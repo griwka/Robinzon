@@ -4,6 +4,13 @@ extends StaticBody3D
 ## Добраться можно, только расчистив путь нужными инструментами. Осмотр даёт находки и страницу журнала.
 
 const PLACES := {
+	"treehouse": {"model": "treehouse_ruin", "name": "Развалины дома Лёвы", "radius": 1.3,
+		"loot": {}, "pages": 0, "restore": {"plank": 10, "rope": 4, "copper_nails": 10, "leaf": 8},
+		"restored_model": "treehouse", "restored_name": "Дом Лёвы",
+		"lines": [["player", "Каркас, провалившаяся крыша и обрывки брезента. На балке вырезано: «Л. + М. = лучший суп на архипелаге». Ха."]]},
+	"lyova_chest": {"model": "chest", "name": "Сундук Лёвы", "radius": 0.5, "needs": "lyova_key",
+		"loot": {"coins": 10}, "pages": 0, "journal": "journal_banyan", "journal_pages": 3,
+		"lines": [["narrator", "Ключ поворачивается с тихим щелчком. Внутри — компас, засушенная синяя бабочка и три исписанные страницы."]]},
 	"banyan_roots": {"model": "", "name": "Корни Великого Баньяна", "radius": 0.0,
 		"loot": {"liana": 2}, "pages": 0,
 		"lines": [["player", "На коре вырезаны зарубки — ровные, через каждые полметра. Кто-то считал дни. Очень много дней."],
@@ -13,14 +20,14 @@ const PLACES := {
 		"lines": [["player", "Отсюда виден весь архипелаг. И мой маяк — крошечная искра на западе."]]},
 	"wreck": {"model": "", "name": "Обломки «Чайки»", "radius": 0.0,
 		"loot": {"scrap": 1, "rope": 1}, "pages": 0,
-		"lines": [["player", "Среди досок — погнутая полоса металла от уключины. Если наточить о камень, выйдет лезвие."]]},
+		"lines": [["player", "Среди досок — погнутая полоса металла от обшивки. Если наточить о камень, выйдет лезвие."]]},
 	"old_camp": {"model": "old_camp", "name": "Старый лагерь Лёвы", "radius": 1.6,
 		"loot": {"rope": 3, "seed_cabbage": 2, "sapling_mango": 1}, "pages": 1,
-		"lines": [["player", "Рухнувшая палатка, остывший очаг... На пюпитре — размокший журнал. Это почерк Лёвы."],
+		"lines": [["player", "Рухнувшая палатка, остывший очаг... На подставке — размокший журнал. Это почерк Лёвы."],
 			["parrot", "Лагерь! Здесь Лёва жил, когда команда ушла к форту. Румба помнит этот запах... мокрый брезент."]]},
 	"lifeboat": {"model": "lifeboat", "name": "Шлюпка «Альбатроса»", "radius": 1.8,
 		"loot": {"sail": 1, "rope": 2, "plank": 4}, "pages": 1,
-		"lines": [["player", "На борту облупившиеся буквы: «АЛЬБАТРОС-2». Под банкой — свёрнутый парус и ещё одна страница."],
+		"lines": [["player", "На борту облупившиеся буквы: «АЛЬБАТРОС-2». Под скамейкой — свёрнутый парус и ещё одна страница."],
 			["parrot", "Лёва хотел уплыть на ней. Потом передумал. Сказал: «Сначала свет»."]]},
 	"lighthouse": {"model": "lighthouse_ruin", "name": "Древний маяк", "radius": 1.9,
 		"loot": {}, "pages": 1, "fuel": {"wood": 10, "fiber": 6},
@@ -34,7 +41,8 @@ var fire: Node3D
 
 
 func _ready() -> void:
-	if id == "lighthouse" or not Game.flags.get("poi_" + id, false):
+	var cfg0: Dictionary = PLACES[id]
+	if id == "lighthouse" or not Game.flags.get("poi_" + id, false) or (cfg0.has("restore") and not Game.flags.get("restored_" + id, false)):
 		add_to_group("interactable")
 	add_to_group("obstacle")
 	collision_layer = 4
@@ -53,6 +61,8 @@ func _ready() -> void:
 	add_child(cs)
 	if id == "lighthouse" and Game.flags.get("lighthouse_lit", false):
 		light_fire(false)
+	if cfg.has("restore") and Game.flags.get("restored_" + id, false):
+		_swap_model(false)
 
 
 func block_radius() -> float:
@@ -80,6 +90,10 @@ func _cost_text(cost: Dictionary) -> String:
 
 func get_hint() -> String:
 	var cfg: Dictionary = PLACES[id]
+	if cfg.has("needs") and not Game.flags.get("poi_" + id, false) and not Game.has_tool(cfg["needs"]) and Game.count(cfg["needs"]) == 0:
+		return "%s — заперт (нужен: %s)" % [cfg["name"], Game.item_name(cfg["needs"])]
+	if cfg.has("restore") and not Game.flags.get("restored_" + id, false):
+		return "Отстроить: %s (нужно: %s)" % [cfg["name"], _cost_text(cfg["restore"])]
 	if not Game.flags.get("poi_" + id, false):
 		return "Осмотреть: %s" % cfg["name"]
 	if id == "lighthouse" and not Game.flags.get("lighthouse_lit", false):
@@ -89,6 +103,25 @@ func get_hint() -> String:
 
 func interact(_player: Node) -> void:
 	var cfg: Dictionary = PLACES[id]
+	if cfg.has("needs") and Game.count(cfg["needs"]) == 0 and not Game.flags.get("poi_" + id, false):
+		Game.notified.emit("Заперто. Нужен: %s" % Game.item_name(cfg["needs"]), Color("ff9d7a"))
+		return
+	if cfg.has("restore") and not Game.flags.get("restored_" + id, false):
+		if not Game.flags.get("poi_" + id, false):
+			Game.flags["poi_" + id] = true
+			Game.dialogue_requested.emit(cfg["lines"], Callable())
+			return
+		if Game.pay(cfg["restore"]):
+			Game.flags["restored_" + id] = true
+			_swap_model(true)
+			Audio.play("build", 0.0, 0.0)
+			FX.burst(self, Vector3(0, 1.5, 0), Color("ffe08a"), 24)
+			Game.notified.emit("Отстроено: %s" % cfg["restored_name"], Color("8affa0"))
+			Game.bump("restored", id)
+			remove_from_group("interactable")
+		else:
+			Game.notified.emit("Не хватает: %s" % _cost_text(cfg["restore"]), Color("ff9d7a"))
+		return
 	if not Game.flags.get("poi_" + id, false):
 		Game.flags["poi_" + id] = true
 		Audio.play("rare", -2.0)
@@ -98,8 +131,14 @@ func interact(_player: Node) -> void:
 			Game.add_item(k, cfg["loot"][k], false)
 		for i in int(cfg["pages"]):
 			Game.add_collectible("journal")
+		for i in int(cfg.get("journal_pages", 0)):
+			Game.add_collectible(cfg["journal"])
+		if id == "lyova_chest":
+			var lid := visual.find_child("Lid", true, false) as Node3D
+			if lid:
+				create_tween().tween_property(lid, "rotation:x", -1.6, 0.4)
 		Game.bump("found", id)
-		if id != "lighthouse":
+		if id != "lighthouse" and not cfg.has("restore"):
 			remove_from_group("interactable")
 		return
 	if id == "lighthouse" and not Game.flags.get("lighthouse_lit", false):
@@ -109,6 +148,19 @@ func interact(_player: Node) -> void:
 			Game.bump("lit", "lighthouse")
 		else:
 			Game.notified.emit("Нужно топливо: %s" % _cost_text(cfg["fuel"]), Color("ff9d7a"))
+
+
+func _swap_model(animate: bool) -> void:
+	var cfg: Dictionary = PLACES[id]
+	var m := Models.glb(cfg["restored_model"])
+	if m == null:
+		return
+	visual.queue_free()
+	visual = m
+	add_child(m)
+	if animate:
+		m.scale = Vector3(0.05, 0.05, 0.05)
+		create_tween().tween_property(m, "scale", Vector3.ONE, 0.6).set_trans(Tween.TRANS_BACK)
 
 
 func light_fire(animate: bool) -> void:

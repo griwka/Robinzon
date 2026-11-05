@@ -7,6 +7,8 @@ const OUTLINE := preload("res://shaders/outline.gdshader")
 const WING := preload("res://shaders/wing.gdshader")
 const TOON_FOLIAGE := preload("res://shaders/toon_foliage.gdshader")
 
+const PAINTED := preload("res://assets/textures/painted.png")
+
 static var _mat_cache: Dictionary = {}
 static var _outline_cache: Dictionary = {}
 static var _unshaded_cache: Dictionary = {}
@@ -46,6 +48,8 @@ static func model_mat(foliage: bool) -> ShaderMaterial:
 	m.set_shader_parameter("use_vertex_color", true)
 	m.set_shader_parameter("rim_amount", 0.2)
 	m.set_shader_parameter("gloss", 0.03)
+	m.set_shader_parameter("painted", PAINTED)
+	m.set_shader_parameter("paint_amount", 0.14 if foliage else 0.16)
 	if foliage:
 		m.set_shader_parameter("wind_strength", 0.8)
 		m.set_shader_parameter("near_fade", 1.0)
@@ -73,6 +77,7 @@ static func mat(color: Color, outline := true, wind := 0.0, fade := false, gloss
 	m.set_shader_parameter("wind_strength", wind)
 	m.set_shader_parameter("near_fade", 1.0 if fade else 0.0)
 	m.set_shader_parameter("gloss", gloss)
+	m.set_shader_parameter("painted", PAINTED)
 	if outline:
 		m.next_pass = outline_mat(0.03)
 	_mat_cache[key] = m

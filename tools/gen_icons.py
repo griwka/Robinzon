@@ -602,6 +602,116 @@ def i_bamboo():
     return img
 
 
+def i_coins():
+    img, d = new()
+    # стопка старых морских монет и одна монета сверху, лицом к нам
+    for k in range(4):
+        y = 400 - k * 42
+        ell(d, 200, y, 120, 42, rgb("d9a520"))
+        ell(d, 200, y - 10, 120, 42, rgb("f2c23a"))
+    ell(d, 330, 250, 125, 125, rgb("f2c23a"))
+    ell(d, 330, 250, 92, 92, rgb("e0a820"), w=8)
+    # якорь на монете
+    line(d, [(330, 190), (330, 310)], rgb("a87010"), 14)
+    line(d, quad_curve((280, 280), (330, 330), (380, 280)), rgb("a87010"), 12)
+    line(d, [(305, 210), (355, 210)], rgb("a87010"), 12)
+    ell(d, 330, 178, 14, 14, rgb("a87010"), w=0)
+    return img
+
+
+def i_copper_nails():
+    img, d = new()
+    for k in range(4):
+        x = 140 + k * 75
+        stroke(d, [(x, 120 + k * 10), (x + 30, 430 - k * 5)], rgb("d9884a"), 22)
+        ell(d, x - 2, 115 + k * 10, 38, 18, rgb("e8a060"), -0.1)
+    return img
+
+
+def i_hive_frame():
+    img, d = new()
+    rrect(d, (90, 90, 420, 420), 18, rgb("c08a50"))
+    d.rectangle((130, 130, 380, 380), fill=rgb("f2c23a"))
+    for r in range(6):
+        for c in range(6):
+            x = 150 + c * 40 + (r % 2) * 20
+            y = 150 + r * 38
+            pts = [(x + math.cos(a) * 17, y + math.sin(a) * 17) for a in [k * math.pi / 3 for k in range(6)]]
+            d.polygon(pts, fill=rgb("e0a020"))
+    return img
+
+
+def i_honey():
+    img, d = new()
+    poly(d, lathe_pts := [(170, 170), (342, 170), (390, 260), (380, 430), (132, 430), (122, 260)], rgb("f2a93a"))
+    rrect(d, (150, 120, 362, 180), 16, rgb("c9a050"))
+    poly(d, [(170, 120), (342, 120), (330, 80), (182, 80)], rgb("e8ddc8"))
+    line(d, [(250, 200), (250, 330)], rgb("ffd27a"), 14)
+    return img
+
+
+def i_wool():
+    img, d = new()
+    for x, y, r in ((200, 300, 110), (320, 280, 120), (260, 200, 110), (180, 200, 80), (350, 190, 80)):
+        ell(d, x, y, r, r * 0.85, rgb("f4efe6"), w=W)
+    for k in range(5):
+        line(d, quad_curve((150 + k * 50, 260), (170 + k * 50, 230), (190 + k * 50, 260)), rgb("d9d2c4"), 6)
+    return img
+
+
+def i_wool_cloth():
+    img, d = new()
+    poly(d, [(100, 150), (420, 120), (430, 380), (90, 410)], rgb("e8ddc8"))
+    for k in range(7):
+        y = 160 + k * 36
+        line(d, [(110, y), (420, y - 25)], rgb("c9b8a0"), 6)
+    poly(d, [(90, 410), (430, 380), (440, 420), (100, 450)], rgb("d9573b"))
+    return img
+
+
+def i_sheep():
+    img, d = new()
+    for x, y in ((180, 260), (260, 220), (340, 260), (220, 320), (310, 320)):
+        ell(d, x, y, 90, 80, rgb("f4efe6"))
+    ell(d, 410, 230, 60, 70, rgb("3a3036"))
+    ell(d, 425, 215, 12, 12, rgb("ffffff"), w=0)
+    for x in (190, 250, 300, 350):
+        stroke(d, [(x, 380), (x, 450)], rgb("3a3036"), 18)
+    return img
+
+
+def i_lyova_key():
+    img, d = new()
+    ell(d, 160, 180, 90, 90, rgb("e8c050"))
+    ell(d, 160, 180, 40, 40, (0, 0, 0, 0), w=W)
+    d.ellipse((120, 140, 200, 220), fill=(0, 0, 0, 0))
+    stroke(d, [(220, 240), (420, 440)], rgb("e8c050"), 36)
+    stroke(d, [(360, 380), (410, 330)], rgb("e8c050"), 26)
+    stroke(d, [(400, 420), (440, 380)], rgb("e8c050"), 26)
+    line(d, quad_curve((90, 120), (40, 40), (150, 60)), rgb("d4b483"), 10)
+    return img
+
+
+def i_liana():
+    img, d = new()
+    pts = [(250 + math.sin(t / 30 * math.pi * 3) * 90, 40 + t * 14) for t in range(31)]
+    stroke(d, pts, rgb("6f7a35"), 26)
+    for k in range(4):
+        x, y = pts[5 + k * 7]
+        poly(d, leaf_shape((x, y), (x + (90 if k % 2 else -90), y + 40), 10, 30), rgb("4f9a4a"))
+    return img
+
+
+def i_climbing_gloves():
+    img, d = new()
+    for k, x0 in enumerate((110, 270)):
+        poly(d, blob(x0 + 70, 300, 110, 13 + k, 0.08, sx=0.8, sy=1.0), rgb("b8834b"))
+        for f in range(4):
+            stroke(d, [(x0 + 20 + f * 34, 220), (x0 + 15 + f * 36, 110 + abs(f - 1.5) * 20)], rgb("b8834b"), 30)
+        line(d, [(x0 + 10, 380), (x0 + 130, 380)], rgb("6f7a35"), 14)
+    return img
+
+
 def i_pickaxe():
     img, d = new()
     stroke(d, [(160, 460), (300, 120)], rgb("a8733f"), 34)
@@ -858,6 +968,40 @@ def portrait_player():
     return img
 
 
+def portrait_marta():
+    img, d = new()
+    ell(d, 256, 256, 240, 240, rgb("bfe0f0"))
+    poly(d, [(140, 420), (372, 420), (410, 512), (102, 512)], rgb("6f8fb0"))
+    poly(d, [(200, 420), (312, 420), (330, 512), (182, 512)], rgb("f2ead3"))
+    ell(d, 256, 280, 140, 145, rgb("e8b48a"))
+    poly(d, blob(256, 190, 150, 61, 0.06, sy=0.55), rgb("d9d4cc"))
+    ell(d, 256, 95, 60, 50, rgb("d9d4cc"))
+    line(d, quad_curve((120, 210), (256, 160), (392, 210)), rgb("d9573b"), 30)
+    for sx in (-1, 1):
+        ell(d, 256 + sx * 52, 290, 20, 24, rgb("ffffff"), w=8)
+        ell(d, 256 + sx * 52, 294, 11, 13, rgb("5a3a22"), w=0)
+        ell(d, 256 + sx * 90, 335, 22, 13, rgb("e8866a"), w=0)
+        line(d, [(256 + sx * 80, 280), (256 + sx * 100, 270)], rgb("b88a6a"), 6)
+    line(d, quad_curve((215, 370), (256, 395), (297, 370)), O, 10)
+    return img
+
+
+def portrait_kesha():
+    img, d = new()
+    ell(d, 256, 256, 240, 240, rgb("cfe8b0"))
+    for sx in (-1, 1):
+        ell(d, 256 + sx * 150, 250, 55, 60, rgb("e8b88a"))
+    ell(d, 256, 260, 150, 145, rgb("8a5a32"))
+    ell(d, 256, 300, 105, 85, rgb("e8b88a"))
+    for sx in (-1, 1):
+        ell(d, 256 + sx * 48, 250, 26, 30, rgb("ffffff"), w=8)
+        ell(d, 256 + sx * 48, 256, 15, 18, rgb("1d1d1d"), w=0)
+    line(d, quad_curve((215, 340), (256, 365), (297, 340)), O, 10)
+    line(d, quad_curve((150, 430), (256, 470), (362, 430)), rgb("d4b483"), 10)
+    ell(d, 256, 470, 22, 26, rgb("e8c050"))
+    return img
+
+
 def bubble():
     img, d = new()
     ell(d, 256, 240, 200, 200, rgb("fff6dc"), w=26)
@@ -922,7 +1066,10 @@ def main():
         "plank": i_plank, "shell": i_shell, "sail": i_sail,
         "egg": i_egg, "milk": i_milk, "fried_egg": i_fried_egg, "baked_potato": i_baked_potato,
         "cheese": i_cheese, "fruit_salad": i_fruit_salad,
-        "stone_axe": i_stone_axe, "pickaxe": i_pickaxe, "machete": i_machete, "scrap": i_scrap, "bamboo": i_bamboo, "watering_can": i_watering_can, "net": i_net,
+        "stone_axe": i_stone_axe, "pickaxe": i_pickaxe, "machete": i_machete,
+        "coins": i_coins, "copper_nails": i_copper_nails, "hive_frame": i_hive_frame, "honey": i_honey, "wool": i_wool,
+        "wool_cloth": i_wool_cloth, "sheep": i_sheep, "lyova_key": i_lyova_key, "liana": i_liana,
+        "climbing_gloves": i_climbing_gloves, "scrap": i_scrap, "bamboo": i_bamboo, "watering_can": i_watering_can, "net": i_net,
         "scallop": i_scallop, "seahorse": i_seahorse, "rapana": i_rapana, "starfish": i_starfish, "pearl": i_pearl,
     }
     icons.update(crops)
@@ -939,8 +1086,11 @@ def main():
         save(k, butterfly(rgb(b), rgb(e), k))
     for i, dd in enumerate((dd_ship, dd_sprout, dd_storm, dd_lighthouse, dd_tree, dd_letter)):
         save("page_%d" % (i + 1), page(dd))
+    for i, dd in enumerate((dd_tree, dd_storm, dd_letter)):
+        save("page_b%d" % (i + 1), page(dd))
     big = 256
-    for name, fn in (("portrait_parrot", portrait_parrot), ("portrait_player", portrait_player), ("portrait_journal", portrait_journal)):
+    for name, fn in (("portrait_parrot", portrait_parrot), ("portrait_player", portrait_player), ("portrait_journal", portrait_journal),
+                     ("portrait_marta", portrait_marta), ("portrait_kesha", portrait_kesha)):
         fn().resize((big, big), Image.LANCZOS).save(os.path.join(OUT, name + ".png"))
     save("bubble", bubble(), False)
     save("exclaim", exclaim())

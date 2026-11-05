@@ -164,6 +164,7 @@ func _fill_settings() -> void:
 	_slider(v, "Чувствительность мыши", "mouse", 0.3, 2.5)
 	_option(v, "Тени", "shadows", ["Низкие", "Средние", "Высокие"])
 	_option(v, "Сглаживание", "msaa", ["Выкл", "2x", "4x"])
+	_option(v, "Чёткость картинки", "sharpen", ["Выкл", "Мягко", "Чётко"])
 	_check(v, "Полный экран", "fullscreen")
 	_check(v, "Вертикальная синхронизация", "vsync")
 	var back := _button("Готово", func():

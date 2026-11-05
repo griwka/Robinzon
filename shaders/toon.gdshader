@@ -12,11 +12,17 @@ uniform float rim_amount : hint_range(0.0, 1.0) = 0.25;
 uniform float gloss : hint_range(0.0, 1.0) = 0.15;
 uniform float wind_strength = 0.0;   // > 0 — качается на ветру
 uniform float near_fade = 0.0;       // > 0 — растворяется возле камеры (листва)
+uniform sampler2D painted : repeat_enable, filter_linear_mipmap;  // «рисованная» фактура мазками
+uniform float paint_amount = 0.08;   // сила фактуры (0 — гладко)
 
 varying vec3 v_color;
+varying vec3 w_pos;
+varying vec3 w_nrm;
 
 void vertex() {
 	v_color = use_vertex_color ? COLOR.rgb : vec3(1.0);
+	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	w_nrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	if (wind_strength > 0.0) {
 		vec3 world = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 		float h = max(VERTEX.y, 0.0);
@@ -34,6 +40,15 @@ void fragment() {
 		}
 	}
 	ALBEDO = albedo.rgb * v_color;
+	if (paint_amount > 0.0) {
+		// трипланарная фактура: крупные мазки (резкие ступени тона) + мелкая крапинка
+		vec3 bl = pow(abs(w_nrm), vec3(4.0));
+		bl /= (bl.x + bl.y + bl.z);
+		float s = 0.55;
+		vec3 a = texture(painted, w_pos.zy * s).rgb * bl.x + texture(painted, w_pos.xz * s).rgb * bl.y + texture(painted, w_pos.xy * s).rgb * bl.z;
+		float tone = 1.0 + paint_amount * (step(0.6, a.r) * 0.8 - step(a.r, 0.36) * 0.9 + step(0.8, a.g) * 0.5);
+		ALBEDO *= tone;
+	}
 	// ободок: светлая линия по краю силуэта на освещённой стороне
 	float fres = 1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0);
 	EMISSION = ALBEDO * step(0.72, fres) * rim_amount * 0.35;

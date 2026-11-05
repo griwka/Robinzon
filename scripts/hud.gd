@@ -38,6 +38,10 @@ var col_panel: PanelContainer
 var journal_panel: PanelContainer
 var help_panel: PanelContainer
 var choice_panel: PanelContainer
+var shop_panel: PanelContainer
+var coin_label: Label
+var _shop_id := ""
+var _shop_tab := "buy"
 var dialogue_panel: PanelContainer
 var dlg_name: Label
 var dlg_text: Label
@@ -69,6 +73,7 @@ func _ready() -> void:
 	journal_panel = _make_window("Журнал", 620)
 	help_panel = _make_window("Как играть", 600)
 	choice_panel = _make_window("Выбор", 460)
+	shop_panel = _make_window("Лавка", 640)
 	_build_help()
 	_build_dialogue()
 	fade_rect = ColorRect.new()
@@ -81,6 +86,8 @@ func _ready() -> void:
 	Game.notified.connect(toast)
 	Game.quest_changed.connect(_update_quest)
 	Game.dialogue_requested.connect(show_dialogue)
+	Game.shop_requested.connect(open_shop)
+	Game.choice_requested.connect(show_choices)
 	Game.collection_changed.connect(func(_c, _i, _n): if col_panel.visible: _fill_collections())
 	Game.time_changed.connect(func(_t, _d): clock_label.text = Game.clock_text())
 	_on_inventory_changed()
@@ -263,8 +270,17 @@ func _build_status() -> void:
 	var p := PanelContainer.new()
 	p.position = Vector2(16, 16)
 	root.add_child(p)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 14)
+	p.add_child(h)
 	clock_label = _label(Game.clock_text(), 20)
-	p.add_child(clock_label)
+	h.add_child(clock_label)
+	var k := HBoxContainer.new()
+	k.add_theme_constant_override("separation", 4)
+	h.add_child(k)
+	k.add_child(_item_icon("coins", 28))
+	coin_label = _label("0", 20, Color("f3e2b8"))
+	k.add_child(coin_label)
 
 
 func _build_quest() -> void:
@@ -348,7 +364,9 @@ func _on_inventory_changed() -> void:
 	tab.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hotbar.add_child(tab)
 	_update_quest()
-	for p in [craft_panel, build_panel, inv_panel]:
+	if coin_label:
+		coin_label.text = str(Game.count("coins"))
+	for p in [craft_panel, build_panel, inv_panel, shop_panel]:
 		if p and p.visible:
 			_refill(p)
 
@@ -561,6 +579,7 @@ func _refill(p: PanelContainer) -> void:
 	elif p == inv_panel: _fill_inventory()
 	elif p == col_panel: _fill_collections()
 	elif p == journal_panel: _fill_journal()
+	elif p == shop_panel: _fill_shop()
 
 
 func open_craft(_station := "") -> void:
@@ -682,6 +701,87 @@ func _build_row(title: String, desc: String, cost: Dictionary, id: String, varia
 	return rh[0]
 
 
+# ================================================================== Лавка
+func open_shop(shop_id: String) -> void:
+	_shop_id = shop_id
+	(shop_panel.get_node("V/Head/Title") as Label).text = Data.SHOPS[shop_id]["name"]
+	_fill_shop()
+	_open(shop_panel)
+
+
+func _fill_shop() -> void:
+	var body := _clear(shop_panel)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	body.add_child(top)
+	for tab in [["buy", "Купить"], ["sell", "Продать"]]:
+		var tb := Button.new()
+		tb.text = tab[1]
+		tb.custom_minimum_size = Vector2(140, 40)
+		if tab[0] != _shop_tab:
+			tb.add_theme_stylebox_override("normal", _box(WOOD_LIGHT, WOOD_DARK, 10, 3, 8))
+		var t: String = tab[0]
+		tb.pressed.connect(func():
+			_shop_tab = t
+			_fill_shop()
+			_fit(shop_panel))
+		top.add_child(tb)
+	var have := HBoxContainer.new()
+	have.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	have.alignment = BoxContainer.ALIGNMENT_END
+	have.add_child(_item_icon("coins", 30))
+	have.add_child(_label("Монет: %d" % Game.count("coins"), 20, INK, false))
+	top.add_child(have)
+	if _shop_tab == "buy":
+		for e in Game.shop_items(_shop_id):
+			var rh := _row()
+			var h: HBoxContainer = rh[1]
+			h.add_child(_card_icon(e["item"], 48))
+			var nm := _label(Game.item_name(e["item"]), 20)
+			nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			h.add_child(nm)
+			h.add_child(_label("%d" % e["price"], 20, Color("f3e2b8")))
+			h.add_child(_item_icon("coins", 26))
+			var b := Button.new()
+			b.text = "Купить"
+			b.custom_minimum_size = Vector2(110, 42)
+			b.disabled = Game.count("coins") < e["price"]
+			var item_id: String = e["item"]
+			var price: int = e["price"]
+			b.pressed.connect(func(): Game.buy(_shop_id, item_id, price))
+			h.add_child(b)
+			body.add_child(rh[0])
+	else:
+		var any := false
+		for id in Data.SELL_PRICES:
+			if Game.count(id) <= 0:
+				continue
+			any = true
+			var rh := _row()
+			var h: HBoxContainer = rh[1]
+			h.add_child(_card_icon(id, 48))
+			var info := VBoxContainer.new()
+			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			info.add_child(_label("%s ×%d" % [Game.item_name(id), Game.count(id)], 20))
+			var res := Game.reserved(id)
+			info.add_child(_label("цена: %d мон." % Data.SELL_PRICES[id] + ("  ·  %d отложено для задания" % res if res > 0 else ""), 15,
+				Color("ffd08a") if res > 0 else Color("f3e2bd")))
+			h.add_child(info)
+			var can := Game.sellable(id)
+			for spec in [[1, "Продать 1"], [can, "Всё (%d)" % can]]:
+				var b := Button.new()
+				b.text = spec[1]
+				b.custom_minimum_size = Vector2(110, 42)
+				b.disabled = can <= 0
+				var n: int = spec[0]
+				var item_id: String = id
+				b.pressed.connect(func(): Game.sell(_shop_id, item_id, n))
+				h.add_child(b)
+			body.add_child(rh[0])
+		if not any:
+			body.add_child(_label("Продавать пока нечего. Урожай, фрукты, яйца, молоко, мёд и шерсть — всё покупают.", 17, INK, false))
+
+
 func open_inventory() -> void:
 	_fill_inventory()
 	_open(inv_panel)
@@ -689,7 +789,7 @@ func open_inventory() -> void:
 
 func _fill_inventory() -> void:
 	var body := _clear(inv_panel)
-	var cats := {"tool": "Инструменты", "material": "Материалы", "seed": "Семена", "sapling": "Саженцы",
+	var cats := {"tool": "Инструменты", "quest": "Особые предметы", "livestock": "Живность", "material": "Материалы", "seed": "Семена", "sapling": "Саженцы",
 		"crop": "Урожай", "fruit": "Фрукты", "product": "С фермы", "food": "Блюда"}
 	var any := false
 	for cat in cats:

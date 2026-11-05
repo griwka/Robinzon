@@ -2,7 +2,7 @@ class_name SupplyCrate
 extends StaticBody3D
 ## Ящик с разбитого корабля, выброшенный на берег. Открывается один раз.
 
-const LOOT := {"seed_potato": 2, "seed_cabbage": 2, "seed_tomato": 1, "rope": 2, "plank": 2}
+const LOOT := {"seed_potato": 2, "seed_cabbage": 2, "seed_tomato": 1, "rope": 2, "plank": 2, "coins": 5}
 
 var visual: Node3D
 
@@ -48,4 +48,4 @@ func interact(_player: Node) -> void:
 	for id in LOOT:
 		Game.add_item(id, LOOT[id], false)
 	Game.add_collectible("journal")
-	Game.bump("collected", "crate")
+	Game.bump("found", "crate")

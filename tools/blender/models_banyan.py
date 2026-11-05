@@ -1,5 +1,5 @@
 """Глава 2 — остров Великого Баньяна: исполинское дерево, площадки-ярусы, лианы для лазания,
-завесы лиан (преграда для мачете), жаровня с огнём и Мелани — кок «Альбатроса»."""
+завесы лиан (преграда для мачете), жаровня с огнём и Марта — повар «Альбатроса»."""
 import math
 
 from mathutils import Vector
@@ -120,9 +120,9 @@ def fire_bowl():
     join([bowl], "FireBowl")
 
 
-# ------------------------------------------------------------------ Мелани
-def melanie():
-    """Мелани: кок «Альбатроса». Седые волосы в пучке под банданой, фартук, деревянный половник."""
+# ------------------------------------------------------------------ Марта
+def marta():
+    """Марта: повар «Альбатроса». Седые волосы в пучке под банданой, фартук, деревянный половник."""
     skin = hexcol("e8b48a")
     hair = hexcol("d9d4cc")
     dress = hexcol("6f8fb0")
@@ -176,4 +176,214 @@ def melanie():
 
 
 BUILDERS = {"banyan_giant": banyan_giant, "deck": deck, "liana": liana, "liana_curtain": liana_curtain,
-            "fire_bowl": fire_bowl, "melanie": melanie}
+            "fire_bowl": fire_bowl, "marta": marta}
+
+
+# ------------------------------------------------------------------ вторая половина главы 2
+def sheep():
+    wool = hexcol("f4efe6")
+    face = hexcol("3a3036")
+    from kit import remesh
+    blobs = [sphere("w", (x, y, 0.55 + z), 0.22, segs=12, rings=8) for x, y, z in
+             ((0, 0, 0.05), (0.14, 0.2, 0), (-0.14, 0.2, 0), (0.14, -0.2, 0), (-0.14, -0.2, 0), (0, 0.32, 0.02), (0, -0.32, 0.02), (0, 0, 0.18))]
+    b = join(blobs, "w")
+    remesh(b, 0.03, 2)
+    paint(b, wool, ao=0.0, noise_amt=0.1, nscale=14)
+    parts = [b]
+    for x in (-0.13, 0.13):
+        for y in (-0.25, 0.25):
+            l = tube("l", [(x, y, 0.4), (x, y, 0.03)], 0.04, 8)
+            paint(l, face, ao=0.0)
+            parts.append(l)
+    body = join(parts, "Body")
+    set_origin(body, (0, 0, 0))
+    hp = [sphere("h", (0, 0.45, 0.72), 0.12, (0.85, 1.25, 0.95))]
+    paint(hp[0], face, ao=0.0)
+    tuft = sphere("tf", (0, 0.42, 0.84), 0.09, (1.2, 1, 0.7))
+    paint(tuft, wool, ao=0.0, noise_amt=0.1, nscale=20)
+    hp.append(tuft)
+    for sx in (-1, 1):
+        e = leaf("ear", (sx * 0.09, 0.42, 0.76), (sx, -0.2, -0.3), 0.12, 0.04, droop=0.1)
+        paint(e, face, ao=0.0)
+        ey = sphere("ey", (sx * 0.06, 0.55, 0.76), 0.022)
+        paint(ey, hexcol("ffffff"), ao=0.0, noise_amt=0)
+        hp += [e, ey]
+    h = join(hp, "Head")
+    set_origin(h, (0, 0.33, 0.66))
+    set_parent(h, body)
+
+
+def monkey():
+    fur = hexcol("8a5a32")
+    skin = hexcol("e8b88a")
+    body = sphere("b", (0, 0, 0.32), 0.17, (1, 0.9, 1.25), segs=16, rings=10)
+    paint(body, fur, ao=0.0, fn=lambda co, n: skin if (co.y > 0.1 and co.z < 0.36) else None)
+    parts = [body]
+    tail = tube("t", [(0, -0.14, 0.2), (0, -0.35, 0.25), (0, -0.42, 0.5), (0, -0.32, 0.62)], [0.035, 0.03, 0.025, 0.015], 8)
+    paint(tail, fur, ao=0.0)
+    parts.append(tail)
+    for sx in (-1, 1):
+        a = tube("a", [(sx * 0.15, 0.02, 0.45), (sx * 0.24, 0.08, 0.3), (sx * 0.2, 0.14, 0.18)], 0.04, 8)
+        l = tube("l", [(sx * 0.09, 0.02, 0.18), (sx * 0.13, 0.08, 0.06), (sx * 0.11, 0.14, 0.02)], 0.045, 8)
+        for o in (a, l):
+            paint(o, fur, ao=0.0)
+        parts += [a, l]
+    bd = join(parts, "Body")
+    set_origin(bd, (0, 0, 0))
+    hp = [sphere("h", (0, 0.03, 0.6), 0.15, segs=18, rings=12)]
+    paint(hp[0], fur, ao=0.0)
+    face = sphere("f", (0, 0.11, 0.58), 0.11, (1.1, 0.6, 0.9))
+    paint(face, skin, ao=0.0)
+    hp.append(face)
+    for sx in (-1, 1):
+        ear = sphere("e", (sx * 0.15, 0.02, 0.63), 0.06, (0.5, 1, 1))
+        paint(ear, skin, ao=0.0)
+        ey = sphere("ey", (sx * 0.05, 0.17, 0.62), 0.025)
+        paint(ey, hexcol("1d1d1d"), ao=0.0, noise_amt=0)
+        hp += [ear, ey]
+    m = tube("m", [(-0.04, 0.18, 0.54), (0, 0.19, 0.53), (0.04, 0.18, 0.54)], 0.008, 5)
+    paint(m, hexcol("6b3a22"), ao=0.0)
+    hp.append(m)
+    h = join(hp, "Head")
+    set_origin(h, (0, 0.02, 0.48))
+    set_parent(h, bd)
+
+
+def beehive():
+    parts = [log("st", (0, 0, 0), (0, 0, 0.55), 0.05, rings=False)]
+    parts.append(plank("base", (0, 0, 0.58), (0.7, 0.6, 0.06)))
+    for i in range(3):
+        bx = box("bx", (0, 0, 0.75 + i * 0.27), (0.62, 0.52, 0.24), bev=0.03)
+        paint(bx, hexcol("f2c23a") if i % 2 == 0 else hexcol("e0a83a"), ao=0.0, fn=lambda co, n: 0.85 if abs(co.y) > 0.24 else None)
+        parts.append(bx)
+    roof = box("rf", (0, 0, 1.6), (0.78, 0.68, 0.1), (0, 0.0, 0), bev=0.03)
+    paint(roof, hexcol("a87342"), ao=0.0)
+    hole = box("hl", (0, 0.27, 0.68), (0.2, 0.02, 0.05))
+    paint(hole, hexcol("2a1a10"), ao=0.0)
+    parts += [roof, hole]
+    for k in range(6):
+        a = k * 1.1
+        f = sphere("fl", (math.cos(a) * 0.55, math.sin(a) * 0.55, 0.12), 0.06, (1, 1, 0.5), segs=8, rings=5)
+        paint(f, [hexcol("ff6fa5"), hexcol("ffd84a"), hexcol("b28cff")][k % 3], ao=0.0)
+        parts.append(f)
+    join(parts, "Beehive")
+
+
+def sheep_pen():
+    parts = []
+    s = 1.8
+    for side in range(4):
+        a = side * math.pi / 2
+        d = Vector((math.sin(a), -math.cos(a), 0))
+        right = Vector((math.cos(a), math.sin(a), 0))
+        for k in range(5):
+            p = d * s + right * (k - 2) * s * 0.5
+            parts.append(log("pp", (p.x, p.y, 0), (p.x, p.y, 0.85), 0.055, rings=False))
+        for z in (0.35, 0.7):
+            if side == 0 and z < 0.5:
+                continue
+            a0, a1 = d * s - right * s, d * s + right * s
+            parts.append(log("rl", (a0.x, a0.y, z), (a1.x, a1.y, z), 0.04, col=hexcol("c9a467"), rings=False))
+    shed = box("sh", (-0.9, 1.0, 0.6), (1.4, 1.0, 1.2), bev=0.04)
+    paint(shed, hexcol("c08a50"), ao=0.2, fn=lambda co, n: 0.85 if int(co.z * 7) % 2 else None)
+    roof = cyl("rf", (-0.9, 1.0, 1.2), 1.05, 0.05, 0.6, (0, 0, math.pi / 4), segs=4)
+    paint(roof, hexcol("d6ad55"), ao=0.0, noise_amt=0.2, nscale=20)
+    hay = box("hy", (0.9, 1.2, 0.15), (0.8, 0.5, 0.3), bev=0.06)
+    displace(hay, 0.04, 0.05)
+    paint(hay, hexcol("d9c45a"), ao=0.0, noise_amt=0.25, nscale=30)
+    parts += [shed, roof, hay]
+    join(parts, "SheepPen")
+
+
+def canoe():
+    hull = lathe("h", [(0.0, 0.0), (0.3, 0.05), (0.42, 0.22), (0.45, 0.4)], 20, scale=(1, 3.4, 1))
+    from kit import solidify
+    solidify(hull, 0.04)
+    paint(hull, hexcol("a87342"), ao=0.25, ao_h=0.3, fn=lambda co, n: hexcol("d9573b") if 0.3 < co.z < 0.36 else (0.85 if int(co.y * 6) % 2 else None))
+    parts = [hull]
+    for y in (-0.8, 0.0, 0.8):
+        parts.append(plank("sb", (0, y, 0.28), (0.8, 0.16, 0.04)))
+    mast = log("ms", (0, 0.5, 0.1), (0, 0.5, 2.4), 0.04, rings=False)
+    parts.append(mast)
+    import bmesh
+    from kit import from_bm
+    bm = bmesh.new()
+    vs = [bm.verts.new(p) for p in ((0.03, 0.5, 0.6), (0.03, 0.5, 2.3), (0.03, -0.6, 0.65))]
+    bm.faces.new(vs)
+    sail = from_bm("sl", bm)
+    solidify(sail, 0.02)
+    paint(sail, hexcol("e8ddc8"), ao=0.0, fn=lambda co, n: hexcol("b8a48a") if int(co.z * 5) % 2 else None)
+    parts.append(sail)
+    for sx in (-1, 1):
+        out = log("ot", (sx * 0.05, 0, 0.32), (sx * 1.1, 0, 0.32), 0.03, rings=False)
+        fl = lathe("fl", [(0.0, -0.1), (0.07, -0.08), (0.08, 0.05), (0.0, 0.08)], 10, rot=(math.pi / 2, 0, 0), scale=(1, 1, 8), loc=(sx * 1.15, 0, 0.12))
+        paint(fl, hexcol("8a5a32"), ao=0.0)
+        parts += [out, fl]
+    join(parts, "Canoe")
+
+
+def treehouse_ruin():
+    """Разрушенный дом Лёвы на ярусе: каркас, провалившаяся крыша, доски вразброс."""
+    parts = []
+    for x, y, h in ((-1.0, -0.9, 2.0), (1.0, -0.9, 1.4), (-1.0, 0.9, 2.0), (1.0, 0.9, 0.9)):
+        parts.append(log("pp", (x, y, 0), (x, y, h), 0.07, rings=False))
+    parts.append(log("bm", (-1.0, -0.9, 1.9), (-1.0, 0.9, 1.9), 0.05, rings=False))
+    for k in range(4):
+        parts.append(plank("wl", (-1.0, -0.6 + k * 0.4, 0.3 + (k % 2) * 0.25), (0.06, 0.36, 0.5)))
+    for k in range(5):
+        parts.append(plank("db", (-0.4 + k * 0.25, -0.2 + (k % 3) * 0.3, 0.06 + 0.04 * k), (0.9, 0.18, 0.05), (0.1 * k, 0.05, 0.6 * k)))
+    tarp = box("tp", (0.2, 0.2, 0.15), (1.4, 1.2, 0.04), (0.15, -0.1, 0.3), bev=0.02)
+    paint(tarp, hexcol("c9bfa0"), ao=0.0, fn=lambda co, n: hexcol("6f8a4a") if math.sin(co.x * 6 + co.y * 5) > 0.6 else None)
+    parts.append(tarp)
+    join(parts, "TreehouseRuin")
+
+
+def treehouse():
+    """Восстановленный дом Лёвы: стены из досок, круглое окно, крыша из листьев, флюгер-альбатрос."""
+    parts = [plank("fl", (0, 0, 0.04), (2.3, 2.0, 0.08))]
+    for side in range(4):
+        a = side * math.pi / 2
+        d = Vector((math.sin(a), -math.cos(a), 0))
+        right = Vector((math.cos(a), math.sin(a), 0))
+        ln = 2.2 if side % 2 == 0 else 1.9
+        for k in range(6):
+            z = 0.2 + k * 0.32
+            if side == 0 and k < 5 and False:
+                continue
+            p = d * (0.95 if side % 2 == 0 else 1.1)
+            w = box("wb", (p.x, p.y, z), (ln if side % 2 == 0 else 0.08, 0.08 if side % 2 == 0 else ln, 0.3), bev=0.02)
+            if side == 0 and abs(k - 1.5) < 2 and True:
+                pass
+            paint(w, shade(hexcol("c08a50"), 0.9 + 0.1 * (k % 2)), ao=0.2, ao_h=0.5, fn=lambda co, n: 0.82 if math.sin(co.x * 20 + co.y * 20) > 0.8 else None)
+            parts.append(w)
+    door = box("dr", (0, -0.98, 0.6), (0.6, 0.04, 1.1), bev=0.02)
+    paint(door, hexcol("6b3a22"), ao=0.0)
+    win = cyl("wn", (1.12, 0, 1.2), 0.25, 0.25, 0.04, (0, math.pi / 2, 0), 16)
+    paint(win, hexcol("8fc3e8"), ao=0.0, fn=lambda co, n: hexcol("6b3a22") if (abs(co.y) < 0.03 or abs(co.z - 1.2) < 0.03) else None)
+    parts += [door, win]
+    roof = cyl("rf", (0, 0, 2.05), 1.75, 0.08, 1.1, (0, 0, math.pi / 4), segs=4)
+    displace(roof, 0.05, 0.08)
+    paint(roof, hexcol("4f8a3a"), ao=0.0, noise_amt=0.15, nscale=12, fn=lambda co, n: 0.8 if math.sin(co.z * 40) > 0.7 else None)
+    parts.append(roof)
+    vane = log("vn", (0, 0, 3.1), (0, 0, 3.6), 0.02, rings=False)
+    bird = leaf("vb", (-0.2, 0, 3.6), (1, 0, 0), 0.4, 0.06, droop=0.0, fold=0.0, up=(0, 1, 0))
+    paint(bird, hexcol("f2f2f2"), ao=0.0)
+    parts += [vane, bird]
+    join(parts, "Treehouse")
+
+
+def chest():
+    body = box("b", (0, 0, 0.22), (0.8, 0.5, 0.44), bev=0.04)
+    paint(body, hexcol("8a5a32"), ao=0.0, fn=lambda co, n: hexcol("c9a050") if (abs(co.x) > 0.34 or abs(co.z - 0.22) < 0.03) else None)
+    lock = box("lk", (0, -0.27, 0.36), (0.12, 0.04, 0.14), bev=0.01)
+    paint(lock, hexcol("e8c050"), ao=0.0)
+    lid = lathe("ld", [(0.0, 0.0), (0.25, 0.0), (0.25, 0.05), (0.0, 0.26)], 12, rot=(0, math.pi / 2, 0), scale=(1, 1, 1.6), loc=(0, 0, 0.44))
+    paint(lid, hexcol("9a6a3e"), ao=0.0)
+    b = join([body, lock], "Chest")
+    l = join([lid], "Lid")
+    set_origin(l, (0, 0.25, 0.44))
+    set_parent(l, b)
+
+
+BUILDERS.update({"sheep": sheep, "monkey": monkey, "beehive": beehive, "sheep_pen": sheep_pen, "canoe": canoe,
+                 "treehouse_ruin": treehouse_ruin, "treehouse": treehouse, "chest": chest})
