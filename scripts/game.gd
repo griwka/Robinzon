@@ -27,6 +27,8 @@ var quest_baseline: Dictionary = {}    # "kind:target" -> значение ст�
 var quest_started := false             # показано ли вступление
 var flags: Dictionary = {}             # разные одноразовые события
 var cleared: Dictionary = {}           # номера расчищенных преград (заросли, деревья, гряды)
+var location := "home"                 # остров, на котором сейчас игрок
+var loc_data: Dictionary = {}          # остров -> {buildings, player} для островов, где мы уже бывали
 var time_of_day := 0.3
 var day := 1
 var world_time := 0.0                  # секунды игрового мира (растения растут по нему)
@@ -166,6 +168,24 @@ func craft(recipe: Dictionary) -> bool:
 	return true
 
 
+# ======================================================================= Еда
+## Съесть самое сытное. Возвращает сытность (0 — нечего есть). Еда восстанавливает силы при лазании.
+func eat_best_food() -> int:
+	var best := ""
+	for id in Data.ITEMS:
+		if Data.ITEMS[id].has("food") and count(id) > 0:
+			if best == "" or Data.ITEMS[id]["food"] > Data.ITEMS[best]["food"]:
+				best = id
+	if best == "":
+		notified.emit("Нечего есть — потряси пальму или банан!", Color("ff9d7a"))
+		return 0
+	pay({best: 1})
+	var v: int = Data.ITEMS[best]["food"]
+	notified.emit("Съеден %s: +%d сил" % [item_name(best).to_lower(), v * 2], Color("ffe08a"))
+	Audio.play("pickup", -4.0)
+	return v
+
+
 # ======================================================================= Коллекции
 func add_collectible(col_id: String) -> bool:
 	var col: Dictionary = Data.COLLECTIONS[col_id]
@@ -247,6 +267,21 @@ func current_quest() -> Dictionary:
 	return {}
 
 
+## Отдать предметы, которые просит текущее задание (например, еду для Мелани). Возвращает, что-то отдали ли.
+func deliver_for_quest() -> bool:
+	var q := current_quest()
+	if q.is_empty() or not quest_started:
+		return false
+	var gave := false
+	for t in q["tasks"]:
+		if t["kind"] == "delivered" and task_progress(t) < t["count"] and count(t["target"]) > 0:
+			pay({t["target"]: 1})
+			notified.emit("Отдано: %s" % item_name(t["target"]), Color("ffe08a"))
+			bump("delivered", t["target"])
+			gave = true
+	return gave
+
+
 func task_progress(task: Dictionary) -> int:
 	var key: String = task["kind"] + ":" + task["target"]
 	var base: int = quest_baseline.get(key, 0)
@@ -270,7 +305,8 @@ func start_current_quest() -> void:
 	for t in q["tasks"]:
 		var key: String = t["kind"] + ":" + t["target"]
 		# постройки и разговоры считаем с нуля, ресурсы — от момента получения задания
-		quest_baseline[key] = 0 if t["kind"] in ["talk", "built", "sailed", "collection", "found", "lit"] else stat(t["kind"], t["target"])
+		var zero: bool = t["kind"] in ["talk", "built", "sailed", "collection", "found", "lit", "reached"] and not t.get("fresh", false)
+		quest_baseline[key] = 0 if zero else stat(t["kind"], t["target"])
 	quest_changed.emit()
 	dialogue_requested.emit(q.get("intro", []), func(): _check_quest())
 
@@ -283,6 +319,9 @@ func _check_quest() -> void:
 	if quest_done(q):
 		quest_started = false
 		quest_index += 1
+		if quest_index >= current_chapter()["quests"].size() and chapter + 1 < Data.CHAPTERS.size():
+			chapter += 1
+			quest_index = 0
 		_grant(q.get("reward", {}))
 		quest_completed.emit(q)
 		Audio.play("quest", -2.0, 0.0)
@@ -316,8 +355,11 @@ func save_game(extra: Dictionary) -> void:
 		"collections": collections, "chapter": chapter, "quest_index": quest_index,
 		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags, "cleared": cleared.keys(),
 		"time_of_day": time_of_day, "day": day, "world_time": world_time,
+		"location": location,
 	}
-	data.merge(extra)
+	# данные текущего острова кладём к остальным островам
+	loc_data[location] = extra.duplicate()
+	data["locations"] = loc_data
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify(data, "\t"))
@@ -362,6 +404,10 @@ func load_game() -> Dictionary:
 	time_of_day = float(data.get("time_of_day", 0.3))
 	day = int(data.get("day", 1))
 	world_time = float(data.get("world_time", 0.0))
+	location = data.get("location", "home")
+	loc_data = data.get("locations", {})
+	if loc_data.is_empty() and data.has("buildings"):
+		loc_data["home"] = {"buildings": data["buildings"], "player": data.get("player", [])}
 	inventory_changed.emit()
 	quest_changed.emit()
 	return data
@@ -378,6 +424,8 @@ func reset_state() -> void:
 	quest_started = false
 	flags = {}
 	cleared = {}
+	location = "home"
+	loc_data = {}
 	time_of_day = 0.3
 	day = 1
 	world_time = 0.0
@@ -396,7 +444,7 @@ func _setup_input() -> void:
 		"jump": [KEY_SPACE], "sprint": [KEY_SHIFT], "interact": [KEY_E],
 		"craft_menu": [KEY_C], "build_menu": [KEY_B], "rotate_build": [KEY_R],
 		"inventory": [KEY_TAB, KEY_I], "journal": [KEY_J], "collections": [KEY_K],
-		"help": [KEY_F1, KEY_H], "save": [KEY_F5], "load": [KEY_F9],
+		"help": [KEY_F1, KEY_H], "save": [KEY_F5], "load": [KEY_F9], "eat": [KEY_Q],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):

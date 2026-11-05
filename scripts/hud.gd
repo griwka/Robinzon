@@ -395,6 +395,31 @@ func _item_slot(id: String, n: int, big := false) -> Control:
 	return box
 
 
+var stamina_bar: ProgressBar
+
+
+## Полоска сил — видна, только когда силы не полные (как в PEAK).
+func set_stamina(v: float, m: float) -> void:
+	if stamina_bar == null:
+		stamina_bar = ProgressBar.new()
+		stamina_bar.show_percentage = false
+		stamina_bar.custom_minimum_size = Vector2(260, 18)
+		stamina_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		stamina_bar.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		stamina_bar.position.y = -212
+		var bg := _box(WOOD_DARK, WOOD_DARK, 9, 2, 0)
+		var fg := _box(Color("ffcf3d"), Color("c98d10"), 9, 2, 0)
+		bg.shadow_size = 0
+		fg.shadow_size = 0
+		stamina_bar.add_theme_stylebox_override("background", bg)
+		stamina_bar.add_theme_stylebox_override("fill", fg)
+		root.add_child(stamina_bar)
+	stamina_bar.max_value = m
+	stamina_bar.value = v
+	stamina_bar.visible = v < m - 0.5
+	stamina_bar.modulate = Color(1, 0.5, 0.45) if v < m * 0.25 else Color.WHITE
+
+
 func set_hint(text: String) -> void:
 	hint_label.text = text
 

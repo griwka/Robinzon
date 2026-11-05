@@ -5,12 +5,15 @@ extends Node3D
 
 const SIZE := 200.0
 const RES := 160
-const RADIUS := 52.0
 const MAP_RES := 256
 const H_MIN := -6.0
 const H_MAX := 14.0
 
 var seed_value := 1337
+var radius := 52.0
+var peak_h := 10.0
+var loc := "home"
+var mix := "home"
 var shape_noise := FastNoiseLite.new()
 var hill_noise := FastNoiseLite.new()
 var detail_noise := FastNoiseLite.new()
@@ -21,6 +24,18 @@ var camp_center := Vector3.ZERO     # поляна для лагеря рядо�
 var wreck_point := Vector3.ZERO
 var noise_tex: NoiseTexture2D
 var water_mat: ShaderMaterial
+
+
+## Настроить остров по описанию из Data.LOCATIONS (вызывать до add_child / build).
+func configure(location: String) -> void:
+	var cfg: Dictionary = Data.LOCATIONS[location]
+	loc = location
+	seed_value = cfg["seed"]
+	radius = cfg["radius"]
+	peak_center = cfg["peak"]
+	peak_h = cfg["peak_h"]
+	mix = cfg["mix"]
+	_init()
 
 
 func _init() -> void:
@@ -56,14 +71,14 @@ func height_at(x: float, z: float) -> float:
 	var p := Vector2(x, z)
 	var d := p.length()
 	var ang := atan2(z, x)
-	var r := RADIUS * (1.0 + 0.2 * shape_noise.get_noise_2d(cos(ang) * 1.5, sin(ang) * 1.5)
+	var r := radius * (1.0 + 0.2 * shape_noise.get_noise_2d(cos(ang) * 1.5, sin(ang) * 1.5)
 		+ 0.07 * shape_noise.get_noise_2d(cos(ang) * 4.0 + 10.0, sin(ang) * 4.0))
 	var t := d / r
 	var h := lerpf(H_MIN, 0.5, smoothstep(1.35, 0.95, t))
 	var inland := smoothstep(0.92, 0.55, t)
 	h += inland * (1.4 + 1.4 * (hill_noise.get_noise_2d(x, z) * 0.5 + 0.5))
 	var pd := p.distance_to(peak_center)
-	h += 10.0 * exp(-pd * pd / (2.0 * 12.0 * 12.0)) * inland
+	h += peak_h * exp(-pd * pd / (2.0 * 12.0 * 12.0)) * inland
 	h += detail_noise.get_noise_2d(x, z) * 0.15 * inland
 	# пологая поляна под лагерь
 	if camp_center != Vector3.ZERO:
@@ -176,8 +191,8 @@ func _build_grass() -> void:
 	var attempts := 0
 	while tr.size() < 7000 and attempts < 70000:
 		attempts += 1
-		var x := g.randf_range(-RADIUS * 1.2, RADIUS * 1.2)
-		var z := g.randf_range(-RADIUS * 1.2, RADIUS * 1.2)
+		var x := g.randf_range(-radius * 1.2, radius * 1.2)
+		var z := g.randf_range(-radius * 1.2, radius * 1.2)
 		var h := height_at(x, z)
 		if h < 1.25 or h > 9.0 or normal_at(x, z).y < 0.82:
 			continue
@@ -195,8 +210,8 @@ func _build_grass() -> void:
 	while ft.size() < 900 and attempts < 30000:
 		attempts += 1
 		# цветы растут полянками
-		var cx := g.randf_range(-RADIUS, RADIUS)
-		var cz := g.randf_range(-RADIUS, RADIUS)
+		var cx := g.randf_range(-radius, radius)
+		var cz := g.randf_range(-radius, radius)
 		var col: Color = palette[g.randi() % palette.size()]
 		for k in 8:
 			var x := cx + g.randf_range(-1.8, 1.8)
@@ -246,8 +261,13 @@ var _uid := 0
 
 
 func _place_pois() -> void:
+	if mix == "banyan":
+		var c := Vector3(0, 0, 0)
+		c.y = height_at(0, 0)
+		poi["banyan_roots"] = c
+		return
 	# старый лагерь Лёвы — на западе, в глубине джунглей
-	var oc := Vector3(-RADIUS * 0.5, 0, RADIUS * 0.08)
+	var oc := Vector3(-radius * 0.5, 0, radius * 0.08)
 	oc.y = height_at(oc.x, oc.z)
 	poi["old_camp"] = oc
 	# шлюпка «Альбатроса» — на северном пляже
@@ -277,6 +297,11 @@ func _spawn_resources() -> void:
 	decor.name = "Decor"
 	add_child(decor)
 	for id in poi:
+		if id == "banyan_roots":
+			var tree := BanyanTree.new()
+			tree.position = poi[id]
+			holder.add_child(tree)
+			continue
 		var sp := StoryPlace.new()
 		sp.id = id
 		sp.position = poi[id]
@@ -289,11 +314,11 @@ func _spawn_resources() -> void:
 	var camp2 := Vector2(camp_center.x, camp_center.z)
 	var wreck2 := Vector2(wreck_point.x, wreck_point.z)
 	var step := 2.25
-	var n := int(RADIUS * 1.35 * 2 / step)
+	var n := int(radius * 1.35 * 2 / step)
 	for j in n:
 		for i in n:
-			var x := -RADIUS * 1.35 + i * step + rng.randf_range(-0.7, 0.7)
-			var z := -RADIUS * 1.35 + j * step + rng.randf_range(-0.7, 0.7)
+			var x := -radius * 1.35 + i * step + rng.randf_range(-0.7, 0.7)
+			var z := -radius * 1.35 + j * step + rng.randf_range(-0.7, 0.7)
 			var roll := rng.randf()
 			var seed_v := rng.randi()
 			var h := height_at(x, z)
@@ -302,7 +327,7 @@ func _spawn_resources() -> void:
 			var p2 := Vector2(x, z)
 			var dc := p2.distance_to(camp2)
 			var dw := p2.distance_to(wreck2)
-			if _near_poi(p2, 5.0):
+			if _near_poi(p2, 10.0 if mix == "banyan" else 5.0):
 				continue
 			var kind := ""
 			if dc < 9.5 or dw < 7.0:
@@ -327,6 +352,19 @@ func _spawn_resources() -> void:
 				elif roll < 0.8: kind = "thicket"
 				elif roll < 0.88: kind = "palm"
 				elif roll < 0.92: kind = "banana"
+			elif mix == "banyan":
+				# остров Баньяна: чаще великаны, папоротники, завесы лиан и фруктовые деревья
+				if roll < 0.18: kind = "jungle_tree"
+				elif roll < 0.33: kind = "fern"
+				elif roll < 0.45: kind = "thicket"
+				elif roll < 0.53: kind = "liana_curtain"
+				elif roll < 0.63: kind = "tall_grass"
+				elif roll < 0.68: kind = "palm"
+				elif roll < 0.74: kind = "banana"
+				elif roll < 0.78: kind = "mango"
+				elif roll < 0.83: kind = "bush"
+				elif roll < 0.86: kind = "fallen_log"
+				elif roll < 0.88: kind = "rock"
 			else:
 				var bamboo_patch := patch.get_noise_2d(x, z) > 0.32
 				if bamboo_patch:
@@ -346,7 +384,7 @@ func _spawn_resources() -> void:
 				if h > 1.1 and roll > 0.94 and dc > 9.5:
 					_add_decor(decor, "flower_patch", Vector3(x, h - 0.03, z), seed_v)
 				continue
-			_spawn(holder, kind, Vector3(x, h - 0.05, z), seed_v, "j%d" % _uid, -100.0)
+			_spawn(holder, kind, Vector3(x, h - 0.05, z), seed_v, ("j%d" if loc == "home" else loc + ":j%d") % _uid, -100.0)
 	_barrier_rings(holder)
 
 
@@ -361,13 +399,16 @@ func _near_poi(p2: Vector2, r: float) -> bool:
 ## Кольца преград вокруг сюжетных мест — без нужного инструмента не пройти.
 func _barrier_rings(holder: Node3D) -> void:
 	# шаг по кольцу меньше диаметра преграды + игрока — щелей нет
-	var specs := {"old_camp": [["thicket", 5.4, 18], ["jungle_tree", 7.6, 17]],
+	var specs_all := {"old_camp": [["thicket", 5.4, 18], ["jungle_tree", 7.6, 17]],
+		"banyan_roots": [["liana_curtain", 11.5, 28], ["thicket", 13.2, 30]],
 		"lifeboat": [["cliff", 6.0, 10]],
 		"lighthouse": [["cliff", 6.2, 11]]}
-	for id in specs:
+	for id in specs_all:
+		if not poi.has(id):
+			continue
 		var c: Vector3 = poi[id]
 		var k := 0
-		for ring in specs[id]:
+		for ring in specs_all[id]:
 			var kind: String = ring[0]
 			var rad: float = ring[1]
 			var cnt: int = ring[2]
@@ -376,8 +417,8 @@ func _barrier_rings(holder: Node3D) -> void:
 				var a := TAU * i / cnt + (0.15 if kind == "jungle_tree" else 0.0)
 				var pos := c + Vector3(cos(a) * rad, 0, sin(a) * rad)
 				pos.y = height_at(pos.x, pos.z) - 0.05
-				var yaw := -a + PI / 2 if kind == "cliff" else -100.0
-				_spawn(holder, kind, pos, k * 7919 + i, "r_%s_%d" % [id, k], yaw)
+				var yaw := -a + PI / 2 if kind in ["cliff", "liana_curtain"] else -100.0
+				_spawn(holder, kind, pos, k * 7919 + i, "%s:r_%s_%d" % [loc, id, k], yaw)
 
 
 func _spawn(holder: Node3D, kind: String, pos: Vector3, seed_v: int, uid: String, yaw: float) -> void:
@@ -449,7 +490,7 @@ func spawn_distant_scenery(parent: Node3D) -> void:
 		var isl := Models.distant_island(g, 30.0 if i == 0 else g.randf_range(14, 24))
 		isl.position = Vector3(cos(a) * d, -0.2, sin(a) * d)
 		parent.add_child(isl)
-		if i == 0:
+		if i == 0 and loc == "home":
 			banyan = isl
 			var tree := Models.glb("jungle_tree_a")
 			if tree:

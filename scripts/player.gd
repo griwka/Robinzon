@@ -8,6 +8,8 @@ const JUMP_VELOCITY := 6.0
 const GRAVITY := 18.0
 const INTERACT_RANGE := 2.6
 const SWING_TIME := 0.38
+const STAMINA_MAX := 100.0
+const CLIMB_SPEED := 2.3
 
 var camera_yaw := 0.0
 var camera_pitch := -0.62
@@ -37,6 +39,11 @@ var _lean := Vector2.ZERO
 var _was_on_floor := true
 var _squash := 1.0
 var _body_y := 0.45
+var stamina := STAMINA_MAX
+var climbing: Climbable = null
+var near_climb: Climbable = null
+var _climb_side := Vector3.FORWARD
+var _climb_phase := 0.0
 
 
 func _ready() -> void:
@@ -190,6 +197,23 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if target != null and not is_instance_valid(target):
 		target = null   # объект расчищен и удалён
+	if controls_enabled and Input.is_action_just_pressed("eat"):
+		var v := Game.eat_best_food()
+		stamina = minf(STAMINA_MAX, stamina + v * 2.0)
+	if climbing:
+		_climb(delta)
+		return
+	_find_climb()
+	if near_climb and controls_enabled and Input.is_action_just_pressed("jump"):
+		if not Game.has_tool("climbing_gloves"):
+			Game.notified.emit("Голыми руками по лиане не залезть — нужны перчатки лазальщика", Color("ff9d7a"))
+		elif stamina < 10.0:
+			Game.notified.emit("Нет сил. Отдохни или поешь (Q)", Color("ff9d7a"))
+		else:
+			_start_climb(near_climb)
+			return
+	if is_on_floor():
+		stamina = minf(STAMINA_MAX, stamina + 30.0 * delta)
 	var input := Vector2.ZERO
 	if controls_enabled:
 		input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
@@ -207,7 +231,7 @@ func _physics_process(delta: float) -> void:
 	velocity.z = lerpf(velocity.z, dir.z * speed, accel * delta)
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
-	elif controls_enabled and Input.is_action_just_pressed("jump"):
+	elif controls_enabled and Input.is_action_just_pressed("jump") and near_climb == null:
 		velocity.y = JUMP_VELOCITY
 		_squash = 1.25
 
@@ -302,6 +326,68 @@ func _animate(delta: float, speed: float) -> void:
 	model.scale = Vector3(1.0 / sqrt(_squash), _squash, 1.0 / sqrt(_squash))
 
 
+# ------------------------------------------------------------------ Лазание
+func _find_climb() -> void:
+	near_climb = null
+	for c in get_tree().get_nodes_in_group("climb"):
+		var b: Vector3 = c.world_bottom()
+		var t: Vector3 = c.world_top()
+		if Vector2(global_position.x - b.x, global_position.z - b.z).length() < 1.0 \
+				and global_position.y > b.y - 0.7 and global_position.y < t.y - 0.8:
+			near_climb = c
+			return
+
+
+func _start_climb(c: Climbable) -> void:
+	climbing = c
+	var b := c.world_bottom()
+	var side := Vector3(global_position.x - b.x, 0, global_position.z - b.z)
+	_climb_side = side.normalized() if side.length() > 0.05 else -Basis(Vector3.UP, model.rotation.y).z * -1.0
+	velocity = Vector3.ZERO
+	Audio.play("rustle", -4.0)
+
+
+func _stop_climb(push := Vector3.ZERO) -> void:
+	climbing = null
+	velocity = push
+
+
+func _climb(delta: float) -> void:
+	var b := climbing.world_bottom()
+	var t := climbing.world_top()
+	var up := 0.0
+	if controls_enabled:
+		up = Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
+	stamina -= (9.0 if abs(up) > 0.1 else 2.5) * delta
+	var y := global_position.y + up * CLIMB_SPEED * delta
+	global_position = Vector3(b.x, 0, b.z) + _climb_side * 0.45 + Vector3(0, y, 0)
+	model.rotation.y = lerp_angle(model.rotation.y, atan2(_climb_side.x, _climb_side.z), 10.0 * delta)
+	# поза лазания: руки и ноги перехватываются по очереди
+	_climb_phase += delta * abs(up) * 7.0
+	var sw := sin(_climb_phase)
+	arm_l.rotation.x = -2.6 + sw * 0.5
+	arm_r.rotation.x = -2.6 - sw * 0.5
+	leg_l.rotation.x = -0.5 - sw * 0.4
+	leg_r.rotation.x = -0.5 + sw * 0.4
+	if abs(up) > 0.1 and int(_climb_phase / PI) != int((_climb_phase - delta * 7.0) / PI):
+		Audio.play("rustle", -14.0, 0.2)
+	_update_camera(delta)
+	if y >= t.y - 1.0:
+		global_position = climbing.world_exit()
+		_stop_climb()
+		return
+	if y <= b.y + 0.05 and up < 0.0:
+		_stop_climb()
+		return
+	if controls_enabled and Input.is_action_just_pressed("jump"):
+		_stop_climb(_climb_side * 3.0 + Vector3(0, 3.0, 0))
+		return
+	if stamina <= 0.0:
+		stamina = 0.0
+		Game.notified.emit("Пальцы разжались — сил не хватило!", Color("ff9d7a"))
+		_stop_climb(_climb_side * 1.5)
+
+
 # ------------------------------------------------------------------ Взаимодействие
 func _find_target() -> void:
 	var best: Node = null
@@ -347,6 +433,10 @@ func try_interact() -> void:
 
 
 func get_hint() -> String:
+	if climbing:
+		return "W — вверх,  S — вниз,  Пробел — спрыгнуть,  Q — поесть"
+	if near_climb and (target == null or not is_instance_valid(target)):
+		return "[Пробел]  Лезть по лиане" if Game.has_tool("climbing_gloves") else "Лиана (нужны перчатки лазальщика)"
 	if target == null or not is_instance_valid(target):
 		return ""
 	return "[ЛКМ / E]  " + target.get_hint()
