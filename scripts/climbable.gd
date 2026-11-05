@@ -11,15 +11,17 @@ var ladder_yaw := 0.0   # железная лестница (бункер): пе
 var ice := false        # ледяная стена (Ледяной остров): нужны ледоруб и перчатки; ladder_yaw — куда смотрит стена
 var rest_step := 0.0    # на ледяной стене через каждые rest_step м — зарубка, где можно повисеть и отдышаться
 var locked_hint := ""   # не пускает (например, поперёк тропы спит морж) — вот почему
+var rock := false       # выступы базальта (стена кратера): нужны перчатки, как для лианы
+var hot := false        # на стене жарко (Остров Вулкана): растёт шкала жара
 
 
 func _ready() -> void:
 	add_to_group("climb")
 	var len := top.y - bottom.y
 	var segs := int(ceil(len))
-	if ice:
+	if ice or rock:
 		for i in segs:
-			var im := Models.glb("ice_steps")
+			var im := Models.glb("ice_steps" if ice else "rock_holds")
 			if im == null:
 				break
 			im.position = bottom + Vector3(0, i * len / segs, 0)

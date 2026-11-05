@@ -21,6 +21,8 @@ func _ready() -> void:
 		a.kind = cfg["animal"]
 		a.home = global_position
 		a.radius = 1.2 if id == "coop" else (1.0 if id == "goose_house" else 1.4)
+		if id == "tortoise_pen":
+			a.size = [1.3, 1.0, 0.65][i % 3]   # Генерал, Тортила, Малыш
 		a.position = position + Vector3(randf_range(-1, 1), 0, randf_range(-1, 1))
 		get_parent().add_child.call_deferred(a)
 		animals.append(a)
@@ -34,7 +36,7 @@ func _exit_tree() -> void:
 
 
 func marker_height() -> float:
-	return {"coop": 2.6, "beehive": 2.1, "sheep_pen": 1.9, "pig_sty": 1.9, "goose_house": 2.2, "lightning_rod": 4.4}.get(id, 1.8)
+	return {"coop": 2.6, "beehive": 2.1, "sheep_pen": 1.9, "pig_sty": 1.9, "goose_house": 2.2, "lightning_rod": 4.4, "tortoise_pen": 1.6}.get(id, 1.8)
 
 
 ## Доля времени, когда идёт гроза (для «пропущенного» времени — сон, далёкий остров).
@@ -106,7 +108,7 @@ func interact(_player: Node) -> void:
 			fed = true
 			progress = 0.0
 			Game.bump("fed", id)
-			Audio.play({"coop": "cluck", "beehive": "rustle", "pig_sty": "oink", "goose_house": "honk", "lightning_rod": "radio"}.get(id, "bleat"), -2.0, 0.1, global_position)
+			Audio.play({"coop": "cluck", "beehive": "rustle", "pig_sty": "oink", "goose_house": "honk", "lightning_rod": "radio", "tortoise_pen": "tortoise"}.get(id, "bleat"), -2.0, 0.1, global_position)
 			Game.notified.emit("Аккумулятор подключён. Ждём грозу!" if id == "lightning_rod" else "%s накормлены!" % cfg["animal_name"], Color("ffe08a"))
 			for a in animals:
 				if is_instance_valid(a):

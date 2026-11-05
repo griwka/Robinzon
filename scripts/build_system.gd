@@ -88,10 +88,35 @@ func _process(_delta: float) -> void:
 	var cfg: Dictionary = Data.BUILDINGS[active_id]
 	if cfg.get("shore", false):
 		pos.y = maxf(pos.y, 0.0)
+	var snap_rot := ghost_rot
+	if cfg.get("spot", false):
+		# мосток — только на отмеченном месте: призрак прилипает к ближайшим колышкам
+		var sp := free_spot(pos, 4.0)
+		valid = sp != null and sp.global_position.distance_to(player.global_position) < 12.0
+		if sp:
+			pos = sp.global_position
+			snap_rot = sp.rotation.y
+		ghost.global_position = pos
+		ghost.rotation.y = snap_rot
+		_set_ghost_mat(_ok_mat if valid else _bad_mat)
+		return
 	ghost.global_position = pos
 	ghost.rotation.y = ghost_rot
 	valid = _check_valid(pos, cfg)
 	_set_ghost_mat(_ok_mat if valid else _bad_mat)
+
+
+## Свободное место под мосток рядом с точкой (или null).
+func free_spot(pos: Vector3, within: float) -> Node3D:
+	var best: Node3D = null
+	for s in get_tree().get_nodes_in_group("bridge_spot"):
+		var sp := s as Node3D
+		if sp.get("used"):
+			continue
+		var d := Vector2(sp.global_position.x - pos.x, sp.global_position.z - pos.z).length()
+		if d < within and (best == null or d < Vector2(best.global_position.x - pos.x, best.global_position.z - pos.z).length()):
+			best = sp
+	return best
 
 
 func _check_valid(pos: Vector3, cfg: Dictionary) -> bool:
@@ -152,7 +177,7 @@ func _try_place() -> void:
 		return
 	var id := active_id
 	var v := active_variant
-	var b := spawn_building(id, ghost.global_position, ghost_rot, v)
+	var b := spawn_building(id, ghost.global_position, ghost.rotation.y, v)
 	Game.notified.emit("Построено: %s" % cfg["name"], Color("8affa0"))
 	Audio.play("build", -2.0, 0.05)
 	cancel(false)
@@ -171,6 +196,7 @@ func spawn_building(id: String, pos: Vector3, rot: float, variant := "", state :
 		"fruit_tree": b = FruitTree.new()
 		"coop", "goat_pen", "beehive", "sheep_pen", "pig_sty", "goose_house", "lightning_rod": b = AnimalPen.new()
 		"greenhouse": b = Greenhouse.new()
+		"tortoise_pen": b = AnimalPen.new()
 		_: b = Building.new()
 	b.setup(id, variant)
 	b.position = pos

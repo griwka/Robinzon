@@ -65,6 +65,7 @@ func build() -> void:
 	_find_spawn()
 	_build_terrain()
 	_build_water()
+	_place_pois()   # заранее: трава не должна расти там, где будет лава
 	_build_grass()
 	_spawn_resources()
 
@@ -140,6 +141,12 @@ func _build_terrain() -> void:
 			["grass_light", Palette.GRASS_LIGHT], ["grass_dark", Palette.GRASS_DARK], ["grass_warm", Palette.GRASS_WARM],
 			["rock", Palette.ROCK], ["rock_dark", Palette.ROCK_DARK], ["dirt", Palette.DIRT], ["dirt_dark", Palette.DIRT_DARK]]:
 		m.set_shader_parameter(pair[0], pair[1])
+	if mix == "volcano":
+		# Остров Вулкана: чёрный песок, сочная трава, тёмный базальт
+		for pair in [["sand", Color("4c4648")], ["sand_dark", Color("3a3537")], ["sand_light", Color("625b5c")],
+				["wet_sand", Color("2e2a2c")], ["seabed", Color("4fb0a8")], ["rock", Color("5e5858")], ["rock_dark", Color("454042")],
+				["dirt", Color("7a5a48")], ["dirt_dark", Color("5e4638")]]:
+			m.set_shader_parameter(pair[0], pair[1])
 	if mix == "ice":
 		# Ледяной остров: галечный берег, тундра с рыжими пятнами, выше — снег и голубой лёд
 		for pair in [["sand", Color("e9e0c9")], ["sand_dark", Color("d6caae")], ["sand_light", Color("f5efe0")],
@@ -199,6 +206,14 @@ func _build_water() -> void:
 const SNOW_LINE := 2.1   # Ледяной остров до оттепели: выше этой высоты — снег
 
 
+## Лавовое поле перед храмом на Вулкане: там не растёт трава.
+func _lava_field(x: float, z: float) -> bool:
+	if not poi.has("temple_gate"):
+		return false
+	var g: Vector3 = poi["temple_gate"]
+	return Vector2(x - g.x, z - g.z).length() < 9.8
+
+
 ## Ледяной остров ещё скован холодом.
 var cold := false
 
@@ -242,6 +257,8 @@ func _build_grass() -> void:
 			continue
 		if cold and h > SNOW_LINE + detail_noise.get_noise_2d(x * 0.3, z * 0.3) * 0.8 - 0.2:
 			continue   # под снегом трава не растёт
+		if _lava_field(x, z):
+			continue
 		var s := g.randf_range(0.8, 1.6)
 		tr.append(Transform3D(Basis(Vector3.UP, g.randf() * TAU).scaled(Vector3(s, s * g.randf_range(0.8, 1.3), s)), Vector3(x, h - 0.03, z)))
 		cols.append(Color.WHITE.lerp(Color("e8ffb0"), g.randf() * 0.4))
@@ -265,7 +282,7 @@ func _build_grass() -> void:
 			var x := cx + g.randf_range(-1.8, 1.8)
 			var z := cz + g.randf_range(-1.8, 1.8)
 			var h := height_at(x, z)
-			if h < 1.3 or h > 7.5 or Vector2(x - camp_center.x, z - camp_center.z).length() < 6.5:
+			if h < 1.3 or h > 7.5 or Vector2(x - camp_center.x, z - camp_center.z).length() < 6.5 or _lava_field(x, z):
 				continue
 			var s := g.randf_range(0.8, 1.4)
 			ft.append(Transform3D(Basis(Vector3.UP, g.randf() * TAU).scaled(Vector3(s, s, s)), Vector3(x, h + 0.12, z)))
@@ -369,6 +386,25 @@ func _place_pois() -> void:
 		for k in ["storm_tower", "seaplane", "graves"]:
 			poi_extra[k] = poi[k]
 		return
+	if mix == "volcano":
+		# кратер — столовая гора; подъём — со стороны лагеря; храм — в стене кратера сбоку;
+		# горячие источники с лечебницей Веры — недалеко от лагеря
+		var cr := Vector3(flat[0].x, flat[2], flat[0].y)
+		poi["crater"] = cr
+		var to_c := Vector3(camp_center.x - cr.x, 0, camp_center.z - cr.z).normalized()
+		var cfoot := cr + to_c * (VolcanoCrater.WALL_R + 2.0)
+		cfoot.y = height_at(cfoot.x, cfoot.z)
+		poi["crater_foot"] = cfoot
+		var east := Vector3(-to_c.z, 0, to_c.x)
+		var gate := cr + east * (VolcanoCrater.WALL_R + 0.9)
+		gate.y = height_at(gate.x, gate.z)
+		poi["temple_gate"] = gate
+		var sp := camp_center + Vector3(-to_c.z, 0, to_c.x) * -15.0 - to_c * 4.0
+		sp.y = height_at(sp.x, sp.z)
+		poi["springs"] = sp
+		for k in ["temple_gate", "springs", "crater_foot"]:
+			poi_extra[k] = poi[k]
+		return
 	if mix == "ice":
 		# ледник с обсерваторией — на столовой горе; тропа к нему (с моржом) — со стороны лагеря;
 		# маяк — на восточном мысу, пингвины — у бухты на западе, ларцы — на уступе, под водопадом и в бору
@@ -422,7 +458,8 @@ func _shore_point(a: float, inland: float) -> Vector3:
 
 
 func _spawn_resources() -> void:
-	_place_pois()
+	if poi.is_empty():
+		_place_pois()
 	var holder := Node3D.new()
 	holder.name = "Resources"
 	add_child(holder)
@@ -449,7 +486,25 @@ func _spawn_resources() -> void:
 			gl.position = Vector3(poi[id].x, 0, poi[id].z)
 			holder.add_child(gl)
 			continue
-		if id == "glacier_foot":
+		if id in ["glacier_foot", "crater_foot"]:
+			continue
+		if id == "crater":
+			var vc := VolcanoCrater.new()
+			vc.island = self
+			vc.site = poi[id]
+			vc.foot = poi["crater_foot"]
+			vc.position = Vector3(poi[id].x, 0, poi[id].z)
+			holder.add_child(vc)
+			crater_node = vc
+			continue
+		if id == "temple_gate":
+			_pending_temple = poi[id]
+			continue
+		if id == "springs":
+			var hs := HotSprings.new()
+			hs.island = self
+			hs.position = poi[id]
+			holder.add_child(hs)
 			continue
 		if id == "penguins":
 			var pc := PenguinColony.new()
@@ -499,10 +554,12 @@ func _spawn_resources() -> void:
 			var p2 := Vector2(x, z)
 			var dc := p2.distance_to(camp2)
 			var dw := p2.distance_to(wreck2)
-			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5, "storm": 10.5, "ice": 11.0}.get(mix, 5.0)):
+			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5, "storm": 10.5, "ice": 11.0, "volcano": 11.0}.get(mix, 5.0)):
 				continue
 			var kind := ""
-			if mix == "ice" and dc >= 9.5 and dw >= 7.0:
+			if mix == "volcano" and dc >= 9.5 and dw >= 7.0:
+				kind = _volcano_kind(h, dc, roll, seed_v)
+			elif mix == "ice" and dc >= 9.5 and dw >= 7.0:
 				kind = _ice_kind(h, dc, roll, seed_v, p2)
 			elif mix == "storm" and dc >= 9.5 and dw >= 7.0:
 				kind = _storm_kind(h, dc, roll, seed_v)
@@ -573,6 +630,15 @@ func _spawn_resources() -> void:
 		_spawn_pits(holder, "sand", 6, "storm:sand_%d")
 	if mix == "ice":
 		_spawn_floes(decor)
+	if mix == "volcano":
+		_spawn_obsidian(holder)
+	if mix == "volcano" and crater_node:
+		# храм строится после кратера: ему нужна стена кратера, чтобы упереть в неё лавовые ручьи
+		var tp := VolcanoTemple.new()
+		tp.island = self
+		tp.crater = crater_node
+		tp.position = _pending_temple
+		holder.add_child(tp)
 
 
 ## Ледяной остров: на берегу — галька и льдины, в тундре — мох, брусника и сосны (у западного бора — гуще),
@@ -610,6 +676,65 @@ func _ice_kind(h: float, dc: float, roll: float, seed_v: int, p2: Vector2) -> St
 	if roll < 0.5: return "ice_block"
 	if roll < 0.55 and h > 3.0: return "ice_wall"
 	if roll < 0.58: return "fallen_log"
+	return ""
+
+
+var crater_node: VolcanoCrater
+var _pending_temple := Vector3.ZERO
+
+
+## Обсидиан — чёрные глыбы у подножия кратера (с тыльной стороны, подальше от храма и подъёма). Отрастает.
+func _spawn_obsidian(holder: Node3D) -> void:
+	var cr: Vector3 = poi["crater"]
+	var gate: Vector3 = poi["temple_gate"]
+	var foot: Vector3 = poi["crater_foot"]
+	var k := 0
+	for i in 22:
+		var a := TAU * i / 22.0
+		var p := cr + Vector3(cos(a), 0, sin(a)) * 12.3
+		if Vector2(p.x - gate.x, p.z - gate.z).length() < 13.5 or Vector2(p.x - foot.x, p.z - foot.z).length() < 5.0:
+			continue
+		var h := height_at(p.x, p.z)
+		if h < 1.2:
+			continue
+		k += 1
+		_spawn(holder, "obsidian_rock", Vector3(p.x, h - 0.05, p.z), 9100 + k, "volcano:obs_%d" % k, -100.0)
+
+
+## Остров Вулкана: на чёрном пляже — пальмы и плавник; на склонах — папоротник, трава, алоэ, дикий кофе,
+## горелые деревья (уголь), рыжие рудные жилы; выше, у кратера, — обсидиан и базальтовые столбы.
+func _volcano_kind(h: float, dc: float, roll: float, seed_v: int) -> String:
+	if h < 1.05:
+		if roll < 0.1: return ["pebble", "shell", "driftwood"][seed_v % 3]
+		if roll < 0.18: return "palm"
+		if roll < 0.21: return "rock"
+		return ""
+	if dc < 17.0:
+		if roll < 0.24: return "tall_grass"
+		if roll < 0.38: return "fern"
+		if roll < 0.5: return "aloe"
+		if roll < 0.58: return "coffee_bush"
+		if roll < 0.64: return "bush"
+		if roll < 0.69: return "palm"
+		return ""
+	if h > 5.0:
+		if roll < 0.12: return "obsidian_rock"
+		if roll < 0.22: return "charred_tree"
+		if roll < 0.3: return "rock"
+		if roll < 0.36: return "ore_vein"
+		if roll < 0.4: return "aloe"
+		return ""
+	if roll < 0.14: return "fern"
+	if roll < 0.27: return "tall_grass"
+	if roll < 0.36: return "coffee_bush"
+	if roll < 0.45: return "aloe"
+	if roll < 0.53: return "charred_tree"
+	if roll < 0.6: return "ore_vein"
+	if roll < 0.65: return "palm"
+	if roll < 0.7: return "jungle_tree"
+	if roll < 0.75: return "bush"
+	if roll < 0.78: return "rock"
+	if roll < 0.8: return "basalt"
 	return ""
 
 
@@ -735,7 +860,7 @@ func _spawn_clay(holder: Node3D) -> void:
 
 ## Места для рыбалки — бурлящая вода у берега недалеко от лагеря.
 func _spawn_fishing_spots(holder: Node3D) -> void:
-	var want: int = {"fort": 4, "home": 2, "banyan": 2, "storm": 3, "ice": 2}.get(mix, 2)
+	var want: int = {"fort": 4, "home": 2, "banyan": 2, "storm": 3, "ice": 2, "volcano": 3}.get(mix, 2)
 	var c := Vector2(camp_center.x, camp_center.z)
 	var placed: Array[Vector2] = []
 	var a0 := atan2(wreck_point.z, wreck_point.x)
@@ -821,7 +946,9 @@ const RINGS := {"old_camp": [["thicket", 5.4, 18], ["jungle_tree", 7.6, 17]],
 	"storm_tower": [["rockfall", 5.2, 12]],
 	# Ледяной: у подножия ледника — полукольцо ледяных стен (вторую половину закрывает обрыв), маяк — во льду
 	"glacier_foot": [["ice_wall", 4.6, 14]],
-	"ice_tower": [["ice_wall", 5.4, 14]]}
+	"ice_tower": [["ice_wall", 5.4, 14]],
+	# Вулкан: лавовое поле перед храмом закрыто полукольцом базальтовых столбов (вторую половину — стена кратера)
+	"temple_gate": [["basalt", 10.9, 28]]}
 
 
 func _barrier_rings(holder: Node3D) -> void:
@@ -840,10 +967,11 @@ func _barrier_rings(holder: Node3D) -> void:
 				k += 1
 				var a := TAU * i / cnt + (0.15 if kind == "jungle_tree" else 0.0)
 				var pos := c + Vector3(cos(a) * rad, 0, sin(a) * rad)
-				if poi.has("glacier") and Vector2(pos.x - poi["glacier"].x, pos.z - poi["glacier"].z).length() < IceGlacier.WALL_R + 1.1:
-					continue   # эту часть кольца закрывает ледяной обрыв
+				var mesa: Vector3 = poi.get("glacier", poi.get("crater", Vector3(9999, 0, 9999)))
+				if Vector2(pos.x - mesa.x, pos.z - mesa.z).length() < IceGlacier.WALL_R + 1.1:
+					continue   # эту часть кольца закрывает обрыв (ледник или кратер)
 				pos.y = height_at(pos.x, pos.z) - 0.05
-				var yaw := -a + PI / 2 if kind in ["cliff", "liana_curtain", "rockfall", "ice_wall"] else -100.0
+				var yaw := -a + PI / 2 if kind in ["cliff", "liana_curtain", "rockfall", "ice_wall", "basalt"] else -100.0
 				_spawn(holder, kind, pos, k * 7919 + i, "%s:r_%s_%d" % [loc, id, k], yaw)
 
 
