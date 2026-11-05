@@ -34,7 +34,7 @@ func _exit_tree() -> void:
 
 
 func marker_height() -> float:
-	return {"coop": 2.6, "beehive": 2.1, "sheep_pen": 1.9}.get(id, 1.8)
+	return {"coop": 2.6, "beehive": 2.1, "sheep_pen": 1.9, "pig_sty": 1.9}.get(id, 1.8)
 
 
 func _process(delta: float) -> void:
@@ -88,7 +88,7 @@ func interact(_player: Node) -> void:
 			fed = true
 			progress = 0.0
 			Game.bump("fed", id)
-			Audio.play({"coop": "cluck", "beehive": "rustle"}.get(id, "bleat"), -2.0, 0.1, global_position)
+			Audio.play({"coop": "cluck", "beehive": "rustle", "pig_sty": "oink"}.get(id, "bleat"), -2.0, 0.1, global_position)
 			Game.notified.emit("%s накормлены!" % cfg["animal_name"], Color("ffe08a"))
 			for a in animals:
 				if is_instance_valid(a):

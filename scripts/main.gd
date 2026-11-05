@@ -150,7 +150,7 @@ func _resume() -> void:
 ## Причал на новом острове: плот, на котором мы приплыли (на нём можно уплыть обратно), и Румба на мачте.
 func _spawn_arrival_dock() -> void:
 	var dock := Building.new()
-	dock.setup("raft")
+	dock.setup("canoe" if Game.location == "fort" else "raft")
 	var w := island.wreck_point
 	w.y = maxf(w.y, 0.0)
 	dock.position = w
@@ -161,7 +161,7 @@ func _spawn_arrival_dock() -> void:
 	dock.sail_requested.connect(_choose_destination)
 	parrot = NPCParrot.new()
 	dock.add_child(parrot)
-	parrot.position = Vector3(0, 2.9, 0)
+	parrot.position = Vector3(0, 2.6 if Game.location == "fort" else 2.9, 0) + (Vector3(0, 0, 0.45) if Game.location == "fort" else Vector3.ZERO)
 
 
 func _spawn_story_objects() -> void:
@@ -453,9 +453,9 @@ func _choose_destination() -> void:
 		if cfg.has("unlock_flag") and not Game.flags.get(cfg["unlock_flag"], false):
 			continue
 		options.append({"text": "Плыть: %s" % cfg["name"], "icon": "sail", "callback": travel_to.bind(loc)})
-	if Game.stat("built", "canoe") > 0:
-		options.append({"text": "Старый форт — глава 3 (в разработке)", "icon": "lyova_key",
-			"callback": func(): Game.notified.emit("Старый форт появится в следующей версии игры", Color("ffe08a"))})
+	if Game.flags.get("storm_route", false):
+		options.append({"text": "Грозовой остров — глава 4 (в разработке)", "icon": "sym_star",
+			"callback": func(): Game.notified.emit("Грозовой остров появится в следующей версии игры", Color("ffe08a"))})
 	if options.is_empty():
 		Game.notified.emit("Плыть пока некуда. Куда указывает свет?..", Color("ffe08a"))
 		return

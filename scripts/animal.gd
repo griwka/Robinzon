@@ -46,7 +46,7 @@ func _process(delta: float) -> void:
 	_voice_t -= delta
 	if _voice_t <= 0.0:
 		_voice_t = randf_range(10.0, 25.0)
-		Audio.play("cluck" if kind == "chicken" else "bleat", -9.0, 0.15, global_position)
+		Audio.play({"chicken": "cluck", "pig": "oink"}.get(kind, "bleat"), -9.0, 0.15, global_position)
 	var speed := 0.7 if kind == "chicken" else 0.5
 	var to := _target - global_position
 	to.y = 0
@@ -93,7 +93,7 @@ func tool_hint() -> String:
 
 
 func get_hint() -> String:
-	return "Погладить %s" % {"chicken": "курочку", "goat": "козу", "sheep": "овечку"}.get(kind, "зверя")
+	return "Погладить %s" % {"chicken": "курочку", "goat": "козу", "sheep": "овечку", "pig": "поросёнка"}.get(kind, "зверя")
 
 
 func interact(_player: Node) -> void:
@@ -101,10 +101,11 @@ func interact(_player: Node) -> void:
 		return
 	_pet_cooldown = 1.0
 	happy()
-	Audio.play("cluck" if kind == "chicken" else "bleat", -2.0, 0.12, global_position)
+	Audio.play({"chicken": "cluck", "pig": "oink"}.get(kind, "bleat"), -2.0, 0.12, global_position)
 	Game.bump("petted", kind)
 	var lines := {"chicken": ["Ко-ко-ко!", "Курочка довольно кудахчет", "Курица смотрит на тебя одним глазом"],
 		"goat": ["Ме-е-е!", "Коза жуёт и не обращает внимания", "Коза бодает тебя в руку — ещё!"],
-		"sheep": ["Бе-е-е!", "Овечка тёплая и мягкая, как облако", "Овечка жмурится от удовольствия"]}
+		"sheep": ["Бе-е-е!", "Овечка тёплая и мягкая, как облако", "Овечка жмурится от удовольствия"],
+		"pig": ["Хрю!", "Поросёнок радостно виляет хвостиком", "Поросёнок тычется пятачком тебе в ладонь"]}
 	var l: Array = lines[kind]
 	Game.notified.emit(l[randi() % l.size()], Color("ffe08a"))

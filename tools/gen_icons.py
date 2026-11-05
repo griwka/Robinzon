@@ -712,6 +712,215 @@ def i_climbing_gloves():
     return img
 
 
+def fish_icon(body, belly, fin, stripes=None, spots=None):
+    def draw():
+        img, d = new()
+        poly(d, [(110, 260), (40, 160), (60, 260), (40, 360)], fin)                      # хвост
+        poly(d, blob(270, 260, 170, 7, 0.04, sx=1.15, sy=0.62), body)
+        d.polygon(ell_pts(290, 300, 140, 50), fill=belly)
+        poly(d, [(230, 160), (330, 110), (350, 170)], fin)                                # спинной плавник
+        if stripes:
+            for x in (230, 300):
+                line(d, quad_curve((x, 170), (x + 20, 260), (x, 350)), stripes, 22)
+        if spots:
+            for x, y in ((220, 220), (280, 250), (330, 215), (250, 290)):
+                ell(d, x, y, 12, 12, spots, w=0)
+        ell(d, 385, 235, 24, 24, rgb("ffffff"), w=8)
+        ell(d, 390, 237, 12, 12, rgb("1d1d1d"), w=0)
+        line(d, quad_curve((420, 285), (440, 295), (420, 305)), O, 8)
+        return img
+    return draw
+
+
+def i_fish_soup():
+    img, d = new()
+    poly(d, ell_pts(256, 260, 210, 190, 0, 48, 0.0, math.pi), rgb("8a5a32"))
+    ell(d, 256, 260, 210, 70, rgb("e8b45a"))
+    for x, y, c in ((190, 255, "f58a1f"), (290, 245, "ffffff"), (330, 270, "3fae49"), (230, 275, "c8a064")):
+        ell(d, x, y, 26, 16, rgb(c), w=6)
+    for x in (200, 256, 312):
+        line(d, quad_curve((x, 180), (x - 25, 130), (x + 6, 80)), rgb("ffffff", 200), 12)
+    return img
+
+
+def i_truffle():
+    img, d = new()
+    poly(d, blob(256, 290, 160, 41, 0.12, sx=1.0, sy=0.85), rgb("4a3a2a"))
+    for k in range(14):
+        a = k * 2.4
+        ell(d, 256 + math.cos(a) * 90, 290 + math.sin(a) * 70, 14, 10, rgb("6a5a48"), w=0)
+    poly(d, leaf_shape((330, 160), (440, 90), -20, 26), rgb("4f9a4a"))
+    return img
+
+
+def i_clay():
+    img, d = new()
+    poly(d, blob(256, 300, 170, 51, 0.1, sx=1.15, sy=0.7), rgb("c87048"))
+    for x, y in ((200, 270), (300, 300), (250, 340)):
+        line(d, quad_curve((x - 40, y), (x, y - 20), (x + 40, y)), rgb("a8583a"), 8)
+    return img
+
+
+def i_brick():
+    img, d = new()
+    for k, (x, y) in enumerate(((150, 320), (360, 320), (255, 200))):
+        poly(d, [(x - 105, y - 50), (x + 105, y - 50), (x + 105, y + 50), (x - 105, y + 50)], rgb("b8583a"))
+        for q in range(3):
+            ell(d, x - 50 + q * 50, y, 10, 10, rgb("8a3a22"), w=0)
+    return img
+
+
+def i_piglet():
+    img, d = new()
+    ell(d, 240, 290, 170, 130, rgb("f2a8a8"))
+    ell(d, 390, 250, 85, 80, rgb("f2a8a8"))
+    ell(d, 455, 265, 30, 34, rgb("e88a8a"))
+    for y in (255, 280):
+        ell(d, 455, y, 6, 8, rgb("8a4a4a"), w=0)
+    poly(d, [(360, 180), (395, 140), (410, 200)], rgb("e88a8a"))
+    ell(d, 410, 230, 12, 12, rgb("1d1d1d"), w=0)
+    for x in (150, 210, 280, 330):
+        stroke(d, [(x, 390), (x, 450)], rgb("e88a8a"), 26)
+    line(d, quad_curve((70, 260), (40, 230), (70, 210)), O, 10)
+    return img
+
+
+def i_fishing_rod():
+    img, d = new()
+    stroke(d, [(110, 460), (430, 60)], rgb("b8c450"), 22)
+    ell(d, 170, 380, 40, 40, rgb("8f9499"))
+    line(d, quad_curve((430, 60), (470, 260), (440, 400)), rgb("eeeeee"), 5)
+    ell(d, 440, 410, 22, 22, rgb("d9573b"))
+    return img
+
+
+def i_shovel():
+    img, d = new()
+    stroke(d, [(150, 70), (300, 330)], rgb("a8733f"), 30)
+    stroke(d, [(110, 90), (190, 45)], rgb("a8733f"), 26)
+    poly(d, [(270, 300), (360, 250), (450, 410), (400, 470), (330, 450)], rgb("8f9499"))
+    return img
+
+
+def i_fort_key():
+    img, d = new()
+    ell(d, 160, 180, 100, 100, rgb("9aa0a6"))
+    d.ellipse((115, 135, 205, 225), fill=(0, 0, 0, 0))
+    stroke(d, [(230, 250), (430, 450)], rgb("9aa0a6"), 40)
+    for q in range(3):
+        stroke(d, [(340 + q * 30, 360 + q * 30), (390 + q * 30, 310 + q * 30)], rgb("9aa0a6"), 24)
+    return img
+
+
+def i_lamp_oil():
+    img, d = new()
+    poly(d, [(200, 180), (312, 180), (380, 280), (370, 450), (142, 450), (132, 280)], rgb("6b8a3a"))
+    rrect(d, (220, 110, 292, 190), 12, rgb("8a5a32"))
+    poly(d, [(170, 300), (342, 300), (342, 400), (170, 400)], rgb("f2e2b8"), w=8)
+    poly(d, [(256, 320), (285, 370), (227, 370)], rgb("ff8a1e"), w=6)
+    return img
+
+
+def symbol(kind, col):
+    def draw():
+        img, d = new()
+        ell(d, 256, 256, 220, 220, rgb("f2e2b8"))
+        if kind == "moon":
+            ell(d, 236, 256, 140, 140, col)
+            d.ellipse((236 + 70 - 120, 256 - 40 - 120, 236 + 70 + 120, 256 - 40 + 120), fill=rgb("f2e2b8"))
+            line(d, ell_pts(306, 216, 120, 120, 0, 40, 1.7, 3.6), O, W)
+        elif kind == "star":
+            pts = []
+            for i in range(10):
+                r = 150 if i % 2 == 0 else 62
+                t = -math.pi / 2 + i * math.pi / 5
+                pts.append((256 + math.cos(t) * r, 256 + math.sin(t) * r))
+            poly(d, pts, col)
+        else:
+            for k in range(12):
+                a = k * math.pi / 6
+                stroke(d, [(256 + math.cos(a) * 110, 256 + math.sin(a) * 110), (256 + math.cos(a) * 175, 256 + math.sin(a) * 175)], col, 22)
+            ell(d, 256, 256, 95, 95, col)
+        return img
+    return draw
+
+
+def portrait_stepa():
+    img, d = new()
+    ell(d, 256, 256, 240, 240, rgb("a8c8e0"))
+    poly(d, [(120, 410), (392, 410), (430, 512), (82, 512)], rgb("2f3e5c"))
+    ell(d, 256, 270, 145, 145, rgb("e0a888"))
+    poly(d, blob(256, 360, 130, 71, 0.08, sx=1.05, sy=0.75), rgb("d9d4cc"))
+    poly(d, [(110, 200), (402, 200), (380, 110), (256, 70), (132, 110)], rgb("8a2a2a"))
+    for k in range(5):
+        line(d, [(140 + k * 58, 120), (140 + k * 58, 195)], rgb("6a1a1a"), 8)
+    for sx in (-1, 1):
+        ell(d, 256 + sx * 52, 265, 18, 20, rgb("ffffff"), w=8)
+        ell(d, 256 + sx * 52, 268, 10, 11, rgb("3a5a7a"), w=0)
+        line(d, [(256 + sx * 25, 232), (256 + sx * 85, 225)], rgb("d9d4cc"), 16)
+    ell(d, 256, 310, 30, 26, rgb("d98a70"))
+    stroke(d, [(300, 345), (380, 380)], rgb("5a3a22"), 12)
+    ell(d, 390, 372, 22, 26, rgb("5a3a22"))
+    return img
+
+
+def fresco(scene):
+    """Большой рисунок на стене (охра по камню): старинный стиль, простые силуэты."""
+    img = Image.new("RGBA", (S * 2, S), rgb("d9c4a0"))
+    d = ImageDraw.Draw(img)
+    rnd_ = random.Random(len(scene))
+    for k in range(400):   # фактура камня
+        x, y = rnd_.randint(0, S * 2), rnd_.randint(0, S)
+        r = rnd_.randint(2, 9)
+        d.ellipse((x - r, y - r, x + r, y + r), fill=rgb("c9b088", 140))
+    ink = rgb("7a3a22")
+    red = rgb("b8583a")
+    def person(x, y, s=1.0):
+        d.ellipse((x - 14 * s, y - 70 * s, x + 14 * s, y - 42 * s), fill=ink)
+        d.line([(x, y - 42 * s), (x, y)], fill=ink, width=int(9 * s))
+        d.line([(x, y), (x - 18 * s, y + 40 * s)], fill=ink, width=int(8 * s))
+        d.line([(x, y), (x + 18 * s, y + 40 * s)], fill=ink, width=int(8 * s))
+        d.line([(x - 22 * s, y - 30 * s), (x + 22 * s, y - 34 * s)], fill=ink, width=int(7 * s))
+    def tower(x, y, lit=True):
+        d.polygon([(x - 30, y), (x + 30, y), (x + 20, y - 150), (x - 20, y - 150)], fill=ink)
+        if lit:
+            d.polygon([(x - 26, y - 150), (x, y - 210), (x + 26, y - 150)], fill=red)
+            for a in range(-3, 4):
+                d.line([(x, y - 180), (x + a * 40, y - 240)], fill=red, width=5)
+    if scene == "light":
+        for k, x in enumerate((180, 520, 860)):
+            tower(x, 420)
+            person(x - 70, 420)
+            person(x + 70, 420)
+        d.line([(60, 425), (S * 2 - 60, 425)], fill=ink, width=8)
+    elif scene == "storm":
+        for k in range(9):
+            x = 80 + k * 115
+            d.arc((x - 60, 60, x + 60, 180), 180, 360, fill=ink, width=12)
+        for k in range(5):
+            x = 120 + k * 200
+            d.line([(x, 190), (x - 30, 260), (x + 10, 260), (x - 20, 330)], fill=red, width=10)
+        tower(S - 0, 470)
+        for k in range(6):
+            r = 120 + k * 60
+            d.arc((S - r, 470 - r * 0.6, S + r, 470 + r * 0.6), 200, 340, fill=ink, width=6)
+    else:  # map
+        isl = [(150, 330, 60), (360, 200, 70), (560, 380, 55), (760, 220, 65), (920, 380, 50)]
+        for x, y, r in isl:
+            d.ellipse((x - r, y - r * 0.6, x + r, y + r * 0.6), outline=ink, width=8)
+            d.polygon([(x - 8, y - 5), (x + 8, y - 5), (x + 5, y - 45), (x - 5, y - 45)], fill=red)
+        for (a, b) in zip(isl, isl[1:]):
+            for t in range(0, 10, 2):
+                x0 = a[0] + (b[0] - a[0]) * t / 10
+                y0 = a[1] + (b[1] - a[1]) * t / 10
+                x1 = a[0] + (b[0] - a[0]) * (t + 1) / 10
+                y1 = a[1] + (b[1] - a[1]) * (t + 1) / 10
+                d.line([(x0, y0), (x1, y1)], fill=ink, width=6)
+        d.ellipse((S - 70, 60, S + 70, 160), outline=red, width=10)
+        d.line([(S, 160), (S, 210)], fill=red, width=8)
+    return img
+
+
 def i_pickaxe():
     img, d = new()
     stroke(d, [(160, 460), (300, 120)], rgb("a8733f"), 34)
@@ -1069,7 +1278,16 @@ def main():
         "stone_axe": i_stone_axe, "pickaxe": i_pickaxe, "machete": i_machete,
         "coins": i_coins, "copper_nails": i_copper_nails, "hive_frame": i_hive_frame, "honey": i_honey, "wool": i_wool,
         "wool_cloth": i_wool_cloth, "sheep": i_sheep, "lyova_key": i_lyova_key, "liana": i_liana,
-        "climbing_gloves": i_climbing_gloves, "scrap": i_scrap, "bamboo": i_bamboo, "watering_can": i_watering_can, "net": i_net,
+        "climbing_gloves": i_climbing_gloves,
+        "fish_soup": i_fish_soup, "truffle": i_truffle, "clay": i_clay, "brick": i_brick, "piglet": i_piglet,
+        "fishing_rod": i_fishing_rod, "shovel": i_shovel, "fort_key": i_fort_key, "lamp_oil": i_lamp_oil,
+        "fish": fish_icon(rgb("7fa8c8"), rgb("d8e8f0"), rgb("5a88a8")),
+        "perch": fish_icon(rgb("8fae4a"), rgb("e8e0a0"), rgb("d9573b"), stripes=rgb("4a6a2a")),
+        "mackerel": fish_icon(rgb("4a7ab8"), rgb("e8f0f8"), rgb("2a5a98"), stripes=rgb("1a3a6a")),
+        "parrotfish": fish_icon(rgb("4ac8a8"), rgb("ffd27a"), rgb("e8448a"), spots=rgb("e8448a")),
+        "clownfish": fish_icon(rgb("ff8a2a"), rgb("ffb05a"), rgb("1d1d1d"), stripes=rgb("ffffff")),
+        "goldfish": fish_icon(rgb("ffc23a"), rgb("fff0a0"), rgb("ff9a1a"), spots=rgb("fff6c0")),
+        "sym_moon": symbol("moon", rgb("4f6fb8")), "sym_star": symbol("star", rgb("e8b42a")), "sym_sun": symbol("sun", rgb("e8642a")), "scrap": i_scrap, "bamboo": i_bamboo, "watering_can": i_watering_can, "net": i_net,
         "scallop": i_scallop, "seahorse": i_seahorse, "rapana": i_rapana, "starfish": i_starfish, "pearl": i_pearl,
     }
     icons.update(crops)
@@ -1088,9 +1306,13 @@ def main():
         save("page_%d" % (i + 1), page(dd))
     for i, dd in enumerate((dd_tree, dd_storm, dd_letter)):
         save("page_b%d" % (i + 1), page(dd))
+    for i, dd in enumerate((dd_letter, dd_lighthouse, dd_storm)):
+        save("page_f%d" % (i + 1), page(dd))
+    for scene in ("light", "storm", "map"):
+        fresco(scene).save(os.path.join(OUT, "fresco_%s.png" % scene))
     big = 256
     for name, fn in (("portrait_parrot", portrait_parrot), ("portrait_player", portrait_player), ("portrait_journal", portrait_journal),
-                     ("portrait_marta", portrait_marta), ("portrait_kesha", portrait_kesha)):
+                     ("portrait_marta", portrait_marta), ("portrait_kesha", portrait_kesha), ("portrait_stepa", portrait_stepa)):
         fn().resize((big, big), Image.LANCZOS).save(os.path.join(OUT, name + ".png"))
     save("bubble", bubble(), False)
     save("exclaim", exclaim())

@@ -6,12 +6,15 @@ class_name QuestValidator
 ## Ещё считает экономику: сколько монет нужно заработать в каждой главе.
 
 const KNOWN_KINDS := ["talk", "collected", "crafted", "built", "planted", "harvested", "watered", "fed", "product",
-	"caught", "sailed", "cleared", "found", "lit", "reached", "collection", "delivered", "sold", "bought", "restored"]
-const NPCS := ["parrot", "marta", "kesha"]
+	"caught", "sailed", "cleared", "found", "lit", "reached", "collection", "delivered", "sold", "bought", "restored",
+	"fished", "solved"]
+const NPCS := ["parrot", "marta", "kesha", "stepa"]
+const PUZZLES := ["cellar"]
 const DECKS := ["deck1", "deck2", "deck3"]
 
 var unlocked := {}
 var given := {}        # предметы из наград и находок (разовые)
+var solved_seen := {}
 var errors: Array[String] = []
 var report: Array[String] = []
 var _where := ""
@@ -31,6 +34,8 @@ func run(chapters: Array = Data.CHAPTERS) -> Array[String]:
 					_err("неизвестный говорящий «%s»" % line[0])
 			for t in q["tasks"]:
 				_check_task(t)
+				if t["kind"] == "solved":
+					solved_seen[t["target"]] = true
 				if t["kind"] == "bought" and t["target"] != "any":
 					spend += _min_price(t["target"]) * int(t["count"])
 				# находка сразу доступна для следующих пунктов того же задания
@@ -123,6 +128,8 @@ func can_get(id: String, depth := 0) -> bool:
 			return true
 	if id in ["leaf", "coconut"]:
 		return true   # пальму можно трясти без инструментов
+	if id == "fish" and can_get("fishing_rod", depth + 1):
+		return true
 	for t in Data.TREES.values():
 		if t["fruit"] == id:
 			return true   # дикие деревья
@@ -140,7 +147,7 @@ func can_get(id: String, depth := 0) -> bool:
 				return true
 	for r in Data.RECIPES:
 		if r["out"].has(id) and (not r.get("unlock", false) or unlocked.has(r["id"])):
-			var ok := true
+			var ok: bool = r["station"] == "" or _building_ok(r["station"], depth + 1)
 			for i in r["in"]:
 				ok = ok and can_get(i, depth + 1)
 			if ok:
@@ -237,6 +244,12 @@ func _check_task(t: Dictionary) -> void:
 		"caught":
 			if not can_get("net"):
 				_err("нет сачка")
+		"fished":
+			if not can_get("fishing_rod"):
+				_err("нечем ловить рыбу — нет удочки")
+		"solved":
+			if not tgt in PUZZLES:
+				_err("нет головоломки «%s»" % tgt)
 		"sailed":
 			if not (_building_ok("raft") or _building_ok("canoe")):
 				_err("не на чем плыть")
@@ -258,6 +271,8 @@ func _check_task(t: Dictionary) -> void:
 						_err("для «%s» не достать «%s»" % [tgt, i])
 			if cfg.has("needs") and not can_get(cfg["needs"]):
 				_err("«%s» заперт, а ключа не достать" % tgt)
+			if cfg.has("needs_flag") and cfg["needs_flag"] == "cellar_drained" and not solved_seen.has("cellar"):
+				_err("«%s» за водой, а головоломку подвала ещё не решали" % tgt)
 		"reached":
 			if not tgt in DECKS:
 				_err("нет яруса «%s»" % tgt)

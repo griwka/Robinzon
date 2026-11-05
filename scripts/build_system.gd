@@ -169,7 +169,7 @@ func spawn_building(id: String, pos: Vector3, rot: float, variant := "", state :
 	match id:
 		"garden_bed": b = GardenBed.new()
 		"fruit_tree": b = FruitTree.new()
-		"coop", "goat_pen", "beehive", "sheep_pen": b = AnimalPen.new()
+		"coop", "goat_pen", "beehive", "sheep_pen", "pig_sty": b = AnimalPen.new()
 		_: b = Building.new()
 	b.setup(id, variant)
 	b.position = pos
