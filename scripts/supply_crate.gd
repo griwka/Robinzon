@@ -39,9 +39,9 @@ func interact(_player: Node) -> void:
 		return
 	Game.flags["crate_opened"] = true
 	remove_from_group("interactable")
-	var lid := visual.get_node("Lid")
+	var lid := visual.find_child("Lid", true, false) as Node3D
 	var tw := create_tween()
-	tw.tween_property(lid, "position", Vector3(0, 0.45, 0.55), 0.3)
+	tw.tween_property(lid, "position", lid.position + Vector3(0, -0.3, 0.55), 0.3)
 	tw.parallel().tween_property(lid, "rotation:x", 1.3, 0.3)
 	FX.burst(self, Vector3(0, 0.8, 0), Color("ffe08a"), 16)
 	Audio.play("rare", -2.0)

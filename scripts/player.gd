@@ -36,6 +36,7 @@ var _head_lag := Vector3.ZERO
 var _lean := Vector2.ZERO
 var _was_on_floor := true
 var _squash := 1.0
+var _body_y := 0.45
 
 
 func _ready() -> void:
@@ -59,6 +60,30 @@ func _ready() -> void:
 
 # ------------------------------------------------------------------ Модель
 func _build_model() -> void:
+	var g := Models.glb("player")
+	if g:
+		model = Node3D.new()
+		model.name = "Model"
+		add_child(model)
+		model.add_child(g)
+		body_pivot = g.get_node("Body")
+		head = body_pivot.get_node("Head")
+		arm_l = body_pivot.get_node("ArmL")
+		arm_r = body_pivot.get_node("ArmR")
+		leg_l = g.get_node("LegL")
+		leg_r = g.get_node("LegR")
+		_body_y = body_pivot.position.y
+		hand_tool = Node3D.new()
+		hand_tool.rotation = Vector3(PI / 2, 0, 0)
+		var hand := arm_r.find_child("HandR", true, false) as Node3D
+		(hand if hand else arm_r).add_child(hand_tool)
+		for mi in g.find_children("*", "MeshInstance3D", true, false):
+			(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		return
+	_build_model_simple()
+
+
+func _build_model_simple() -> void:
 	var skin := Color("f6c9a0")
 	var shirt := Color("7f9a4a")   # рваная зелёная рубаха
 	var shorts := Color("8a5a32")
@@ -184,6 +209,13 @@ func _physics_process(delta: float) -> void:
 		velocity.y = JUMP_VELOCITY
 		_squash = 1.25
 
+	# в открытое море не уплыть: глубина держит у берега
+	var isl := get_tree().get_first_node_in_group("island")
+	if isl:
+		var ahead := global_position + Vector3(velocity.x, 0, velocity.z) * 0.25
+		if isl.height_at(ahead.x, ahead.z) < -0.9:
+			velocity.x = 0.0
+			velocity.z = 0.0
 	# в воде — медленнее и всплываем
 	if global_position.y < -0.6:
 		velocity.x *= 0.92
@@ -255,7 +287,7 @@ func _animate(delta: float, speed: float) -> void:
 	arm_r.rotation.z = 0.12 + (0.6 if not is_on_floor() else 0.0)
 
 	# покачивание тела и "резиновая" голова с запаздыванием
-	body_pivot.position.y = 0.45 + abs(sin(_walk_phase)) * 0.06 * moving
+	body_pivot.position.y = _body_y + abs(sin(_walk_phase)) * 0.06 * moving
 	var local_vel := model.global_transform.basis.inverse() * velocity
 	_lean = _lean.lerp(Vector2(local_vel.z, local_vel.x) * 0.04, 6.0 * delta)
 	body_pivot.rotation.x = _lean.x   # наклон вперёд при беге

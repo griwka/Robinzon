@@ -570,6 +570,38 @@ def i_stone_axe():
     return img
 
 
+def i_machete():
+    img, d = new()
+    rrect(d, (70, 330, 200, 400), 26, rgb("6b3a22"))
+    poly(d, [(190, 320), (220, 300), (240, 420), (205, 435)], rgb("8f9499"))
+    blade = quad_curve((225, 330), (360, 220), (470, 90)) + quad_curve((470, 90), (430, 230), (235, 400))[1:]
+    poly(d, blade, rgb("c9cfd6"))
+    line(d, quad_curve((240, 345), (360, 250), (455, 110)), rgb("eef2f6"), 8)
+    return img
+
+
+def i_scrap():
+    img, d = new()
+    poly(d, [(90, 300), (180, 150), (330, 120), (440, 210), (400, 380), (230, 420), (130, 400)], rgb("9aa3ab"))
+    poly(d, [(180, 150), (330, 120), (300, 200), (200, 230)], rgb("c2c9cf"))
+    for x, y in ((170, 320), (300, 340), (360, 260)):
+        ell(d, x, y, 16, 16, rgb("6b6f75"), w=6)
+    poly(d, [(330, 120), (380, 60), (400, 140)], rgb("b08a5a"))
+    return img
+
+
+def i_bamboo():
+    img, d = new()
+    for k, (x0, x1) in enumerate(((150, 230), (240, 300), (330, 360))):
+        stroke(d, [(x0, 470), (x1, 60)], rgb("b8c450") if k != 1 else rgb("a9b84a"), 44)
+        for t in (0.25, 0.5, 0.75):
+            x = x0 + (x1 - x0) * t
+            y = 470 - 410 * t
+            line(d, [(x - 26, y), (x + 26, y - 4)], rgb("7a8a30"), 10)
+    poly(d, leaf_shape((300, 140), (450, 90), -20, 30), rgb("4f9a4a"))
+    return img
+
+
 def i_pickaxe():
     img, d = new()
     stroke(d, [(160, 460), (300, 120)], rgb("a8733f"), 34)
@@ -890,7 +922,7 @@ def main():
         "plank": i_plank, "shell": i_shell, "sail": i_sail,
         "egg": i_egg, "milk": i_milk, "fried_egg": i_fried_egg, "baked_potato": i_baked_potato,
         "cheese": i_cheese, "fruit_salad": i_fruit_salad,
-        "stone_axe": i_stone_axe, "pickaxe": i_pickaxe, "watering_can": i_watering_can, "net": i_net,
+        "stone_axe": i_stone_axe, "pickaxe": i_pickaxe, "machete": i_machete, "scrap": i_scrap, "bamboo": i_bamboo, "watering_can": i_watering_can, "net": i_net,
         "scallop": i_scallop, "seahorse": i_seahorse, "rapana": i_rapana, "starfish": i_starfish, "pearl": i_pearl,
     }
     icons.update(crops)

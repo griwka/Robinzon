@@ -2,8 +2,8 @@
 shader_type spatial;
 render_mode cull_disabled;
 
-uniform vec4 base_color : source_color = vec4(0.26, 0.54, 0.18, 1.0);
-uniform vec4 tip_color : source_color = vec4(0.58, 0.82, 0.32, 1.0);
+uniform vec4 base_color : source_color = vec4(0.27, 0.46, 0.21, 1.0);
+uniform vec4 tip_color : source_color = vec4(0.56, 0.70, 0.35, 1.0);
 
 varying float v_h;
 

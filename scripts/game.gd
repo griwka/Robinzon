@@ -25,6 +25,7 @@ var quest_index := 0
 var quest_baseline: Dictionary = {}    # "kind:target" -> значение статистики при старте задания
 var quest_started := false             # показано ли вступление
 var flags: Dictionary = {}             # разные одноразовые события
+var cleared: Dictionary = {}           # номера расчищенных преград (заросли, деревья, гряды)
 var time_of_day := 0.3
 var day := 1
 var world_time := 0.0                  # секунды игрового мира (растения растут по нему)
@@ -268,7 +269,7 @@ func start_current_quest() -> void:
 	for t in q["tasks"]:
 		var key: String = t["kind"] + ":" + t["target"]
 		# постройки и разговоры считаем с нуля, ресурсы — от момента получения задания
-		quest_baseline[key] = 0 if t["kind"] in ["talk", "built", "sailed", "collection"] else stat(t["kind"], t["target"])
+		quest_baseline[key] = 0 if t["kind"] in ["talk", "built", "sailed", "collection", "found", "lit"] else stat(t["kind"], t["target"])
 	quest_changed.emit()
 	dialogue_requested.emit(q.get("intro", []), func(): _check_quest())
 
@@ -312,7 +313,7 @@ func save_game(extra: Dictionary) -> void:
 		"version": 2,
 		"inventory": inventory, "stats": stats, "unlocked": unlocked.keys(),
 		"collections": collections, "chapter": chapter, "quest_index": quest_index,
-		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags,
+		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags, "cleared": cleared.keys(),
 		"time_of_day": time_of_day, "day": day, "world_time": world_time,
 	}
 	data.merge(extra)
@@ -354,6 +355,9 @@ func load_game() -> Dictionary:
 	quest_baseline = _int_dict(data.get("quest_baseline", {}))
 	quest_started = bool(data.get("quest_started", false))
 	flags = data.get("flags", {})
+	cleared = {}
+	for k in data.get("cleared", []):
+		cleared[k] = true
 	time_of_day = float(data.get("time_of_day", 0.3))
 	day = int(data.get("day", 1))
 	world_time = float(data.get("world_time", 0.0))
@@ -372,6 +376,7 @@ func reset_state() -> void:
 	quest_baseline = {}
 	quest_started = false
 	flags = {}
+	cleared = {}
 	time_of_day = 0.3
 	day = 1
 	world_time = 0.0

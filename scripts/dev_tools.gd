@@ -29,6 +29,8 @@ func _process(_delta: float) -> void:
 		if args.has("dist"): p.camera_distance = float(args["dist"])
 		if args.has("demo"):
 			_demo()
+		if args.has("gallery"):
+			_gallery(args["gallery"].split(","))
 	if args.has("time"):
 		Game.time_of_day = float(args["time"])
 	if args.has("demo") and _frames > 2 and _frames < 6:
@@ -56,6 +58,8 @@ func _process(_delta: float) -> void:
 			"settings":
 				main._pause()
 				main.menu.open_settings(main.menu.show_pause)
+	if args.has("gallery") and _frames > 2:
+		p.cam_rig.global_position = main.island.camp_center + Vector3(0, float(args.get("camy", "0.8")), 0)
 	if args.has("shot") and _frames == int(args.get("frames", "90")):
 		get_viewport().get_texture().get_image().save_png(args["shot"])
 		print("screenshot saved: ", args["shot"])
@@ -68,6 +72,33 @@ func _flush() -> void:
 	while hud.dialogue_open() and guard < 200:
 		hud.advance_dialogue()
 		guard += 1
+
+
+# ------------------------------------------------------------------ Галерея моделей
+func _gallery(names: PackedStringArray) -> void:
+	var isl: Island = main.island
+	var c: Vector3 = isl.camp_center
+	var p: Player = main.player
+	p.visible = names.has("player") == false
+	var spacing := float(args.get("spacing", "1.6"))
+	var root := Node3D.new()
+	main.add_child(root)
+	var right := Vector3(1, 0, 0)
+	for i in names.size():
+		var m := Models.glb(names[i])
+		if m == null:
+			print("нет модели: ", names[i])
+			continue
+		root.add_child(m)
+		var pos := c + right * (i - (names.size() - 1) / 2.0) * spacing
+		pos.y = isl.height_at(pos.x, pos.z)
+		m.global_position = pos
+		m.rotation.y = float(args.get("rot", "0.5"))
+	p.global_position = c + Vector3(0, 0, 4.0)
+	p.cam_rig.global_position = c + Vector3(0, 0.8, 0)
+	p.camera_yaw = 0.0
+	p.controls_enabled = false
+	main.hud.visible = false
 
 
 # ------------------------------------------------------------------ Демо-лагерь
@@ -245,6 +276,25 @@ func _do_task(t: Dictionary) -> void:
 				_advance([pen], Data.PENS[pen_id]["time"] + 1.0)
 				pen.interact(main.player)
 				guard += 1
+		"cleared":
+			var tools := {"thicket": "machete", "bamboo": "machete", "jungle_tree": "stone_axe", "fallen_log": "stone_axe", "cliff": "pickaxe", "rock": "pickaxe"}
+			if tools.has(target) and not Game.has_tool(tools[target]):
+				_give({tools[target]: 1})
+			var done := 0
+			for c in get_tree().get_nodes_in_group("interactable"):
+				if done >= need:
+					break
+				if c is ResourceNode and c.kind == target and c.active:
+					for k in ResourceNode.KINDS[target]["hp"]:
+						c.interact(main.player)
+					done += 1
+		"found", "lit":
+			if t["kind"] == "lit":
+				_give(StoryPlace.PLACES[target]["fuel"])
+			for c in get_tree().get_nodes_in_group("interactable"):
+				if c is StoryPlace and c.id == target:
+					c.interact(main.player)
+					break
 		"collection":
 			var guard := 0
 			while Game.task_progress(t) < t["count"] and guard < 10:
@@ -318,6 +368,12 @@ func _autotest() -> void:
 		if b["id"] == "garden_bed" and b["s"].has("crop"):
 			bed_state = true
 	_check(bed_state, "состояние грядок сохраняется")
+	_check(data.get("cleared", []).size() > 5, "расчищенные заросли сохраняются (%d)" % data.get("cleared", []).size())
+	var obstacles := 0
+	for c in get_tree().get_nodes_in_group("obstacle"):
+		if c is ResourceNode and c.is_obstacle():
+			obstacles += 1
+	_check(obstacles > 400, "остров зарос: преград %d" % obstacles)
 	Game.delete_save()
 	Game.reset_state()
 

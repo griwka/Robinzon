@@ -237,65 +237,180 @@ func _add_multimesh(name_: String, mesh: Mesh, tr: Array[Transform3D], cols: Arr
 	add_child(mmi)
 
 
-# ------------------------------------------------------------------ Ресурсы
+# ------------------------------------------------------------------ Растительность и преграды
+## Остров почти весь зарос. Свободна только полянка у места крушения.
+## Ближе к лагерю — трава и папоротник (рвутся руками), дальше — колючки и бамбук (мачете),
+## в чаще — деревья-гиганты и поваленные стволы (топор), у вершины и шлюпки — каменные гряды (кирка).
+var poi: Dictionary = {}       # id сюжетного места -> позиция
+var _uid := 0
+
+
+func _place_pois() -> void:
+	# старый лагерь Лёвы — на западе, в глубине джунглей
+	var oc := Vector3(-RADIUS * 0.5, 0, RADIUS * 0.08)
+	oc.y = height_at(oc.x, oc.z)
+	poi["old_camp"] = oc
+	# шлюпка «Альбатроса» — на северном пляже
+	var a := -PI * 0.5
+	var r := 20.0
+	while r < 90.0 and height_at(cos(a) * r, sin(a) * r) > 0.7:
+		r += 0.5
+	var lb := Vector3(cos(a) * (r - 1.5), 0, sin(a) * (r - 1.5))
+	lb.y = height_at(lb.x, lb.z)
+	poi["lifeboat"] = lb
+	# древний маяк — на вершине горы
+	var best := Vector3(peak_center.x, 0, peak_center.y)
+	for i in 60:
+		var q := Vector3(peak_center.x + rng.randf_range(-4, 4), 0, peak_center.y + rng.randf_range(-4, 4))
+		if height_at(q.x, q.z) > height_at(best.x, best.z):
+			best = q
+	best.y = height_at(best.x, best.z)
+	poi["lighthouse"] = best
+
+
 func _spawn_resources() -> void:
+	_place_pois()
 	var holder := Node3D.new()
 	holder.name = "Resources"
 	add_child(holder)
-	var placed: Array[Vector2] = []
-	var plan := {
-		"palm": {"count": 60, "h": [0.7, 6.5], "gap": 3.5},
-		"banana": {"count": 10, "h": [1.6, 6.0], "gap": 4.0},
-		"mango": {"count": 5, "h": [2.0, 7.0], "gap": 4.5},
-		"bush": {"count": 50, "h": [1.2, 7.0], "gap": 2.0},
-		"rock": {"count": 24, "h": [1.4, 12.0], "gap": 3.0},
-		"pebble": {"count": 34, "h": [0.15, 1.3], "gap": 1.2},
-		"driftwood": {"count": 18, "h": [0.1, 0.9], "gap": 2.5},
-		"shell": {"count": 26, "h": [0.05, 0.8], "gap": 1.0},
-	}
+	var decor := Node3D.new()
+	decor.name = "Decor"
+	add_child(decor)
+	for id in poi:
+		var sp := StoryPlace.new()
+		sp.id = id
+		sp.position = poi[id]
+		sp.rotation.y = rng.randf() * TAU
+		holder.add_child(sp)
+
+	var patch := FastNoiseLite.new()
+	patch.seed = seed_value + 5
+	patch.frequency = 0.045
 	var camp2 := Vector2(camp_center.x, camp_center.z)
-	for kind in plan:
-		var cfg: Dictionary = plan[kind]
-		var n := 0
-		var tries := 0
-		while n < cfg["count"] and tries < 9000:
-			tries += 1
-			var x := rng.randf_range(-RADIUS * 1.3, RADIUS * 1.3)
-			var z := rng.randf_range(-RADIUS * 1.3, RADIUS * 1.3)
+	var wreck2 := Vector2(wreck_point.x, wreck_point.z)
+	var step := 2.25
+	var n := int(RADIUS * 1.35 * 2 / step)
+	for j in n:
+		for i in n:
+			var x := -RADIUS * 1.35 + i * step + rng.randf_range(-0.7, 0.7)
+			var z := -RADIUS * 1.35 + j * step + rng.randf_range(-0.7, 0.7)
+			var roll := rng.randf()
+			var seed_v := rng.randi()
 			var h := height_at(x, z)
-			if h < cfg["h"][0] or h > cfg["h"][1]:
-				continue
-			if kind != "rock" and normal_at(x, z).y < 0.75:
+			if h < 0.15:
 				continue
 			var p2 := Vector2(x, z)
-			# поляна лагеря свободна от крупных объектов
-			var keep_out := 9.0 if kind in ["palm", "rock", "banana", "mango", "bush"] else 3.0
-			if p2.distance_to(camp2) < keep_out:
+			var dc := p2.distance_to(camp2)
+			var dw := p2.distance_to(wreck2)
+			if _near_poi(p2, 5.0):
 				continue
-			var ok := true
-			for q in placed:
-				if q.distance_to(p2) < cfg["gap"]:
-					ok = false
-					break
-			if not ok:
-				continue
-			placed.append(p2)
-			var node: Node3D
-			if kind in ["banana", "mango"]:
-				var t := FruitTree.new()
-				t.setup("fruit_tree")
-				t.tree_type = kind
-				t.wild = true
-				t.rng_seed = rng.randi()
-				node = t
+			var kind := ""
+			if dc < 9.5 or dw < 7.0:
+				# стартовая полянка: только мелочь на песке
+				if h < 1.05 and roll < 0.12:
+					kind = ["pebble", "shell", "driftwood"][seed_v % 3]
+			elif h < 1.05:
+				# пляж: пальмы, дюнная трава, дары моря
+				if roll < 0.13: kind = "palm"
+				elif roll < 0.2: kind = "tall_grass"
+				elif roll < 0.27: kind = ["pebble", "shell"][seed_v % 2]
+				elif roll < 0.31: kind = "driftwood"
+				elif roll < 0.33: kind = "rock"
+			elif h > 9.0:
+				if roll < 0.25: kind = "rock"
+				elif roll < 0.55: kind = "tall_grass"
+			elif dc < 17.0:
+				# опушка: можно пробиться руками, но местами нужен мачете
+				if roll < 0.34: kind = "tall_grass"
+				elif roll < 0.54: kind = "fern"
+				elif roll < 0.66: kind = "bush"
+				elif roll < 0.8: kind = "thicket"
+				elif roll < 0.88: kind = "palm"
+				elif roll < 0.92: kind = "banana"
 			else:
-				var r := ResourceNode.new()
-				r.kind = kind
-				r.rng_seed = rng.randi()
-				node = r
-			node.position = Vector3(x, h - 0.05, z)
-			holder.add_child(node)
-			n += 1
+				var bamboo_patch := patch.get_noise_2d(x, z) > 0.32
+				if bamboo_patch:
+					kind = "bamboo" if roll < 0.75 else "fern"
+				elif roll < 0.17: kind = "jungle_tree"
+				elif roll < 0.38: kind = "thicket"
+				elif roll < 0.53: kind = "fern"
+				elif roll < 0.65: kind = "tall_grass"
+				elif roll < 0.72: kind = "palm"
+				elif roll < 0.78: kind = "bush"
+				elif roll < 0.81: kind = "banana"
+				elif roll < 0.83: kind = "mango"
+				elif roll < 0.87: kind = "fallen_log"
+				elif roll < 0.9: kind = "rock"
+			_uid += 1
+			if kind == "":
+				if h > 1.1 and roll > 0.94 and dc > 9.5:
+					_add_decor(decor, "flower_patch", Vector3(x, h - 0.03, z), seed_v)
+				continue
+			_spawn(holder, kind, Vector3(x, h - 0.05, z), seed_v, "j%d" % _uid, -1.0)
+	_barrier_rings(holder)
+
+
+func _near_poi(p2: Vector2, r: float) -> bool:
+	for id in poi:
+		var q: Vector3 = poi[id]
+		if p2.distance_to(Vector2(q.x, q.z)) < r:
+			return true
+	return false
+
+
+## Кольца преград вокруг сюжетных мест — без нужного инструмента не пройти.
+func _barrier_rings(holder: Node3D) -> void:
+	var specs := {"old_camp": [["thicket", 5.6, 11], ["jungle_tree", 7.4, 9]],
+		"lifeboat": [["cliff", 6.0, 10]],
+		"lighthouse": [["cliff", 6.2, 11]]}
+	for id in specs:
+		var c: Vector3 = poi[id]
+		var k := 0
+		for ring in specs[id]:
+			var kind: String = ring[0]
+			var rad: float = ring[1]
+			var cnt: int = ring[2]
+			for i in cnt:
+				k += 1
+				var a := TAU * i / cnt + (0.15 if kind == "jungle_tree" else 0.0)
+				var pos := c + Vector3(cos(a) * rad, 0, sin(a) * rad)
+				pos.y = height_at(pos.x, pos.z) - 0.05
+				var yaw := -a + PI / 2 if kind == "cliff" else -1.0
+				_spawn(holder, kind, pos, k * 7919 + i, "r_%s_%d" % [id, k], yaw)
+
+
+func _spawn(holder: Node3D, kind: String, pos: Vector3, seed_v: int, uid: String, yaw: float) -> void:
+	if Game.cleared.has(uid):
+		return
+	var node: Node3D
+	if kind in ["banana", "mango"]:
+		var t := FruitTree.new()
+		t.setup("fruit_tree")
+		t.tree_type = kind
+		t.wild = true
+		t.rng_seed = seed_v
+		node = t
+	else:
+		var r := ResourceNode.new()
+		r.kind = kind
+		r.rng_seed = seed_v
+		r.uid = uid
+		r.yaw = yaw
+		node = r
+	node.position = pos
+	holder.add_child(node)
+
+
+func _add_decor(holder: Node3D, model: String, pos: Vector3, seed_v: int) -> void:
+	var m := Models.glb(model)
+	if m == null:
+		return
+	m.position = pos
+	m.rotation.y = float(seed_v % 628) / 100.0
+	for gi in m.find_children("*", "GeometryInstance3D", true, false):
+		(gi as GeometryInstance3D).visibility_range_end = 45.0
+		(gi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.add_child(m)
 
 
 func _find_spawn() -> void:
@@ -321,12 +436,22 @@ func _find_spawn() -> void:
 	spawn_point = Vector3(0, height_at(0, 0) + 1.0, 0)
 
 
+var banyan: Node3D   # остров Великого Баньяна на горизонте (цель первой главы)
+
+
 func spawn_distant_scenery(parent: Node3D) -> void:
 	var g := RandomNumberGenerator.new()
 	g.seed = seed_value + 99
 	for i in 5:
-		var a := TAU * i / 5.0 + g.randf() * 0.5
-		var d := g.randf_range(190, 260)
-		var isl := Models.distant_island(g, g.randf_range(14, 26))
+		var a := TAU * i / 5.0 + (0.0 if i == 0 else g.randf() * 0.5)
+		var d := 230.0 if i == 0 else g.randf_range(190, 260)
+		var isl := Models.distant_island(g, 30.0 if i == 0 else g.randf_range(14, 24))
 		isl.position = Vector3(cos(a) * d, -0.2, sin(a) * d)
 		parent.add_child(isl)
+		if i == 0:
+			banyan = isl
+			var tree := Models.glb("jungle_tree_a")
+			if tree:
+				tree.scale = Vector3.ONE * 4.5
+				tree.position = Vector3(0, 6.0, 0)
+				isl.add_child(tree)
