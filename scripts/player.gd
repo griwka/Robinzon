@@ -10,8 +10,8 @@ const INTERACT_RANGE := 2.6
 const SWING_TIME := 0.38
 
 var camera_yaw := 0.0
-var camera_pitch := -0.35
-var camera_distance := 6.0
+var camera_pitch := -0.62
+var camera_distance := 9.0
 var controls_enabled := true
 var can_interact := true  # false в режиме строительства
 
@@ -39,6 +39,7 @@ var _squash := 1.0
 
 
 func _ready() -> void:
+	add_to_group("player")
 	collision_layer = 16
 	collision_mask = 1 | 2 | 4
 	var cs := CollisionShape3D.new()
@@ -119,10 +120,13 @@ func _build_model() -> void:
 func _update_tool() -> void:
 	for c in hand_tool.get_children():
 		c.queue_free()
-	if Game.has_tool("pickaxe") and target is ResourceNode and target.kind == "rock":
-		hand_tool.add_child(Models.pick())
-	elif Game.has_tool("stone_axe"):
-		hand_tool.add_child(Models.axe())
+	var want := ""
+	if target and target.has_method("tool_hint"):
+		want = target.tool_hint()
+	if want == "" or not Game.has_tool(want):
+		want = "stone_axe" if Game.has_tool("stone_axe") else ""
+	if want != "":
+		hand_tool.add_child(Models.tool_model(want))
 
 
 # ------------------------------------------------------------------ Камера
@@ -139,7 +143,7 @@ func _build_camera() -> void:
 	spring.margin = 0.3
 	cam_pitch_node.add_child(spring)
 	camera = Camera3D.new()
-	camera.fov = 65
+	camera.fov = 52
 	camera.far = 900
 	spring.add_child(camera)
 	cam_rig.global_position = global_position + Vector3(0, 1.4, 0)
@@ -207,7 +211,7 @@ func _physics_process(delta: float) -> void:
 		var pressed := Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("interact")
 		var held := Input.is_action_pressed("attack") or Input.is_action_pressed("interact")
 		# ресурсы можно добывать, удерживая кнопку; постройки — по одному нажатию
-		if (target is Building and pressed) or (target is ResourceNode and held):
+		if (target is ResourceNode and held) or (not (target is ResourceNode) and pressed):
 			try_interact()
 	if _swing_t > 0.0:
 		_swing_t -= delta
@@ -267,7 +271,7 @@ func _find_target() -> void:
 		to.y *= 0.5
 		var d := to.length()
 		var reach := INTERACT_RANGE
-		if n is Building and n.id == "hut":
+		if n is Building and n.id in ["hut", "goat_pen", "coop", "tent"]:
 			reach = 3.2
 		if n is ResourceNode and n.kind == "rock":
 			reach = 3.0

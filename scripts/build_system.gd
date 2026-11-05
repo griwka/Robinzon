@@ -10,6 +10,7 @@ var island: Island
 var player: Player
 var buildings_root: Node3D
 var active_id := ""
+var active_variant := ""
 var ghost: Node3D
 var ghost_rot := 0.0
 var valid := false
@@ -34,9 +35,16 @@ func is_active() -> bool:
 	return active_id != ""
 
 
-func start(id: String) -> void:
+func cost_of(id: String, variant := "") -> Dictionary:
+	if id == "fruit_tree":
+		return {"sapling_" + variant: 1}
+	return Data.BUILDINGS[id]["cost"]
+
+
+func start(id: String, variant := "") -> void:
 	cancel(false)
 	active_id = id
+	active_variant = variant
 	ghost = Models.building(id)
 	for l in ghost.find_children("*", "OmniLight3D", true, false):
 		l.queue_free()
@@ -48,6 +56,7 @@ func cancel(emit := true) -> void:
 		ghost.queue_free()
 		ghost = null
 	active_id = ""
+	active_variant = ""
 	if emit:
 		cancelled.emit()
 
@@ -76,7 +85,7 @@ func _process(_delta: float) -> void:
 	pos.x = snappedf(pos.x, 0.5)
 	pos.z = snappedf(pos.z, 0.5)
 	pos.y = island.height_at(pos.x, pos.z)
-	var cfg: Dictionary = Game.BUILDINGS[active_id]
+	var cfg: Dictionary = Data.BUILDINGS[active_id]
 	if cfg.get("shore", false):
 		pos.y = maxf(pos.y, 0.0)
 	ghost.global_position = pos
@@ -105,14 +114,10 @@ func _check_valid(pos: Vector3, cfg: Dictionary) -> bool:
 		if hs.max() - hs.min() > 0.9:
 			return false
 	var p2 := Vector2(pos.x, pos.z)
-	for b in get_tree().get_nodes_in_group("building"):
-		var br: float = Game.BUILDINGS[b.id]["radius"]
-		if Vector2(b.global_position.x, b.global_position.z).distance_to(p2) < r + br:
-			return false
-	for n in get_tree().get_nodes_in_group("interactable"):
-		if n is ResourceNode and n.active:
-			var nr: float = ResourceNode.KINDS[n.kind]["radius"]
-			if Vector2(n.global_position.x, n.global_position.z).distance_to(p2) < r + nr + 0.2:
+	for group in ["building", "obstacle"]:
+		for b in get_tree().get_nodes_in_group(group):
+			var br: float = b.block_radius()
+			if br > 0.0 and Vector2(b.global_position.x, b.global_position.z).distance_to(p2) < r + br + 0.1:
 				return false
 	if not cfg.get("shore", false) and Vector2(player.global_position.x, player.global_position.z).distance_to(p2) < r + 0.35:
 		return false
@@ -141,25 +146,34 @@ func _try_place() -> void:
 	if not valid:
 		Game.notified.emit("Здесь строить нельзя", Color("ff9d7a"))
 		return
-	var cfg: Dictionary = Game.BUILDINGS[active_id]
-	if not Game.pay(cfg["cost"]):
+	var cfg: Dictionary = Data.BUILDINGS[active_id]
+	if not Game.pay(cost_of(active_id, active_variant)):
 		Game.notified.emit("Не хватает ресурсов", Color("ff9d7a"))
 		return
-	var b := spawn_building(active_id, ghost.global_position, ghost_rot)
-	Game.register_built(active_id)
-	Game.notified.emit("Построено: %s" % cfg["name"], Color("8affa0"))
 	var id := active_id
+	var v := active_variant
+	var b := spawn_building(id, ghost.global_position, ghost_rot, v)
+	Game.notified.emit("Построено: %s" % cfg["name"], Color("8affa0"))
 	cancel(false)
 	placed.emit(b)
-	# если хватает на ещё одну такую же (например, факелы) — остаёмся в режиме
-	if id in ["torch", "shell_deco"] and Game.can_afford(Game.BUILDINGS[id]["cost"]):
-		start(id)
+	Game.bump("built", id)
+	# дешёвые вещи (факелы, заборы, дорожки) можно ставить подряд
+	if id in ["torch", "fence", "shell_path", "flowerbed", "garden_bed"] and Game.can_afford(cost_of(id, v)):
+		start(id, v)
 
 
-func spawn_building(id: String, pos: Vector3, rot: float) -> Building:
-	var b := Building.new()
-	b.setup(id)
+## Создать постройку нужного класса.
+func spawn_building(id: String, pos: Vector3, rot: float, variant := "", state := {}) -> Building:
+	var b: Building
+	match id:
+		"garden_bed": b = GardenBed.new()
+		"fruit_tree": b = FruitTree.new()
+		"coop", "goat_pen": b = AnimalPen.new()
+		_: b = Building.new()
+	b.setup(id, variant)
 	b.position = pos
 	b.rotation.y = rot
 	buildings_root.add_child(b)
+	if not state.is_empty():
+		b.apply_state(state)
 	return b

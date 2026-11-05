@@ -1,11 +1,10 @@
 extends Node
 ## Инструменты разработчика. Включаются аргументами командной строки после "--":
-##   godot -- --shot=res://shot.png --time=0.45 --demo
-##   --shot=путь     сделать скриншот через пару секунд и выйти
+##   --shot=путь     сделать скриншот и выйти (--frames=N — через сколько кадров)
 ##   --time=0..1     время суток
-##   --demo          выдать ресурсы и поставить несколько построек рядом с игроком
+##   --demo          построить лагерь с фермой рядом с игроком (для скриншотов)
 ##   --yaw= --pitch= --dist=  положение камеры
-##   --autotest      прогнать игровой цикл (крафт, стройка, задания) и вывести результат в консоль
+##   --autotest      пройти всю первую главу через игровую логику и вывести результат
 
 var main: Node
 var args := {}
@@ -16,8 +15,6 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		var kv: PackedStringArray = a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
-	if args.has("time"):
-		Game.time_of_day = float(args["time"])
 	if args.has("autotest"):
 		_autotest.call_deferred()
 
@@ -29,110 +26,270 @@ func _process(_delta: float) -> void:
 		if args.has("yaw"): p.camera_yaw = float(args["yaw"])
 		if args.has("pitch"): p.camera_pitch = float(args["pitch"])
 		if args.has("dist"): p.camera_distance = float(args["dist"])
-		if args.has("time"): Game.time_of_day = float(args["time"])
 		if args.has("demo"):
 			_demo()
 	if args.has("time"):
 		Game.time_of_day = float(args["time"])
+	if args.has("demo") and _frames > 2 and _frames < 6:
+		_flush()
 	if args.has("shot") and _frames == int(args.get("frames", "90")):
-		var img := get_viewport().get_texture().get_image()
-		img.save_png(args["shot"])
+		get_viewport().get_texture().get_image().save_png(args["shot"])
 		print("screenshot saved: ", args["shot"])
 		get_tree().quit()
 
 
+func _flush() -> void:
+	var hud: HUD = main.hud
+	var guard := 0
+	while hud.dialogue_open() and guard < 200:
+		hud.advance_dialogue()
+		guard += 1
+
+
+# ------------------------------------------------------------------ Демо-лагерь
 func _demo() -> void:
-	var p: Player = main.player
-	var fwd := -Basis(Vector3.UP, p.camera_yaw).z
-	var right := Basis(Vector3.UP, p.camera_yaw).x
-	var base := p.global_position + fwd * 7.0
-	var spots := {"campfire": Vector3.ZERO, "workbench": right * 3.5 + fwd * 1.0,
-		"hut": -right * 5.0 + fwd * 3.0, "torch": right * 1.8 - fwd * 1.5, "shell_deco": -right * 1.6 - fwd * 1.0}
-	for id in spots:
-		var pos: Vector3 = base + spots[id]
-		pos.y = main.island.height_at(pos.x, pos.z)
-		main.build.spawn_building(id, pos, 0.3)
-	for id in ["wood", "stone", "fiber", "rope", "leaf", "coconut", "stone_axe"]:
-		Game.inventory[id] = 5 if id != "stone_axe" else 1
+	var isl: Island = main.island
+	var c: Vector3 = isl.camp_center
+	var bs: BuildSystem = main.build
+	var to_sea := (isl.wreck_point - c).normalized()
+	var right := Vector3(-to_sea.z, 0, to_sea.x)
+	var place := func(id: String, off: Vector3, rot := 0.0, v := "", state := {}) -> Building:
+		var pos: Vector3 = c + right * off.x + to_sea * off.z
+		pos.y = isl.height_at(pos.x, pos.z)
+		return bs.spawn_building(id, pos, atan2(to_sea.x, to_sea.z) + rot, v, state)
+	place.call("tent", Vector3(-4.5, 0, -2.0), PI)
+	place.call("campfire", Vector3(-1.5, 0, 0.5))
+	place.call("workbench", Vector3(2.0, 0, -2.5), PI)
+	place.call("torch", Vector3(-3.0, 0, 1.6))
+	place.call("bench", Vector3(-1.5, 0, 2.2), PI)
+	var crops := ["carrot", "corn", "tomato", "cabbage", "watermelon", "potato"]
+	for i in crops.size():
+		var x := 3.0 + (i % 3) * 2.1
+		var z := 1.0 + (i / 3) * 1.6
+		place.call("garden_bed", Vector3(x, 0, z), 0.0, "", {"crop": crops[i], "progress": 1.0 if i != 5 else 0.5, "watered": i % 2 == 0})
+	place.call("fruit_tree", Vector3(7.5, 0, -2.0), 0.0, "banana", {"grow": 1.0, "fruit": 1.0})
+	place.call("fruit_tree", Vector3(9.5, 0, 0.5), 0.0, "lemon", {"grow": 1.0, "fruit": 1.0})
+	place.call("fruit_tree", Vector3(5.0, 0, -4.0), 0.0, "mango", {"grow": 1.0, "fruit": 1.0})
+	place.call("coop", Vector3(-6.0, 0, 3.5), 0.5)
+	place.call("goat_pen", Vector3(-1.0, 0, -6.5))
+	place.call("flowerbed", Vector3(0.5, 0, 2.6))
+	place.call("scarecrow", Vector3(6.0, 0, 3.8))
+	for k in 4:
+		place.call("fence", Vector3(2.4 + k * 1.3, 0, 4.6))
+	for id in ["wood", "stone", "fiber", "rope", "plank", "leaf", "stone_axe", "watering_can", "net", "seed_carrot"]:
+		Game.inventory[id] = 6 if not Data.ITEMS[id]["cat"] == "tool" else 1
 	Game.inventory_changed.emit()
+	main.player.global_position = c + to_sea * 2.5 + right * 1.0 + Vector3(0, 0.5, 0)
+	main.player.cam_rig.global_position = main.player.global_position
 
 
-func _check(cond: bool, what: String, fails: Array) -> void:
+# ------------------------------------------------------------------ Автотест
+var fails := []
+
+
+func _check(cond: bool, what: String) -> void:
 	print(("  OK   " if cond else "  FAIL ") + what)
 	if not cond:
 		fails.append(what)
 
 
+func _give(cost: Dictionary) -> void:
+	for id in cost:
+		Game.inventory[id] = Game.count(id) + cost[id]
+	Game.inventory_changed.emit()
+
+
+func _spot(i: int) -> Vector3:
+	var isl: Island = main.island
+	var c: Vector3 = isl.camp_center
+	var a := i * 2.399
+	var r := 2.0 + sqrt(float(i)) * 2.2
+	var p := c + Vector3(cos(a) * r, 0, sin(a) * r)
+	p.y = isl.height_at(p.x, p.z)
+	return p
+
+
+var _spot_i := 0
+
+
+func _build(id: String, variant := "") -> Building:
+	var bs: BuildSystem = main.build
+	var cost := bs.cost_of(id, variant)
+	_give(cost)
+	Game.pay(cost)
+	var pos := _spot(_spot_i)
+	_spot_i += 1
+	if id == "raft":
+		pos = main.island.wreck_point + Vector3(0, 0, 3)
+	var b := bs.spawn_building(id, pos, 0.0, variant)
+	main._connect_building(b)
+	Game.bump("built", id)
+	return b
+
+
+func _craft(out_id: String) -> void:
+	for r in Data.RECIPES:
+		if r["out"].has(out_id):
+			_give(r["in"])
+			_check(Game.craft(r), "крафт: %s" % Game.item_name(out_id))
+			return
+
+
+func _advance(nodes: Array, seconds: float) -> void:
+	for n in nodes:
+		n._process(0.0)
+	Game.world_time += seconds
+	for n in nodes:
+		n._process(0.0)
+
+
+func _bed() -> GardenBed:
+	for b in get_tree().get_nodes_in_group("building"):
+		if b is GardenBed and b.crop == "":
+			return b
+	return _build("garden_bed") as GardenBed
+
+
+func _grow_and_harvest(crop: String) -> void:
+	var bed := _bed()
+	var seed_id := bed._seed_for(crop)
+	_give({seed_id: 1})
+	bed.plant(crop)
+	_advance([bed], Data.CROPS[crop]["time"] + 1.0)
+	bed.interact(main.player)
+
+
+func _pen(id: String) -> AnimalPen:
+	for b in get_tree().get_nodes_in_group("building"):
+		if b is AnimalPen and b.id == id:
+			return b
+	return _build(id) as AnimalPen
+
+
+func _do_task(t: Dictionary) -> void:
+	var need: int = t["count"] - Game.task_progress(t)
+	var target: String = t["target"]
+	match t["kind"]:
+		"talk":
+			main.parrot.interact(main.player)
+		"collected":
+			if target == "crate":
+				for c in get_tree().get_nodes_in_group("interactable"):
+					if c is SupplyCrate:
+						c.interact(main.player)
+			else:
+				Game.add_item(target, need)
+		"crafted":
+			var guard := 0
+			while Game.task_progress(t) < t["count"] and guard < 15:
+				_craft(target)
+				guard += 1
+		"built":
+			for i in need:
+				_build(target, "banana" if target == "fruit_tree" else "")
+		"planted":
+			for i in need:
+				var bed := _bed()
+				_give({bed._seed_for(target): 1})
+				bed.plant(target)
+		"harvested":
+			var guard := 0
+			while Game.task_progress(t) < t["count"] and guard < 20:
+				_grow_and_harvest(target)
+				guard += 1
+		"watered":
+			if not Game.has_tool("watering_can"):
+				_give({"watering_can": 1})
+			for i in need:
+				var bed := _bed()
+				_give({"seed_carrot": 1})
+				bed.plant("carrot")
+				bed.interact(main.player)
+		"fed":
+			var pen := _pen(target)
+			_give(Data.PENS[target]["feed"])
+			pen.interact(main.player)
+		"product":
+			var pen_id := "coop" if target == "egg" else "goat_pen"
+			var guard := 0
+			while Game.task_progress(t) < t["count"] and guard < 10:
+				var pen := _pen(pen_id)
+				if not pen.fed:
+					_give(Data.PENS[pen_id]["feed"])
+					pen.interact(main.player)
+				_advance([pen], Data.PENS[pen_id]["time"] + 1.0)
+				pen.interact(main.player)
+				guard += 1
+		"caught":
+			if not Game.has_tool("net"):
+				_give({"net": 1})
+			var n := 0
+			for c in get_tree().get_nodes_in_group("interactable"):
+				if c is Critters.Butterfly and n < need:
+					c.interact(main.player)
+					n += 1
+		"sailed":
+			for b in get_tree().get_nodes_in_group("building"):
+				if b.id == "raft":
+					b.interact(main.player)
+
+
 func _autotest() -> void:
 	print("=== AUTOTEST ===")
-	var fails := []
-	Game.reset()
+	Game.delete_save()
+	Game.reset_state()
+	await get_tree().process_frame
+	_flush()
+	Game.start_current_quest()
 	var isl: Island = main.island
 	var p: Player = main.player
-	_check(isl.height_at(0, 0) > 1.0, "центр острова над водой", fails)
-	_check(isl.height_at(150, 150) < -1.0, "вдали — море", fails)
-	_check(p.global_position.y > 0.0, "игрок появился на суше", fails)
-	var res := get_tree().get_nodes_in_group("interactable")
-	_check(res.size() > 150, "на острове есть ресурсы (%d)" % res.size(), fails)
+	_check(isl.height_at(0, 0) > 1.0, "центр острова над водой")
+	_check(isl.height_at(150, 150) < -1.0, "вдали — море")
+	_check(p.global_position.y > 0.0, "игрок появился на суше")
+	_check(get_tree().get_nodes_in_group("interactable").size() > 150, "на острове есть ресурсы и живность")
+	_check(Game.quest_started and Game.current_quest()["id"] == "wake", "первое задание началось")
 
-	# собрать волокно с куста
-	var bush: ResourceNode = null
-	for n in res:
-		if n is ResourceNode and n.kind == "bush":
-			bush = n
+	# проходим главу 1 целиком
+	var qs: Array = Data.CHAPTERS[0]["quests"]
+	var guard := 0
+	while not Game.current_quest().is_empty() and guard < 60:
+		guard += 1
+		var q := Game.current_quest()
+		_flush()
+		if not Game.quest_started:
+			Game.start_current_quest()
+			_flush()
+		for t in q["tasks"]:
+			if Game.current_quest() != q:
+				break
+			if Game.task_progress(t) < t["count"]:
+				_do_task(t)
+				_flush()
+		_flush()
+		_check(Game.current_quest() != q, "задание «%s»" % q["title"])
+		if Game.current_quest() == q:
+			for t in q["tasks"]:
+				print("      %s: %d/%d" % [t["text"], Game.task_progress(t), t["count"]])
 			break
-	bush.interact(p)
-	bush.interact(p)
-	_check(Game.count("fiber") == 2, "куст даёт 2 волокна", fails)
-	_check(not bush.active, "куст исчез после сбора", fails)
-	Game.add_item("fiber", 1)
-	_check(Game.quest_index == 1, "задание 1 выполнено", fails)
-	_check(Game.craft(Game.RECIPES[0]), "крафт верёвки", fails)
-	_check(Game.count("rope") == 1 and Game.count("fiber") == 0, "верёвка создана, волокно списано", fails)
-	_check(not Game.craft(Game.RECIPES[1]), "топор без ресурсов не крафтится", fails)
-	Game.add_item("wood", 2)
-	Game.add_item("stone", 2)
-	_check(Game.craft(Game.RECIPES[1]) and Game.has_tool("stone_axe"), "крафт каменного топора", fails)
-
-	# срубить пальму
-	var palm: ResourceNode = null
-	for n in res:
-		if n is ResourceNode and n.kind == "palm" and n.active:
-			palm = n
-			break
-	var wood_before := Game.count("wood")
-	for i in 4:
-		palm.interact(p)
-	_check(Game.count("wood") == wood_before + 3, "пальма даёт 3 древесины", fails)
-
-	# энергия
-	var e := Game.energy
-	_check(e < Game.MAX_ENERGY, "действия тратят энергию (%d)" % e, fails)
-	Game.add_item("coconut", 1)
-	Game.eat_best_food()
-	_check(Game.energy > e, "кокос восстанавливает энергию", fails)
-
-	# строительство
-	Game.add_item("wood", 10)
-	Game.add_item("stone", 10)
-	var spot := p.global_position + Vector3(0, 0, -4)
-	spot.y = isl.height_at(spot.x, spot.z)
-	var bs: BuildSystem = main.build
-	var cost: Dictionary = Game.BUILDINGS["campfire"]["cost"]
-	_check(Game.pay(cost), "оплата костра", fails)
-	var b := bs.spawn_building("campfire", spot, 0)
-	Game.register_built("campfire")
-	_check(get_tree().get_nodes_in_group("station_campfire").size() == 1, "костёр построен", fails)
+	_check(Game.quest_index == qs.size(), "глава 1 пройдена (%d/%d)" % [Game.quest_index, qs.size()])
+	_check(Game.unlocked.has("raft") and Game.unlocked.has("hut"), "постройки открываются по сюжету")
+	_check(Game.collections.get("butterflies", {}).size() > 0, "бабочки попадают в коллекцию")
 
 	# сохранение / загрузка
 	main._save()
 	var inv_copy: Dictionary = Game.inventory.duplicate()
+	var n_build := get_tree().get_nodes_in_group("building").size()
 	Game.inventory = {}
 	var data := Game.load_game()
-	_check(Game.inventory == inv_copy, "инвентарь сохраняется и загружается", fails)
-	_check(data.get("buildings", []).size() == 1, "постройки сохраняются", fails)
-	b.queue_free()
-	Game.reset()
+	_check(Game.inventory == inv_copy, "инвентарь сохраняется и загружается")
+	_check(data.get("buildings", []).size() == n_build, "постройки сохраняются (%d)" % n_build)
+	var bed_state := false
+	for b in data.get("buildings", []):
+		if b["id"] == "garden_bed" and b["s"].has("crop"):
+			bed_state = true
+	_check(bed_state, "состояние грядок сохраняется")
+	Game.delete_save()
+	Game.reset_state()
 
 	print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
 	get_tree().quit(0 if fails.is_empty() else 1)

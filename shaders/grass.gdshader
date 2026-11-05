@@ -1,9 +1,9 @@
-// Трава (MultiMesh): цвет от основания к кончику, качание на ветру.
+// Пучки травы (MultiMesh): тёмное основание -> светлый кончик, резкая граница цвета, качание на ветру.
 shader_type spatial;
-render_mode diffuse_toon, specular_disabled, cull_disabled;
+render_mode cull_disabled;
 
-uniform vec4 base_color : source_color = vec4(0.22, 0.55, 0.18, 1.0);
-uniform vec4 tip_color : source_color = vec4(0.62, 0.86, 0.32, 1.0);
+uniform vec4 base_color : source_color = vec4(0.26, 0.54, 0.18, 1.0);
+uniform vec4 tip_color : source_color = vec4(0.58, 0.82, 0.32, 1.0);
 
 varying float v_h;
 
@@ -17,6 +17,15 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = mix(base_color.rgb, tip_color.rgb, clamp(v_h / 0.5, 0.0, 1.0)) * COLOR.rgb;
-	ROUGHNESS = 1.0;
+	float t = clamp(v_h / 0.5, 0.0, 1.0);
+	vec3 c = mix(base_color.rgb, tip_color.rgb, step(0.45, t));
+	ALBEDO = c * COLOR.rgb;
+}
+
+void light() {
+	if (LIGHT_IS_DIRECTIONAL) {
+		DIFFUSE_LIGHT += LIGHT_COLOR / PI * smoothstep(0.35, 0.65, ATTENUATION);
+	} else {
+		DIFFUSE_LIGHT += LIGHT_COLOR / PI * ATTENUATION;
+	}
 }
