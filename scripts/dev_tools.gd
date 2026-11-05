@@ -531,6 +531,13 @@ func _layout_only() -> void:
 		elif r is FruitTree:
 			kinds["wild_" + r.tree_type] = kinds.get("wild_" + r.tree_type, 0) + 1
 	print("      состав: ", kinds)
+	main.map._terrain_image()   # первый раз — дождаться фонового рельефа
+	var t0 := Time.get_ticks_usec()
+	main.map._terrain_image()
+	var t1 := Time.get_ticks_usec()
+	main.guide._find_target()
+	var t2 := Time.get_ticks_usec()
+	print("      карта рисуется за %d мс, цель компаса ищется за %.1f мс" % [(t1 - t0) / 1000, (t2 - t1) / 1000.0])
 	print("=== %d проблем ===" % n)
 	get_tree().quit(0)
 
@@ -909,6 +916,14 @@ func _autotest() -> void:
 		if not Game.quest_started:
 			Game.start_current_quest()
 			_flush()
+		# компас: у заданий «найди / поговори / зажги / отстрой» на этом острове цель должна находиться
+		var g: QuestGuide = main.guide
+		g._find_target()
+		for t in q["tasks"]:
+			if t["kind"] in ["found", "lit", "restored", "talk", "solved", "reached"] and Game.task_progress(t) < t["count"]:
+				if QuestGuide.HOME_OF.get(t["target"], Game.location) == Game.location:
+					_check(g.has_target(), "компас ведёт к цели задания «%s» → %s" % [q["title"], g.target_name])
+				break
 		for t in q["tasks"]:
 			if Game.current_quest() != q:
 				break

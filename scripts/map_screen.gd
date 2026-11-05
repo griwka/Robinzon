@@ -24,6 +24,8 @@ var _terrain_tex: ImageTexture
 var _fog_tex: ImageTexture
 var _fog_dirty := true
 var _t := 0.0
+var _base: Image             # рельеф без зарослей — не меняется, считается один раз в фоне
+var _base_task := -1
 
 
 func setup(h: HUD, isl: Island, p: Player, g: QuestGuide) -> void:
@@ -36,6 +38,15 @@ func setup(h: HUD, isl: Island, p: Player, g: QuestGuide) -> void:
 		explored.resize(GRID * GRID)
 		explored.fill(0)
 	_build_window()
+	# рельеф карты — 100 тысяч точек; считаем в фоне, чтобы M открывалась без заминки
+	_base_task = WorkerThreadPool.add_task(func(): _base = _relief_image(), false, "map relief")
+
+
+func _exit_tree() -> void:
+	# фоновый рельеф должен досчитаться до того, как остров уйдёт (перезагрузка сцены, плавание)
+	if _base_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_base_task)
+		_base_task = -1
 
 
 # ------------------------------------------------------------------ Открытые места
@@ -113,6 +124,18 @@ const C_INK := Color("5a3a1c")
 
 
 func _terrain_image() -> Image:
+	if _base_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_base_task)
+		_base_task = -1
+	if _base == null:
+		_base = _relief_image()
+	var img: Image = _base.duplicate()
+	_paint_jungle(img)
+	return img
+
+
+## Рельеф и берег (только чтение высот — можно в фоновом потоке).
+func _relief_image() -> Image:
 	var img := Image.create(IMG, IMG, false, Image.FORMAT_RGBA8)
 	var light := Vector3(-0.6, 0.75, -0.4).normalized()
 	for j in IMG:
@@ -140,7 +163,11 @@ func _terrain_image() -> Image:
 				if h < 0.35:
 					col = col.lerp(C_INK, 0.35)
 			img.set_pixel(i, j, col)
-	# джунгли: живые преграды — тёмные пятна; расчищенное светлеет
+	return img
+
+
+## Джунгли: живые преграды — тёмные пятна; расчищенное светлеет.
+func _paint_jungle(img: Image) -> void:
 	var px := float(IMG) / span
 	for n in get_tree().get_nodes_in_group("obstacle"):
 		if not (n is ResourceNode):
@@ -158,7 +185,6 @@ func _terrain_image() -> Image:
 		var crown: float = {"palm": 1.7, "jungle_tree": 2.3, "bamboo": 1.3}.get(r.kind, float(ResourceNode.KINDS[r.kind]["radius"]) * 1.2)
 		var rad := maxf(1.0, crown * px)
 		_blob(img, (r.global_position.x / span + 0.5) * IMG, (r.global_position.z / span + 0.5) * IMG, rad, col)
-	return img
 
 
 func _blob(img: Image, cx: float, cy: float, rad: float, col: Color) -> void:

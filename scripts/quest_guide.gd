@@ -9,6 +9,9 @@ const NAMES := {"tall_grass": "Высокая трава", "fern": "Папоро
 	"rock": "Валун", "liana_curtain": "Завеса лиан", "clay": "Глина", "palm": "Пальма", "bush": "Куст",
 	"pebble": "Камешки", "driftwood": "Плавник", "shell": "Ракушки"}
 const REFRESH := 0.3
+const SPECIFIC_KINDS := ["talk", "give", "found", "lit", "restored", "reached", "solved"]
+const PLACE_KINDS := ["talk", "give", "found", "lit", "restored", "reached", "solved", "fished", "cleared",
+	"collected", "sold", "bought", "fed", "product", "watered", "harvested", "planted", "caught"]
 ## Где живут жители и где стоят сюжетные места — чтобы подсказать «плыви туда».
 const HOME_OF := {"marta": "banyan", "kesha": "banyan", "stepa": "fort",
 	"wreck": "home", "old_camp": "home", "lifeboat": "home", "lighthouse": "home", "crate": "home",
@@ -65,6 +68,21 @@ static func keys_for(n: Node) -> Array[String]:
 	elif n is FruitTree:
 		if n.wild and n.grow >= 1.0:
 			out.append("collected:" + Data.TREES[n.tree_type]["fruit"])
+	elif n is AnimalPen:
+		# покормить — пока голодны; забрать продукт — когда готов или ещё не кормлены
+		var pen: Dictionary = Data.PENS[n.id]
+		if not n.fed and not n.product_ready:
+			out.append("fed:" + n.id)
+		out.append("product:" + str(pen["product"]))
+	elif n is GardenBed:
+		if n.crop == "":
+			out.append("planted:*")
+		else:
+			if not n.watered:
+				out.append("watered:bed")
+			out.append("harvested:" + n.crop)
+	elif n is Critters.Butterfly:
+		out.append("caught:butterfly")
 	return out
 
 
@@ -97,6 +115,10 @@ static func name_of(n: Node) -> String:
 		return Data.TREES[n.tree_type]["name"]
 	if n is FindSpot:
 		return "Бутылка с запиской" if n.kind == "bottle" else "Тайник"
+	if n is Building:
+		return str(Data.BUILDINGS[n.id]["name"])
+	if n is Critters.Butterfly:
+		return "Бабочка"
 	return ""
 
 
@@ -108,7 +130,18 @@ func _find_target() -> void:
 	if _keys.is_empty():
 		return
 	var me := player.global_position
+	# сначала — конкретные места и жители («прорубись и найди лагерь» ведёт к лагерю, а не к ближайшему дереву),
+	# потом — массовые цели (трава, бамбук, рыбалка, грядки)
+	var ordered: Array[String] = []
 	for key in _keys:
+		if key.get_slice(":", 0) in SPECIFIC_KINDS:
+			ordered.append(key)
+	for key in _keys:
+		if not (key.get_slice(":", 0) in SPECIFIC_KINDS):
+			ordered.append(key)
+	for key in ordered:
+		if not (key.get_slice(":", 0) in PLACE_KINDS):
+			continue   # смастерить, построить, посадить — места на острове у этого нет
 		if key.begins_with("reached:deck"):
 			var lianas := get_tree().get_nodes_in_group("climb")
 			var idx := int(key.substr(12)) - 1
@@ -119,8 +152,12 @@ func _find_target() -> void:
 			continue
 		var best: Node3D = null
 		var best_d := INF
+		var any_key := key.get_slice(":", 0) + ":*"   # «посади морковь» — подходит любая пустая грядка
 		for n in get_tree().get_nodes_in_group("interactable"):
-			if not (n is Node3D) or not keys_for(n).has(key):
+			if not (n is Node3D):
+				continue
+			var ks := keys_for(n)
+			if not ks.has(key) and not ks.has(any_key):
 				continue
 			var d := (n as Node3D).global_position.distance_squared_to(me)
 			if d < best_d:
