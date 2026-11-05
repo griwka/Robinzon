@@ -13,6 +13,7 @@ var _wait := 0.0
 var _t := 0.0
 var _island: Island
 var _pet_cooldown := 0.0
+var _voice_t := randf_range(6.0, 20.0)
 
 
 func _ready() -> void:
@@ -36,6 +37,10 @@ func _pick_target() -> void:
 func _process(delta: float) -> void:
 	_t += delta
 	_pet_cooldown -= delta
+	_voice_t -= delta
+	if _voice_t <= 0.0:
+		_voice_t = randf_range(10.0, 25.0)
+		Audio.play("cluck" if kind == "chicken" else "bleat", -9.0, 0.15, global_position)
 	var speed := 0.7 if kind == "chicken" else 0.5
 	var to := _target - global_position
 	to.y = 0
@@ -90,6 +95,7 @@ func interact(_player: Node) -> void:
 		return
 	_pet_cooldown = 1.0
 	happy()
+	Audio.play("cluck" if kind == "chicken" else "bleat", -2.0, 0.12, global_position)
 	Game.bump("petted", kind)
 	var lines := {"chicken": ["Ко-ко-ко!", "Курочка довольно кудахчет", "Курица смотрит на тебя одним глазом"],
 		"goat": ["Ме-е-е!", "Коза жуёт и не обращает внимания", "Коза бодает тебя в руку — ещё!"]}

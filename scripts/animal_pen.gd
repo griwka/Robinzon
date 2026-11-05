@@ -50,9 +50,9 @@ func _process(delta: float) -> void:
 func _refresh() -> void:
 	var cfg: Dictionary = Data.PENS[id]
 	if product_ready:
-		FX.set_marker(marker, true, Data.ITEMS[cfg["product"]]["color"])
+		FX.set_marker(marker, true, cfg["product"])
 	elif not fed:
-		FX.set_marker(marker, true, Data.ITEMS[cfg["feed"].keys()[0]]["color"])
+		FX.set_marker(marker, true, cfg["feed"].keys()[0])
 	else:
 		FX.set_marker(marker, false)
 
@@ -88,6 +88,7 @@ func interact(_player: Node) -> void:
 			fed = true
 			progress = 0.0
 			Game.bump("fed", id)
+			Audio.play("cluck" if id == "coop" else "bleat", -2.0, 0.1, global_position)
 			Game.notified.emit("%s накормлены!" % cfg["animal_name"], Color("ffe08a"))
 			for a in animals:
 				if is_instance_valid(a):

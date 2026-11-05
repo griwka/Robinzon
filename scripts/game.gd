@@ -11,6 +11,9 @@ signal collection_changed(col_id: String, item_id: String, is_new: bool)
 signal time_changed(time_of_day: float, day: int)
 
 const SAVE_PATH := "user://save.json"
+const SETTINGS_PATH := "user://settings.cfg"
+const DEFAULT_SETTINGS := {"music": 0.6, "sfx": 0.8, "ambience": 0.7, "mouse": 1.0,
+	"shadows": 2, "msaa": 2, "fullscreen": false, "vsync": true}
 const DAY_LENGTH := 600.0  # секунд на сутки (ночь идёт вдвое быстрее)
 
 var inventory: Dictionary = {}
@@ -25,11 +28,39 @@ var flags: Dictionary = {}             # разные одноразовые с�
 var time_of_day := 0.3
 var day := 1
 var world_time := 0.0                  # секунды игрового мира (растения растут по нему)
+var settings: Dictionary = DEFAULT_SETTINGS.duplicate()
+var skip_menu := false                 # true — после перезагрузки сразу в игру, без главного меню
 
 
 func _ready() -> void:
 	_setup_input()
 	reset_state()
+	load_settings()
+	apply_display()
+
+
+# ======================================================================= Настройки
+func load_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		for k in DEFAULT_SETTINGS:
+			settings[k] = cfg.get_value("settings", k, DEFAULT_SETTINGS[k])
+
+
+func save_settings() -> void:
+	var cfg := ConfigFile.new()
+	for k in settings:
+		cfg.set_value("settings", k, settings[k])
+	cfg.save(SETTINGS_PATH)
+
+
+func apply_display() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if settings["fullscreen"] else DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if settings["vsync"] else DisplayServer.VSYNC_DISABLED)
+	get_viewport().msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][int(settings["msaa"])]
+	RenderingServer.directional_shadow_atlas_set_size([1024, 2048, 4096][int(settings["shadows"])], true)
 
 
 func _process(delta: float) -> void:
@@ -90,6 +121,7 @@ func add_item(id: String, amount: int = 1, track := true, quiet := false) -> voi
 	inventory_changed.emit()
 	if not quiet:
 		notified.emit("+%d %s" % [amount, item_name(id)], item(id).get("color", Color.WHITE))
+		Audio.play("pickup", -6.0, 0.15)
 	if track:
 		bump("collected", id, amount)
 
@@ -123,6 +155,7 @@ func recipe_unlocked(r: Dictionary) -> bool:
 func craft(recipe: Dictionary) -> bool:
 	if not recipe_unlocked(recipe) or not pay(recipe["in"]):
 		return false
+	Audio.play("craft", -3.0)
 	for id in recipe["out"]:
 		inventory[id] = count(id) + recipe["out"][id]
 		notified.emit("Создано: %s ×%d" % [item_name(id), recipe["out"][id]], Color("ffe08a"))
@@ -132,33 +165,53 @@ func craft(recipe: Dictionary) -> bool:
 
 
 # ======================================================================= Коллекции
-func add_collectible(col_id: String) -> void:
+func add_collectible(col_id: String) -> bool:
 	var col: Dictionary = Data.COLLECTIONS[col_id]
-	# редкие предметы (последние в списке) выпадают реже
-	var weights: Array[float] = []
-	var total := 0.0
-	for i in col["items"].size():
-		var w: float = 1.0 / (1.0 + i * 0.8)
-		weights.append(w)
-		total += w
-	var r := randf() * total
-	var idx := 0
-	for i in weights.size():
-		r -= weights[i]
-		if r <= 0.0:
-			idx = i
-			break
-	var it: Dictionary = col["items"][idx]
 	var have: Dictionary = collections.get(col_id, {})
+	var idx := 0
+	if col.get("ordered", false):
+		# страницы журнала — строго по порядку и без повторов
+		idx = -1
+		for i in col["items"].size():
+			if not have.has(col["items"][i]["id"]):
+				idx = i
+				break
+		if idx < 0:
+			return false
+	else:
+		# редкие предметы (последние в списке) выпадают реже
+		var weights: Array[float] = []
+		var total := 0.0
+		for i in col["items"].size():
+			var w: float = 1.0 / (1.0 + i * 0.8)
+			weights.append(w)
+			total += w
+		var r := randf() * total
+		for i in weights.size():
+			r -= weights[i]
+			if r <= 0.0:
+				idx = i
+				break
+	var it: Dictionary = col["items"][idx]
 	var is_new: bool = not have.has(it["id"])
 	have[it["id"]] = have.get(it["id"], 0) + 1
 	collections[col_id] = have
 	notified.emit("%s: %s%s" % [col["name"], it["name"], " (новое!)" if is_new else ""], it["color"])
 	collection_changed.emit(col_id, it["id"], is_new)
+	Audio.play("rare" if is_new else "pickup", -3.0)
+	if it.has("text"):
+		dialogue_requested.emit([["journal", it["text"]]], Callable())
+	if is_new:
+		bump("collection", col_id)
 	if is_new and collection_complete(col_id) and not flags.has("col_" + col_id):
 		flags["col_" + col_id] = true
 		_grant(col["reward"])
 		notified.emit("Коллекция «%s» собрана!" % col["name"], Color("8affa0"))
+	return is_new
+
+
+func journal_incomplete() -> bool:
+	return not collection_complete("journal")
 
 
 func collection_complete(col_id: String) -> bool:
@@ -215,7 +268,7 @@ func start_current_quest() -> void:
 	for t in q["tasks"]:
 		var key: String = t["kind"] + ":" + t["target"]
 		# постройки и разговоры считаем с нуля, ресурсы — от момента получения задания
-		quest_baseline[key] = 0 if t["kind"] in ["talk", "built", "sailed"] else stat(t["kind"], t["target"])
+		quest_baseline[key] = 0 if t["kind"] in ["talk", "built", "sailed", "collection"] else stat(t["kind"], t["target"])
 	quest_changed.emit()
 	dialogue_requested.emit(q.get("intro", []), func(): _check_quest())
 
@@ -230,6 +283,7 @@ func _check_quest() -> void:
 		quest_index += 1
 		_grant(q.get("reward", {}))
 		quest_completed.emit(q)
+		Audio.play("quest", -2.0, 0.0)
 		notified.emit("Задание выполнено: %s" % q["title"], Color("8affa0"))
 		quest_changed.emit()
 		dialogue_requested.emit(q.get("outro", []), func(): start_current_quest())
@@ -245,6 +299,8 @@ func _grant(reward: Dictionary) -> void:
 			for r in Data.RECIPES:
 				if r["id"] == id:
 					notified.emit("Новый рецепт: %s" % item_name(r["out"].keys()[0]), Color("bfe3ff"))
+	for i in int(reward.get("pages", 0)):
+		add_collectible("journal")
 	var items: Dictionary = reward.get("items", {})
 	for id in items:
 		add_item(id, items[id], false)
@@ -334,7 +390,7 @@ func _setup_input() -> void:
 		"jump": [KEY_SPACE], "sprint": [KEY_SHIFT], "interact": [KEY_E],
 		"craft_menu": [KEY_C], "build_menu": [KEY_B], "rotate_build": [KEY_R],
 		"inventory": [KEY_TAB, KEY_I], "journal": [KEY_J], "collections": [KEY_K],
-		"help": [KEY_F1, KEY_H], "save": [KEY_F5], "load": [KEY_F9], "new_game": [KEY_F10],
+		"help": [KEY_F1, KEY_H], "save": [KEY_F5], "load": [KEY_F9],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):

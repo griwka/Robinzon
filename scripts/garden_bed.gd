@@ -56,7 +56,7 @@ func _refresh() -> void:
 	var soil := visual.get_node_or_null("Soil") as MeshInstance3D
 	if soil:
 		soil.material_override = Models.mat(Color("54331d") if watered else Color("7a4a2a"), false)
-	FX.set_marker(marker, _stage == 3, Data.ITEMS[crop]["color"] if crop != "" else Color.WHITE)
+	FX.set_marker(marker, _stage == 3, crop)
 
 
 func tool_hint() -> String:
@@ -81,7 +81,7 @@ func interact(_player: Node) -> void:
 				var seed_id := _seed_for(c)
 				if Game.count(seed_id) > 0:
 					options.append({"text": "%s  (семян: %d, ~%d c)" % [Data.CROPS[c]["name"], Game.count(seed_id), int(Data.CROPS[c]["time"])],
-						"color": Data.ITEMS[c]["color"], "callback": plant.bind(c)})
+						"icon": seed_id, "callback": plant.bind(c)})
 			if options.is_empty():
 				Game.notified.emit("Нет семян. Поищи в кустах или спроси Румбу!", Color("ff9d7a"))
 			else:
@@ -92,6 +92,7 @@ func interact(_player: Node) -> void:
 			if not watered and Game.has_tool("watering_can"):
 				watered = true
 				Game.bump("watered", "bed")
+				Audio.play("water", -3.0, 0.1, global_position)
 				FX.burst(self, Vector3(0, 0.5, 0), Color("6fc3ff"), 16)
 				_refresh()
 			else:
@@ -116,6 +117,7 @@ func plant(c: String) -> void:
 	progress = 0.0
 	watered = false
 	Game.bump("planted", c)
+	Audio.play("plant", -2.0, 0.1, global_position)
 	FX.burst(self, Vector3(0, 0.3, 0), Color("8f5a34"), 10)
 	_refresh()
 
@@ -125,6 +127,7 @@ func _harvest() -> void:
 	var n := randi_range(cfg["yield"][0], cfg["yield"][1])
 	Game.add_item(crop, n)
 	Game.bump("harvested", crop, n)
+	Audio.play("harvest", -2.0, 0.1, global_position)
 	if randf() < cfg["seed_back"]:
 		Game.add_item(_seed_for(crop), randi_range(1, 2), false)
 	FX.burst(self, Vector3(0, 0.5, 0), Data.ITEMS[crop]["color"], 14)

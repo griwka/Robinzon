@@ -11,6 +11,12 @@ static var _outline_cache: Dictionary = {}
 static var _unshaded_cache: Dictionary = {}
 
 
+static func clear_caches() -> void:
+	_mat_cache.clear()
+	_outline_cache.clear()
+	_unshaded_cache.clear()
+
+
 # ============================================================== Материалы
 static func mat(color: Color, outline := true, wind := 0.0, fade := false, gloss := 0.15) -> ShaderMaterial:
 	var key := "%s|%s|%s|%s|%s" % [color.to_html(), outline, wind, fade, gloss]

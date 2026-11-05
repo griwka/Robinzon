@@ -14,6 +14,10 @@ var sun: DirectionalLight3D
 var moon: DirectionalLight3D
 var clouds: Array[Node3D] = []
 var _autosave_t := 0.0
+var menu: GameMenu
+var menu_cam: Camera3D
+var in_menu := false
+var _orbit := 0.0
 
 # палитры: [верх неба, горизонт, цвет солнца, сила солнца, цвет теней, яркость теней, яркость воды]
 const SKY_DAY := [Color("3a9cf0"), Color("bde9ff"), Color("fff4dc"), 0.56, Color("8f86c9"), 0.78, 1.0]
@@ -61,17 +65,70 @@ func _ready() -> void:
 	hud.station_check = _near_station
 	hud.build_selected.connect(_on_build_selected)
 	hud.panels_changed.connect(_on_panels_changed)
-	hud.new_game_requested.connect(_new_game)
+	Audio.listener = player
+	Audio.island = island
+
+	menu = GameMenu.new()
+	menu.hud = hud
+	add_child(menu)
+	menu.continue_pressed.connect(start_play)
+	menu.new_game_pressed.connect(_new_game)
+	menu.resume_pressed.connect(_resume)
+	menu.save_pressed.connect(_save)
+	menu.to_main_menu_pressed.connect(func():
+		_save()
+		get_tree().paused = false
+		get_tree().reload_current_scene())
+	menu_cam = Camera3D.new()
+	menu_cam.fov = 50
+	menu_cam.far = 900
+	add_child(menu_cam)
 
 	_spawn_clouds()
 	var loaded := _load()
-	_capture_mouse(true)
-	if not loaded or not Game.quest_started:
-		Game.start_current_quest.call_deferred()
-	if not OS.get_cmdline_user_args().is_empty():
+	var args := OS.get_cmdline_user_args()
+	if Game.skip_menu or (not args.is_empty() and not "--menu" in args):
+		Game.skip_menu = false
+		start_play.call_deferred()
+	else:
+		_show_main_menu(loaded)
+	if not args.is_empty():
 		var dev := preload("res://scripts/dev_tools.gd").new()
 		dev.main = self
 		add_child(dev)
+
+
+func _show_main_menu(has_save: bool) -> void:
+	in_menu = true
+	hud.visible = false
+	player.controls_enabled = false
+	menu_cam.current = true
+	_capture_mouse(false)
+	menu.show_main(has_save)
+
+
+## Начать (или продолжить) игру: убрать меню, вернуть камеру игроку.
+func start_play() -> void:
+	in_menu = false
+	menu.hide_all()
+	hud.visible = true
+	player.camera.current = true
+	player.controls_enabled = true
+	_capture_mouse(true)
+	if not Game.quest_started:
+		Game.start_current_quest()
+
+
+func _pause() -> void:
+	get_tree().paused = true
+	_capture_mouse(false)
+	menu.show_pause()
+
+
+func _resume() -> void:
+	menu.hide_all()
+	get_tree().paused = false
+	_capture_mouse(not hud.any_open())
 
 
 func _spawn_story_objects() -> void:
@@ -200,6 +257,12 @@ func _spawn_clouds() -> void:
 
 func _process(delta: float) -> void:
 	_update_sky()
+	if in_menu:
+		# камера медленно облетает остров
+		_orbit += delta * 0.05
+		var c := island.camp_center
+		menu_cam.global_position = c + Vector3(cos(_orbit) * 34.0, 16.0, sin(_orbit) * 34.0)
+		menu_cam.look_at(c + Vector3(0, 2.0, 0))
 	for c in clouds:
 		c.position.x += delta * 2.0
 		if c.position.x > 280:
@@ -212,7 +275,8 @@ func _process(delta: float) -> void:
 	else:
 		hud.set_hint("")
 	hud.set_crosshair(build.is_active())
-	_autosave_t += delta
+	if not in_menu:
+		_autosave_t += delta
 	if _autosave_t > 90.0:
 		_autosave_t = 0.0
 		_save()
@@ -225,11 +289,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			hud.advance_dialogue()
 			get_viewport().set_input_as_handled()
 		return
+	if in_menu:
+		return
 	if event.is_action_pressed("ui_cancel"):
 		if hud.any_open():
 			hud.close_all()
-		elif Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-			_capture_mouse(false)
+		elif build.is_active():
+			build.cancel()
+		else:
+			_pause()
+		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not hud.any_open():
 		_capture_mouse(true)
@@ -258,8 +327,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		_save()
 	elif event.is_action_pressed("load"):
 		get_tree().reload_current_scene()
-	elif event.is_action_pressed("new_game"):
-		_new_game()
 
 
 func _capture_mouse(on: bool) -> void:
@@ -267,6 +334,8 @@ func _capture_mouse(on: bool) -> void:
 
 
 func _on_panels_changed(open: bool) -> void:
+	if in_menu:
+		return
 	player.controls_enabled = not open
 	_capture_mouse(not open)
 
@@ -298,6 +367,7 @@ func _near_station(station: String) -> bool:
 
 func _sleep() -> void:
 	player.controls_enabled = false
+	Audio.play("sleep", -2.0, 0.0)
 	hud.fade_through(func():
 		Game.sleep_until_morning()
 		hud.toast("Доброе утро! Пока ты спал, грядки подросли.", Color("ffe08a"))
@@ -333,9 +403,16 @@ func _load() -> bool:
 func _new_game() -> void:
 	Game.delete_save()
 	Game.reset_state()
+	Game.skip_menu = true
+	get_tree().paused = false
 	get_tree().reload_current_scene()
 
 
+func _exit_tree() -> void:
+	Models.clear_caches()
+	FX._tex_cache.clear()
+
+
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST and player:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and player and not in_menu:
 		_save()
