@@ -658,13 +658,96 @@ def sfx_metal():
     return normalize(x, 0.7)
 
 
+# ============================================================ глава 5 — Ледяной остров
+def sfx_wind():
+    """Порыв холодного ветра: шум, который то набирает силу, то стихает, с лёгким «посвистом»."""
+    r = np.random.default_rng(71)
+    d = 3.2
+    t = t_axis(d)
+    n = len(t)
+    env = np.sin(np.pi * t / d) ** 1.5 * (0.7 + 0.3 * np.sin(2 * np.pi * 0.9 * t + 1.0))
+    base = bandpass(r.standard_normal(n), 250, 1400) * env
+    whistle_f = 900 + 250 * np.sin(2 * np.pi * 0.4 * t) + 120 * np.sin(2 * np.pi * 1.7 * t)
+    whistle = np.sin(2 * np.pi * np.cumsum(whistle_f) / SR) * 0.06 * env ** 2
+    gusty = bandpass(r.standard_normal(n), 1500, 4000) * 0.25 * env ** 3
+    return normalize(base + whistle + gusty, 0.55)
+
+
+def sfx_ice():
+    """Удар ледорубом по льду: звонкий хруст, осыпаются мелкие осколки."""
+    r = np.random.default_rng(83)
+    d = 0.6
+    t = t_axis(d)
+    n = len(t)
+    crack = highpass(r.standard_normal(n), 2500) * np.exp(-t / 0.015)
+    ring = np.zeros(n)
+    for f, a, dec in ((1850, 0.3, 0.09), (3100, 0.25, 0.06), (4700, 0.18, 0.04)):
+        ring += np.sin(2 * np.pi * f * t + r.uniform(0, 6)) * a * np.exp(-t / dec)
+    tinkle = np.zeros(n)
+    for k in range(9):
+        at = r.uniform(0.05, 0.45)
+        tt = t_axis(0.04)
+        place(tinkle, np.sin(2 * np.pi * r.uniform(3000, 6500) * tt) * np.exp(-tt / 0.01) * r.uniform(0.1, 0.25), at)
+    body = lowpass(r.standard_normal(n), 400) * np.exp(-t / 0.05) * 0.5
+    return normalize(crack * 0.8 + ring + tinkle + body, 0.7)
+
+
+def sfx_penguin():
+    """Пингвин: хрипловатое «а-а-а» с икающими переходами, как маленькая труба."""
+    x = np.zeros(int(0.9 * SR))
+    for i, (f, d) in enumerate(((480, 0.12), (520, 0.12), (430, 0.3))):
+        tt = t_axis(d)
+        freq = f * (1 + 0.1 * np.sin(np.pi * tt / d)) * (1 + 0.03 * np.sin(2 * np.pi * 30 * tt))
+        saw = signal.sawtooth(2 * np.pi * np.cumsum(freq) / SR, 0.3)
+        s = bandpass(saw, 500, 3000) * np.sin(np.pi * tt / d) ** 0.7
+        place(x, s, i * 0.15 + (0.05 if i == 2 else 0.0))
+    return normalize(x, 0.5)
+
+
+def sfx_snore():
+    """Храп моржа: долгий низкий рокот на вдохе и пыхтение на выдохе."""
+    r = np.random.default_rng(97)
+    d = 2.2
+    t = t_axis(d)
+    n = len(t)
+    inhale = (t < 1.1).astype(float) * np.sin(np.pi * np.clip(t / 1.1, 0, 1))
+    exhale = (t >= 1.2).astype(float) * np.sin(np.pi * np.clip((t - 1.2) / 0.9, 0, 1))
+    buzz = signal.sawtooth(2 * np.pi * (55 + 8 * np.sin(2 * np.pi * 3 * t)) * t)
+    rumble = lowpass(buzz, 400) * (0.6 + 0.4 * np.sin(2 * np.pi * 26 * t)) * inhale
+    puff = bandpass(r.standard_normal(n), 300, 1500) * exhale * 0.5
+    return normalize(rumble + puff, 0.6)
+
+
+def sfx_drip():
+    """Капля: оттепель, с сосулек капает — короткий «плюк» с подъёмом тона."""
+    d = 0.35
+    t = t_axis(d)
+    f = 900 + 1400 * (1 - np.exp(-t / 0.03))
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.06)
+    x += np.sin(2 * np.pi * 2600 * t) * np.exp(-t / 0.02) * 0.2
+    return normalize(x, 0.5)
+
+
+def sfx_step_snow():
+    """Шаг по снегу: сухой скрип-хруст."""
+    r = np.random.default_rng(13)
+    n = int(0.16 * SR)
+    t = np.arange(n) / SR
+    crunch = bandpass(r.standard_normal(n), 1800, 7000) * adsr(n, 0.01, 0.05, 0.4, 0.08)
+    grain = (r.random(n) > 0.985).astype(float) * r.standard_normal(n) * 1.5
+    squeak = np.sin(2 * np.pi * (1100 + 400 * t / 0.16) * t) * 0.08 * adsr(n, 0.02, 0.05, 0.3, 0.06)
+    return normalize(crunch + bandpass(grain, 2000, 8000) * 0.5 + squeak, 0.35)
+
+
 def main():
     import sys
     os.makedirs(OUT, exist_ok=True)
     only = sys.argv[1:]   # имена эффектов (без sfx_) — сгенерировать только их, без музыки и фона
     if only:
         table = {"thunder0": lambda: sfx_thunder(0), "thunder1": lambda: sfx_thunder(1), "thunder2": lambda: sfx_thunder(2),
-                 "radio": sfx_radio, "honk": sfx_honk, "metal": sfx_metal}
+                 "radio": sfx_radio, "honk": sfx_honk, "metal": sfx_metal,
+                 "wind": sfx_wind, "ice": sfx_ice, "penguin": sfx_penguin, "snore": sfx_snore, "drip": sfx_drip,
+                 "step_snow": sfx_step_snow}
         for name in only:
             write_wav("sfx_" + name, table[name]())
         print("audio:", only)
@@ -678,6 +761,8 @@ def main():
         "shake": sfx_shake(), "thud": sfx_thud(),
         "thunder0": sfx_thunder(0), "thunder1": sfx_thunder(1), "thunder2": sfx_thunder(2),
         "radio": sfx_radio(), "honk": sfx_honk(), "metal": sfx_metal(),
+        "wind": sfx_wind(), "ice": sfx_ice(), "penguin": sfx_penguin(), "snore": sfx_snore(), "drip": sfx_drip(),
+        "step_snow": sfx_step_snow(),
     }
     for i in range(4):
         sfx["bird%d" % i] = bird(100 + i)

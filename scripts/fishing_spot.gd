@@ -8,6 +8,9 @@ enum { IDLE, WAITING, BITE }
 
 const BITE_WINDOW := 1.2
 var state := IDLE
+var ice := false        # лунка во льду (Ледяной остров): сначала просверлить ледовым буром
+var hole_id := ""       # номер лунки — чтобы помнить, что её уже просверлили
+var _hole: Node3D
 var _timer := 0.0
 var _t := 0.0
 var bubbles: CPUParticles3D
@@ -17,6 +20,11 @@ var marker: Node3D
 
 func _ready() -> void:
 	add_to_group("interactable")
+	if ice:
+		_hole = Models.glb("ice_hole")
+		if _hole:
+			add_child(_hole)
+			_refresh_hole()
 	bubbles = CPUParticles3D.new()
 	bubbles.amount = 14
 	bubbles.lifetime = 1.4
@@ -33,6 +41,9 @@ func _ready() -> void:
 	bubbles.color = Color("eefcff")
 	bubbles.position.y = 0.05
 	add_child(bubbles)
+	if ice:
+		bubbles.emitting = drilled()
+		bubbles.amount = 6
 	bobber = MeshInstance3D.new()
 	var bm := SphereMesh.new()
 	bm.radius = 0.1
@@ -47,13 +58,26 @@ func interact_point() -> Vector3:
 	return global_position + Vector3(0, 0.3, 0)
 
 
+func drilled() -> bool:
+	return not ice or Game.flags.get("drilled_" + hole_id, false)
+
+
+func _refresh_hole() -> void:
+	if _hole:
+		var cap := _hole.find_child("Cap", true, false) as Node3D
+		if cap:
+			cap.visible = not drilled()
+
+
 func tool_hint() -> String:
-	return "fishing_rod"
+	return "fishing_rod" if drilled() else "ice_drill"
 
 
 func get_hint() -> String:
+	if not drilled():
+		return "Просверлить лунку во льду" if Game.has_tool("ice_drill") else "Толстый лёд (нужен ледовый бур)"
 	if not Game.has_tool("fishing_rod"):
-		return "Бурлящая вода (нужна удочка)"
+		return ("Лунка во льду" if ice else "Бурлящая вода") + " (нужна удочка)"
 	match state:
 		WAITING: return "Ждём поклёвки... (E — смотать)"
 		BITE: return "КЛЮЁТ! Жми E!"
@@ -61,6 +85,17 @@ func get_hint() -> String:
 
 
 func interact(_player: Node) -> void:
+	if not drilled():
+		if not Game.has_tool("ice_drill"):
+			Game.notified.emit("Лёд толстый — нужен ледовый бур (у Ингрид)", Color("ff9d7a"))
+			return
+		Game.flags["drilled_" + hole_id] = true
+		Audio.play("ice", -2.0, 0.1, global_position)
+		FX.burst(self, Vector3(0, 0.2, 0), Color("dff4ff"), 16)
+		bubbles.emitting = true
+		_refresh_hole()
+		Game.notified.emit("Лунка готова. Теперь — удочку", Color("bfe3ff"))
+		return
 	if not Game.has_tool("fishing_rod"):
 		Game.notified.emit("Нужна удочка", Color("ff9d7a"))
 		return
@@ -84,10 +119,12 @@ func catch() -> void:
 	bobber.visible = false
 	Game.add_item("fish", 1)
 	Game.bump("fished", "fish")
+	if ice:
+		Game.bump("fished", "ice_fish")
 	FX.burst(get_parent(), global_position + Vector3(0, 0.3, 0), Color("bfe8ff"), 14)
 	Audio.play("harvest", -2.0, 0.1)
-	if randf() < 0.3:
-		Game.add_collectible("fish")
+	if randf() < (0.35 if ice else 0.3):
+		Game.add_collectible("north_fish" if ice else "fish")
 
 
 func _process(delta: float) -> void:

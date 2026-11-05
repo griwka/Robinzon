@@ -71,8 +71,10 @@ func _ready() -> void:
 	_build_model()
 	_build_camera()
 	Game.inventory_changed.connect(_update_tool)
+	Game.inventory_changed.connect(update_clothes)
 	Game.item_gained.connect(_on_item_gained)
 	_update_tool()
+	update_clothes()
 	_shake.seed = 17
 	_shake.frequency = 0.9
 
@@ -161,6 +163,55 @@ func _build_model_simple() -> void:
 	Models.part(head, Models.box(Vector3(0.1, 0.025, 0.02)), Color("a04a3a"), Vector3(0, -0.15, -0.31), Vector3.ZERO, Vector3.ONE, false)
 
 
+# ------------------------------------------------------------------ Тёплая одежда (Ледяной остров)
+var _clothes: Array[Node3D] = []
+var _clothes_key := ""
+
+
+## Тёплую одежду видно на герое там, где холодно: свитер или куртка, валенки, рукавицы.
+## Каждая вещь — модель из Blender с кусками Torso / SleeveL / SleeveR / BootL / BootR / MittenL / MittenR,
+## у каждого куска точка вращения — в суставе, так что он просто вешается на нужный сустав.
+func update_clothes() -> void:
+	var wear: Array[String] = []
+	if Game.cold_active():
+		if Game.has_tool("down_jacket"):
+			wear.append("wear_jacket")
+		elif Game.has_tool("sweater"):
+			wear.append("wear_sweater")
+		if Game.has_tool("felt_boots"):
+			wear.append("wear_boots")
+		if Game.has_tool("mittens"):
+			wear.append("wear_mittens")
+	var key := ",".join(wear)
+	if key == _clothes_key:
+		return
+	_clothes_key = key
+	for c in _clothes:
+		if is_instance_valid(c):
+			c.queue_free()
+	_clothes.clear()
+	if body_pivot == null:
+		return
+	var joints := {"Torso": body_pivot, "SleeveL": arm_l, "SleeveR": arm_r, "BootL": leg_l, "BootR": leg_r,
+		"MittenL": arm_l, "MittenR": arm_r}
+	for w in wear:
+		var g := Models.glb(w)
+		if g == null:
+			continue
+		for piece_name in joints:
+			var piece := g.get_node_or_null(piece_name) as Node3D
+			if piece == null:
+				continue
+			g.remove_child(piece)
+			piece.owner = null
+			piece.transform = Transform3D.IDENTITY
+			(joints[piece_name] as Node3D).add_child(piece)
+			_clothes.append(piece)
+			for mi in piece.find_children("*", "MeshInstance3D", true, false):
+				(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		g.queue_free()
+
+
 func _update_tool() -> void:
 	for c in hand_tool.get_children():
 		c.queue_free()
@@ -210,15 +261,23 @@ func _physics_process(delta: float) -> void:
 	if target != null and not is_instance_valid(target):
 		target = null   # объект расчищен и удалён
 	if controls_enabled and Input.is_action_just_pressed("eat"):
-		var v := Game.eat_best_food()
-		stamina = minf(STAMINA_MAX, stamina + v * 2.0)
+		# на морозе Q — сначала кружка чая (если тепло на исходе), иначе еда
+		if not (Game.warmth < 85.0 and Warmth.drink_tea()):
+			var v := Game.eat_best_food()
+			stamina = minf(STAMINA_MAX, stamina + v * 2.0)
 	if climbing:
 		_climb(delta)
 		return
 	_find_climb()
 	if near_climb and controls_enabled and Input.is_action_just_pressed("jump"):
-		if not near_climb.ladder and Game.storm_active():
+		if near_climb.locked_hint != "":
+			Game.notified.emit(near_climb.locked_hint, Color("ffe08a"))
+		elif not near_climb.ladder and Game.storm_active():
 			Game.notified.emit("В грозу лианы и скалы мокрые — соскользнёшь. Переждите грозу", Color("ff9d7a"))
+		elif near_climb.ice and not (Game.has_tool("ice_pick") and Game.has_tool("climbing_gloves")):
+			Game.notified.emit("По льду не залезть голыми руками: нужны ледоруб и перчатки лазальщика", Color("ff9d7a"))
+		elif not near_climb.ladder and Game.frozen():
+			Game.notified.emit("Пальцы замёрзли и не держат. Сначала согрейся у огня", Color("bfe3ff"))
 		elif not near_climb.ladder and not Game.has_tool("climbing_gloves"):
 			Game.notified.emit("Голыми руками по лиане не залезть — нужны перчатки лазальщика", Color("ff9d7a"))
 		elif stamina < 10.0:
@@ -239,6 +298,8 @@ func _physics_process(delta: float) -> void:
 	var speed := SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
 	if _swing_t > 0.0:
 		speed *= 0.4
+	if Game.frozen():
+		speed = WALK_SPEED * 0.5   # замёрз: еле идёшь
 
 	var accel := 12.0 if is_on_floor() else 4.0
 	velocity.x = lerpf(velocity.x, dir.x * speed, accel * delta)
@@ -360,8 +421,10 @@ func _animate(delta: float, speed: float) -> void:
 	# шаги: звук, когда нога касается земли
 	if is_on_floor() and moving > 0.3 and int(prev_phase / PI) != int(_walk_phase / PI):
 		var isl := get_tree().get_first_node_in_group("island")
-		var on_sand: bool = isl != null and isl.height_at(global_position.x, global_position.z) < 1.1
-		Audio.play("step_sand" if on_sand else "step_grass", -10.0 + moving * 2.0, 0.15)
+		var h_here: float = isl.height_at(global_position.x, global_position.z) if isl else 5.0
+		var on_sand: bool = isl != null and h_here < 1.1
+		var on_snow: bool = Game.cold_active() and (h_here > Island.SNOW_LINE or global_position.y > h_here + 0.5)
+		Audio.play("step_snow" if on_snow else ("step_sand" if on_sand else "step_grass"), -10.0 + moving * 2.0, 0.15)
 		if on_sand and moving > 1.2 and global_position.y > -0.3:
 			FX.dust(self, Vector3(0, 0.05, 0.1), Color("f1dfb0"), 2, 0.22)
 	var swing := sin(_walk_phase) * 0.75 * moving
@@ -394,6 +457,11 @@ func _animate(delta: float, speed: float) -> void:
 
 	_squash = lerpf(_squash, 1.0, 10.0 * delta)
 	model.scale = Vector3(1.0 / sqrt(_squash), _squash, 1.0 / sqrt(_squash))
+	# дрожь на морозе: тепло кончилось — сильно, на исходе — чуть-чуть
+	var shiver := 0.0
+	if Game.cold_active() and Game.warmth < 25.0:
+		shiver = 0.012 if Game.warmth <= 0.0 else 0.005
+	model.position.x = sin(_walk_phase * 9.0 + Time.get_ticks_msec() * 0.06) * shiver
 
 
 # ------------------------------------------------------------------ Лазание
@@ -428,7 +496,11 @@ func _climb(delta: float) -> void:
 	var up := 0.0
 	if controls_enabled:
 		up = Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
-	stamina -= (9.0 if abs(up) > 0.1 else 2.5) * delta * (0.35 if climbing.ladder else 1.0)
+	var cold_k := 1.3 if Game.cold_active() else 1.0
+	stamina -= (9.0 if abs(up) > 0.1 else 2.5) * delta * (0.35 if climbing.ladder else cold_k)
+	# ледяная стена: на зарубке можно повисеть — силы возвращаются
+	if climbing.ice and abs(up) < 0.1 and climbing.at_rest(global_position.y - b.y):
+		stamina = minf(STAMINA_MAX, stamina + 2.5 * delta * cold_k + 14.0 * delta)
 	var y := global_position.y + up * CLIMB_SPEED * delta
 	global_position = Vector3(b.x, 0, b.z) + _climb_side * 0.45 + Vector3(0, y, 0)
 	model.rotation.y = lerp_angle(model.rotation.y, atan2(_climb_side.x, _climb_side.z), 10.0 * delta)
@@ -470,12 +542,16 @@ func _find_target() -> void:
 			continue
 		var p: Vector3 = n.interact_point()
 		var to := p - global_position
+		if absf(to.y) > 3.0:
+			continue   # сильно выше или ниже (уступ, ярус) — рукой не достать
 		to.y *= 0.5
 		var d := to.length()
 		var reach := INTERACT_RANGE
 		if n is Building and n.id in ["hut", "goat_pen", "coop", "tent"]:
 			reach = 3.2
-		if n is ResourceNode and n.kind in ["rock", "jungle_tree", "cliff", "fallen_log", "thicket", "bamboo", "crooked_tree", "rockfall"]:
+		if n is NPCPerson and n.npc_id == "walrus":
+			reach = 3.4
+		if n is ResourceNode and n.kind in ["rock", "jungle_tree", "cliff", "fallen_log", "thicket", "bamboo", "crooked_tree", "rockfall", "ice_wall", "pine"]:
 			reach = 3.4
 		if n is StoryPlace:
 			reach = 3.6
@@ -504,8 +580,16 @@ func try_interact() -> void:
 
 func get_hint() -> String:
 	if climbing:
+		if climbing.ice:
+			var rest := climbing.at_rest(global_position.y - climbing.world_bottom().y)
+			return "W — вверх,  S — вниз,  Пробел — спрыгнуть" + ("   ·   зарубка: повиси, отдышись" if rest else ",  Q — поесть")
 		return "W — вверх,  S — вниз,  Пробел — спрыгнуть" + ("" if climbing.ladder else ",  Q — поесть")
 	if near_climb and (target == null or not is_instance_valid(target)):
+		if near_climb.locked_hint != "":
+			return near_climb.locked_hint
+		if near_climb.ice:
+			return "[Пробел]  Лезть по ледяной стене" if Game.has_tool("ice_pick") and Game.has_tool("climbing_gloves") \
+				else "Ледяная стена (нужны ледоруб и перчатки лазальщика)"
 		if near_climb.ladder:
 			return "[Пробел]  Лезть по лестнице"
 		return "[Пробел]  Лезть по лиане" if Game.has_tool("climbing_gloves") else "Лиана (нужны перчатки лазальщика)"

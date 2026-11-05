@@ -795,6 +795,9 @@ static func building(id: String) -> Node3D:
 		match id:
 			"campfire": _add_fire(g)
 			"torch": _add_torch_flame(g)
+			"stove":
+				var fp := g.find_child("FirePoint", true, false) as Node3D
+				flame(g, fp.position if fp else Vector3(0, 0.45, 0.35), 0.4, 1.6, 7.0)
 		return g
 	match id:
 		"tent": return tent()

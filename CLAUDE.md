@@ -27,10 +27,13 @@
 - **`scripts/quest_validator.gd`** — проверка, что каждое задание выполнимо по порядку, плюс отчёт по монетам.
   Новых жителей, головоломки и ярусы добавляй в `NPCS`, `PUZZLES`, `DECKS`.
 - **`scripts/dev_tools.gd`** — автотесты и скриншоты. Каждой новой главе нужен свой автотест.
-- **Острова:** один генератор `scripts/island.gd`; особые места — `fort_ruin.gd`, `banyan_tree.gd`, `storm_station.gd`
+- **Острова:** один генератор `scripts/island.gd`; особые места — `fort_ruin.gd`, `banyan_tree.gd`, `storm_station.gd`, `ice_glacier.gd`
   (бункер), `story_place.gd`. Кольца преград вокруг мест — `Island.RINGS`.
 - **Гроза** — `scripts/weather.gd` (только на Грозовом): `Game.storm_active()`; громоотвод — загон `lightning_rod`
   с `"storm": true` в `Data.PENS`. Ярусы бункера `bunker1..7` — свет от генератора (1–3) или фонарь.
+- **Холод** — `scripts/warmth.gd` (только на Ледяном до флага `ice_thawed`): `Game.cold_active()`, `Game.warmth`,
+  `Game.cold_mult()` по одежде; тёплые места — постройки из `Warmth.SOURCES` и узлы в группе `warm_spot`.
+  Оттепель — `Island.thaw()`; одежда на герое — `Player.update_clothes()` (модели `wear_*` с кусками Torso/Sleeve*/Boot*/Mitten*).
 - **Ассеты собираются скриптами, руками не правятся:**
   - модели: `tools/blender/*.py` → `assets/models/*.glb`;
   - иконки: `tools/gen_icons.py` → `assets/icons/`;
@@ -71,6 +74,8 @@ godot --headless --path . -- --autotest --location=banyan --chapter=2
 godot --headless --path . -- --autotest --location=fort --chapter=3
 godot --headless --path . -- --autotest --location=fort --chapter=4 --upto=1
 godot --headless --path . -- --autotest --location=storm --chapter=4 --from=1
+godot --headless --path . -- --autotest --location=storm --chapter=5 --upto=1
+godot --headless --path . -- --autotest --location=ice --chapter=5 --from=1
 godot --path . --resolution 1600x900 -- --shot=shot.png --frames=90 --location=fort
 ```
 
@@ -95,12 +100,14 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 - `--storm=1` / `--storm=0` — на Грозовом: гроза всё время / без грозы;
 - `--bunker=N` (+ `--lit=1` — генератор и фонарь) — герой на ярусе N бункера;
 - `--near=timur|storm_tower|seaplane|stepa_boat` — герой у места;
+- `--near=glacier_top|ingrid|walrus|penguins|ice_tower|ice_ledge|ice_chest_3` — то же на Ледяном;
+- `--thaw=1` — Ледяной остров уже оттаял; `--wear=sweater|jacket` — герой в тёплой одежде;
 - автотест: `--from=K` — начать с K-го задания главы, `--upto=K` — пройти только K заданий;
 - `--fxtest` — все эффекты перед кадром;
 - `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO.
 
 Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для музыки и фона — ffmpeg в PATH;
-`python tools/gen_audio.py thunder0 radio` — только указанные эффекты, без ffmpeg). Иконки главы 4 — в `tools/icons_storm.py`.
+`python tools/gen_audio.py thunder0 radio` — только указанные эффекты, без ffmpeg). Иконки главы 4 — в `tools/icons_storm.py`, главы 5 — в `tools/icons_ice.py`.
 На Windows Godot можно вызывать полным путём, если его нет в PATH.
 ```bash
 python tools/blender/build.py

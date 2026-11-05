@@ -8,7 +8,7 @@ signal sleep_requested
 signal craft_requested(station: String)
 signal choice_requested(title: String, options: Array)
 
-const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe", "boat", "shelter"]
+const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe", "boat", "shelter", "stove"]
 
 var id := "campfire"
 var variant := ""
@@ -72,6 +72,8 @@ func _make_collision() -> void:
 					_add_box(Vector3(0.2, 2.4, 0.2), Vector3(sx * 1.05, 1.2, sz * 1.05), 0.0)
 		"lightning_rod":
 			_add_cyl(0.25, 4.0)
+		"stove":
+			_add_box(Vector3(1.1, 1.6, 0.9), Vector3(0, 0.8, 0), 0.0)
 		"goat_pen", "sheep_pen", "pig_sty", "garden_bed", "torch", "flowerbed", "shell_path":
 			_add_cyl(r * 0.6, 0.6)
 			collision_layer = 8  # не мешают ходить
@@ -122,7 +124,7 @@ func _process(delta: float) -> void:
 	if _light and lit:
 		# живой огонь: свет дрожит неравномерно (сумма двух «шумов»), языки пламени колышет шейдер
 		var n := sin(_t * 11.0) * sin(_t * 7.3) * 0.6 + sin(_t * 23.0 + 1.7) * 0.4
-		_light.light_energy = (2.0 if id == "campfire" else 1.4) * (0.86 + 0.14 * n)
+		_light.light_energy = (2.0 if id == "campfire" else (1.6 if id == "stove" else 1.4)) * (0.86 + 0.14 * n)
 	if id in ["raft", "canoe", "boat"]:
 		visual.position.y = sin(_t * 1.4) * 0.06
 		visual.rotation.z = sin(_t * 1.1) * 0.03
@@ -154,6 +156,7 @@ func get_hint() -> String:
 		"canoe": return "Каноэ — плыть"
 		"boat": return "Бот Стёпы — плыть"
 		"shelter": return "Навес — переждать грозу здесь" if Game.storm_active() else "Навес — под ним гроза не страшна"
+		"stove": return "Печка — заварить чай" + (", погреться" if Game.cold_active() else "")
 		"bench": return "Скамейка — присесть отдохнуть"
 	return Data.BUILDINGS[id]["name"]
 
@@ -161,6 +164,7 @@ func get_hint() -> String:
 func interact(_player: Node) -> void:
 	match id:
 		"campfire": craft_requested.emit("campfire")
+		"stove": craft_requested.emit("stove")
 		"workbench": craft_requested.emit("workbench")
 		"tent", "hut", "hammock": sleep_requested.emit()
 		"raft", "canoe", "boat": sail_requested.emit()

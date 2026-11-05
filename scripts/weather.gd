@@ -25,6 +25,8 @@ var _forced := -1.0
 var motes: CPUParticles3D
 var drops: CPUParticles3D
 var splashes: CPUParticles3D
+var flakes: CPUParticles3D     # снег на Ледяном острове (до оттепели)
+var _wind_t := 6.0
 
 const STORM_WARN := 20.0       # сек предупреждения до грозы
 const STORM_LEN := 90.0        # сек — сама гроза
@@ -107,6 +109,27 @@ func _ready() -> void:
 	splashes.color = Color(0.92, 0.96, 1.0, 0.0)
 	splashes.emitting = false
 	add_child(splashes)
+	# крупные медленные хлопья: падают наискосок и чуть кружатся
+	flakes = CPUParticles3D.new()
+	flakes.amount = 320
+	flakes.lifetime = 6.0
+	flakes.preprocess = 6.0
+	flakes.local_coords = false
+	flakes.mesh = FX._quad(FX.particle_mat(0.9, 0.85))
+	flakes.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	flakes.emission_box_extents = Vector3(16, 0.5, 16)
+	flakes.direction = Vector3(0.35, -1, 0.15)
+	flakes.spread = 18.0
+	flakes.gravity = Vector3(0, -0.4, 0)
+	flakes.initial_velocity_min = 1.2
+	flakes.initial_velocity_max = 2.0
+	flakes.tangential_accel_min = -0.6
+	flakes.tangential_accel_max = 0.6
+	flakes.scale_amount_min = 0.05
+	flakes.scale_amount_max = 0.1
+	flakes.color = Color(1.0, 1.0, 1.0, 0.85)
+	flakes.emitting = false
+	add_child(flakes)
 
 
 func _process(delta: float) -> void:
@@ -114,6 +137,8 @@ func _process(delta: float) -> void:
 		_storm_process(delta)
 	elif _forced >= 0.0:
 		_target = _forced
+	elif Game.cold_active():
+		_target = 0.0   # на Ледяном острове вместо дождя — снег
 	elif not get_tree().paused:
 		if _left > 0.0:
 			_left -= delta
@@ -143,6 +168,15 @@ func _process(delta: float) -> void:
 	splashes.global_position = Vector3(p.x, p.y + 0.05, p.z)
 	splashes.emitting = rain > (0.6 if storm_island else 0.15) and not indoor
 	splashes.color = Color(0.92, 0.96, 1.0, 0.7 * rain)
+	# Ледяной остров: идёт снег, порывы ветра
+	var cold := Game.cold_active()
+	flakes.emitting = cold and not indoor
+	flakes.global_position = p + Vector3(0, 9.0, 0)
+	if cold and not get_tree().paused:
+		_wind_t -= delta
+		if _wind_t <= 0.0:
+			_wind_t = randf_range(9.0, 18.0)
+			Audio.play("wind", randf_range(-14.0, -8.0), 0.15)
 
 
 # ================================================================== Гроза (Грозовой остров)

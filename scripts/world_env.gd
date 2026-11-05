@@ -27,6 +27,7 @@ var rain := 0.0              # 0..1 — задаёт погода
 var flash := 0.0             # 0..1 — вспышка молнии (Грозовой остров)
 var indoor := false          # игрок в бункере: ни неба, ни солнца — только лампы и фонарь
 var pal: Dictionary = Palette.DAY
+var _frost := -1.0
 var _sky_push := 0.0
 var _applied := ""
 # упрощённый рендерер (Compatibility, для старых ПК) считает заливку из неба ярче — приглушаем
@@ -144,6 +145,8 @@ func _apply_quality() -> void:
 
 func update(delta: float) -> void:
 	_apply_quality()
+	if _frost < 0.0:
+		_frost = 1.0 if Game.cold_active() else 0.0
 	if indoor and player and player.global_position.y >= -8.0:
 		_restore_outdoor()
 	var t := Game.time_of_day
@@ -155,6 +158,10 @@ func update(delta: float) -> void:
 	if Game.storm > 0.0:
 		# грозовая туча: темно, как вечером, — молнии на этом фоне видно издалека
 		p = Palette.mix(p, Palette.NIGHT, 0.55 * Game.storm)
+	# мороз: днём небо и тени холодно-голубые (ночью — обычная ночь)
+	_frost = move_toward(_frost, 1.0 if Game.cold_active() else 0.0, delta / 6.0)
+	if _frost > 0.001:
+		p = Palette.mix(p, Palette.mix(Palette.FROST, p, 1.0 - clampf(elev * 4.0 + 0.4, 0.0, 1.0)), 0.5 * _frost)
 	pal = p
 	# солнце идёт с востока на запад по дуге не выше MAX_SUN_ELEV; луна — с другой стороны неба
 	var el := asin(clampf(elev, -1.0, 1.0)) * MAX_SUN_ELEV / 90.0
