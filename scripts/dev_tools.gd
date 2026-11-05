@@ -936,6 +936,31 @@ func _autotest() -> void:
 	_check(Game.unlocked.has("raft") and Game.unlocked.has("hut"), "постройки открываются по сюжету")
 	_check(Game.collections.get("butterflies", {}).size() > 0, "бабочки попадают в коллекцию")
 
+	# компас: цель на другом острове — ведёт к плоту, но только когда нужное уже в сумке
+	var keep := [Game.chapter, Game.quest_index, Game.quest_started, Game.quest_baseline.duplicate(), Game.inventory.duplicate()]
+	var qs2: Array = Data.CHAPTERS[1]["quests"]
+	for i in qs2.size():
+		if qs2[i]["id"] == "feast":
+			Game.chapter = 1
+			Game.quest_index = i
+	Game.quest_started = true
+	Game.quest_baseline = {}
+	Game.inventory.erase("fried_egg")
+	Game.inventory.erase("baked_potato")
+	var g2: QuestGuide = main.guide
+	g2._find_target()
+	_check(not g2.has_target(), "еды для Марты ещё нет — компас не зовёт в плавание")
+	Game.inventory["fried_egg"] = 1
+	Game.inventory["baked_potato"] = 1
+	g2._find_target()
+	_check(g2.has_target() and g2.target is Building and g2.target_name.begins_with("Плыть"),
+		"еда готова, Марта на другом острове — компас ведёт к плоту («%s»)" % g2.target_name)
+	Game.chapter = keep[0]
+	Game.quest_index = keep[1]
+	Game.quest_started = keep[2]
+	Game.quest_baseline = keep[3]
+	Game.inventory = keep[4]
+
 	# сохранение / загрузка
 	main._save()
 	var inv_copy: Dictionary = Game.inventory.duplicate()

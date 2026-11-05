@@ -174,11 +174,30 @@ func _blob(img: Image, cx: float, cy: float, rad: float, col: Color) -> void:
 
 
 func _fog_image() -> Image:
+	# плотность тумана по клеткам, дважды размытая — край «недорисованной» карты получается мягким
+	var a := PackedFloat32Array()
+	a.resize(GRID * GRID)
+	for k in GRID * GRID:
+		a[k] = 0.0 if explored[k] != 0 else 1.0
+	for pass_i in 2:
+		var b := PackedFloat32Array()
+		b.resize(GRID * GRID)
+		for j in GRID:
+			for i in GRID:
+				var sum := 0.0
+				var n := 0
+				for dj in [-1, 0, 1]:
+					for di in [-1, 0, 1]:
+						var x: int = clampi(i + di, 0, GRID - 1)
+						var y: int = clampi(j + dj, 0, GRID - 1)
+						sum += a[y * GRID + x]
+						n += 1
+				b[j * GRID + i] = sum / n
+		a = b
 	var img := Image.create(GRID, GRID, false, Image.FORMAT_RGBA8)
 	for j in GRID:
 		for i in GRID:
-			var seen := explored[j * GRID + i] != 0
-			img.set_pixel(i, j, Color(C_PAPER.r, C_PAPER.g, C_PAPER.b, 0.0 if seen else 1.0))
+			img.set_pixel(i, j, Color(C_PAPER.r, C_PAPER.g, C_PAPER.b, smoothstep(0.15, 0.85, a[j * GRID + i])))
 	return img
 
 

@@ -9,6 +9,12 @@ const NAMES := {"tall_grass": "Высокая трава", "fern": "Папоро
 	"rock": "Валун", "liana_curtain": "Завеса лиан", "clay": "Глина", "palm": "Пальма", "bush": "Куст",
 	"pebble": "Камешки", "driftwood": "Плавник", "shell": "Ракушки"}
 const REFRESH := 0.3
+## Где живут жители и где стоят сюжетные места — чтобы подсказать «плыви туда».
+const HOME_OF := {"marta": "banyan", "kesha": "banyan", "stepa": "fort",
+	"wreck": "home", "old_camp": "home", "lifeboat": "home", "lighthouse": "home", "crate": "home",
+	"banyan_roots": "banyan", "fire_bowl": "banyan", "treehouse": "banyan", "lyova_chest": "banyan",
+	"deck1": "banyan", "deck2": "banyan", "deck3": "banyan",
+	"fort_gate": "fort", "gatehouse": "fort", "frescoes": "fort", "fort_tower": "fort", "cellar": "fort"}
 
 var hud: HUD
 var player: Player
@@ -124,6 +130,36 @@ func _find_target() -> void:
 			target = best
 			target_name = name_of(best)
 			return
+	# цели на этом острове нет, а она на другом — ведём к плоту или каноэ
+	for key in _keys:
+		var there := _island_for(key)
+		if there == "" or there == Game.location:
+			continue
+		var boat: Node3D = null
+		for g in ["station_raft", "station_canoe"]:
+			for b in get_tree().get_nodes_in_group(g):
+				if boat == null or (b as Node3D).global_position.distance_squared_to(me) < boat.global_position.distance_squared_to(me):
+					boat = b
+		if boat:
+			target = boat
+			target_name = "Плыть: " + str(Data.LOCATIONS[there]["name"])
+		return
+
+
+## На каком острове цель пункта задания («» — где угодно или неизвестно).
+## Для «отдай» — только когда нужное уже в сумке, иначе сначала надо это добыть.
+func _island_for(key: String) -> String:
+	var kind := key.get_slice(":", 0)
+	var tgt := key.get_slice(":", 1)
+	if kind in ["talk", "found", "lit", "restored", "reached", "solved"]:
+		return HOME_OF.get(tgt, "")
+	if kind == "give":
+		var q := Game.current_quest()
+		for t in q.get("tasks", []):
+			if t["kind"] == "delivered" and t.get("to", "") == tgt and Game.count(t["target"]) < t["count"] - Game.task_progress(t):
+				return ""
+		return HOME_OF.get(tgt, "")
+	return ""
 
 
 func target_position() -> Vector3:
@@ -218,6 +254,8 @@ func _beacon_height() -> float:
 		return 4.6
 	if target is Climbable:
 		return 2.2
+	if target is Building:
+		return 2.6
 	if target is NPCParrot:
 		return 1.2
 	return 2.4

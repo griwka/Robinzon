@@ -521,6 +521,14 @@ func _load() -> bool:
 		var node := build.spawn_building(b["id"], Vector3(b["x"], b["y"], b["z"]), b["rot"], b.get("v", ""), b.get("s", {}))
 		_connect_building(node)
 	map.from_save(str(data.get("explored", "")))
+	if not data.has("explored"):
+		# сохранение до появления карты: открываем лагерь и места, где уже побывали
+		map.reveal(island.camp_center, 26.0)
+		for id in island.poi:
+			if Game.flags.get("poi_" + id, false) or id in ["fort", "banyan_roots"]:
+				map.reveal(island.poi[id], 16.0)
+		for b in data.get("buildings", []):
+			map.reveal(Vector3(b["x"], b["y"], b["z"]), 10.0)
 	var p: Array = data.get("player", [])
 	if p.size() == 3:
 		player.global_position = Vector3(p[0], p[1] + 0.3, p[2])

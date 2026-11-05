@@ -28,6 +28,11 @@
   Новых жителей, головоломки и ярусы добавляй в `NPCS`, `PUZZLES`, `DECKS`.
 - **`scripts/dev_tools.gd`** — автотесты и скриншоты. Каждой новой главе нужен свой автотест.
 - **Острова:** один генератор `scripts/island.gd`; особые места — `fort_ruin.gd`, `banyan_tree.gd`, `story_place.gd`.
+  Генератор сначала ставит особые места (кольца преград, причал, хижины, глину) через `_reserve`/`_occupy`,
+  потом заросли — только на свободных местах. Не меняй порядок вызовов `rng` в сетке зарослей:
+  от него зависят номера преград (`j<N>`), а по ним сохраняется расчищенное.
+- **Карта, компас, находки:** `map_screen.gd`, `quest_guide.gd` (цель ищется по `Game.pending_keys()`
+  и `QuestGuide.keys_for()` — новому виду цели добавь ключ туда), `find_spot.gd` (записки — в `FindSpot.NOTES`).
 - **Ассеты собираются скриптами, руками не правятся:**
   - модели: `tools/blender/*.py` → `assets/models/*.glb`;
   - иконки: `tools/gen_icons.py` → `assets/icons/`;
@@ -61,6 +66,10 @@ godot --path . --resolution 1600x900 -- --shot=shot.png --frames=90 --location=f
 - `--deck=N` — ярус баньяна;
 - `--fortview=closed|open|cellar` — вид форта;
 - `--near=stepa` — герой рядом со Стёпой;
+- `--nearkind=thicket|find_stash|old_camp` — герой рядом с ближайшим объектом этого вида;
+- `--open=map` — открыть карту (`--reveal=N` — открыть N метров вокруг);
+- `--mapshot=map.png` — карта острова картинкой, работает в `--headless`;
+- `--layout` — отчёт о расстановке: наложения, подходы к жителям и находкам, состав зарослей;
 - `--yaw= --pitch= --dist= --camy=` — камера.
 
 Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для звука — ffmpeg в PATH):

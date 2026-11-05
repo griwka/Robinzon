@@ -276,8 +276,10 @@ func _physics_process(delta: float) -> void:
 	if controls_enabled and can_interact:
 		var pressed := Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("interact")
 		var held := Input.is_action_pressed("attack") or Input.is_action_pressed("interact")
-		# ресурсы можно добывать, удерживая кнопку; постройки — по одному нажатию
-		if (target is ResourceNode and held) or (not (target is ResourceNode) and pressed):
+		# ресурсы можно добывать, удерживая кнопку; постройки — по одному нажатию.
+		# Без нужного инструмента удержание не повторяет удар (и не сыплет одно и то же сообщение).
+		var repeat_ok := target is ResourceNode and _target_ready(target)
+		if (repeat_ok and held) or pressed:
 			try_interact()
 	if _swing_t > 0.0:
 		_swing_t -= delta
