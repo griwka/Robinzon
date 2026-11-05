@@ -27,11 +27,10 @@ func _ready() -> void:
 	bubbles.initial_velocity_min = 0.2
 	bubbles.initial_velocity_max = 0.5
 	bubbles.gravity = Vector3.ZERO
-	var m := SphereMesh.new()
-	m.radius = 0.06
-	m.height = 0.12
-	m.material = Models.unshaded(Color("e8fbff"))
-	bubbles.mesh = m
+	bubbles.mesh = FX._quad(FX.particle_mat(0.0, 0.45))   # пузырьки темнеют ночью вместе с миром
+	bubbles.scale_amount_min = 0.1
+	bubbles.scale_amount_max = 0.16
+	bubbles.color = Color("eefcff")
 	bubbles.position.y = 0.05
 	add_child(bubbles)
 	bobber = MeshInstance3D.new()
@@ -39,7 +38,7 @@ func _ready() -> void:
 	bm.radius = 0.1
 	bm.height = 0.2
 	bobber.mesh = bm
-	bobber.material_override = Models.unshaded(Color("d9573b"))
+	bobber.material_override = Models.mat(Color("e0553a"), true)
 	bobber.visible = false
 	add_child(bobber)
 

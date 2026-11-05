@@ -45,6 +45,7 @@ var _shop_tab := "buy"
 var dialogue_panel: PanelContainer
 var dlg_name: Label
 var dlg_text: Label
+var _type_tw: Tween   # текст реплики «печатается» по буквам
 var dlg_portrait: PanelContainer
 var dlg_letter: Label
 var dlg_face: TextureRect
@@ -460,7 +461,13 @@ func toast(text: String, color := Color.WHITE) -> void:
 	toasts.add_child(l)
 	if toasts.get_child_count() > 7:
 		toasts.get_child(0).queue_free()
+	# появляется мягко: проявляется и чуть «выпрыгивает»
+	l.modulate.a = 0.0
+	l.scale = Vector2(0.9, 0.9)
+	l.pivot_offset = Vector2(0, 14)
 	var tw := l.create_tween()
+	tw.tween_property(l, "modulate:a", 1.0, 0.16)
+	tw.parallel().tween_property(l, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_interval(3.0)
 	tw.tween_property(l, "modulate:a", 0.0, 0.8)
 	tw.tween_callback(l.queue_free)
@@ -529,6 +536,13 @@ func _next_block() -> void:
 	for w in windows:
 		w.visible = false
 	dialogue_panel.visible = true
+	# окно диалога появляется мягко
+	dialogue_panel.modulate.a = 0.0
+	dialogue_panel.pivot_offset = dialogue_panel.size * Vector2(0.5, 1.0)
+	dialogue_panel.scale = Vector2(0.96, 0.96)
+	var tw := dialogue_panel.create_tween()
+	tw.tween_property(dialogue_panel, "modulate:a", 1.0, 0.15)
+	tw.parallel().tween_property(dialogue_panel, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	panels_changed.emit(true)
 	_show_line()
 
@@ -548,12 +562,23 @@ func _show_line() -> void:
 	sb.shadow_size = 0
 	dlg_portrait.add_theme_stylebox_override("panel", sb)
 	dlg_text.text = line[1]
+	# текст «печатается» (клик — сразу весь)
+	if _type_tw and _type_tw.is_valid():
+		_type_tw.kill()
+	dlg_text.visible_ratio = 0.0
+	_type_tw = dlg_text.create_tween()
+	_type_tw.tween_property(dlg_text, "visible_ratio", 1.0, clampf(str(line[1]).length() * 0.016, 0.25, 1.6))
 	Audio.play("blip", -6.0, 0.1)
 	dlg_text.add_theme_color_override("font_color", INK if nm != "" else Color("6b4524"))
 
 
 func advance_dialogue() -> void:
 	if not dialogue_panel.visible:
+		return
+	if dlg_text.visible_ratio < 1.0 and DisplayServer.get_name() != "headless":
+		if _type_tw and _type_tw.is_valid():
+			_type_tw.kill()
+		dlg_text.visible_ratio = 1.0   # первый клик — дописать реплику, второй — дальше
 		return
 	_dlg_lines.pop_front()
 	if _dlg_lines.is_empty():

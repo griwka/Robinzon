@@ -26,6 +26,8 @@ func _process(_delta: float) -> void:
 	_frames += 1
 	var p: Player = main.player
 	if _frames == 2:
+		if args.has("dbgdraw"):   # отладка рендера: 1 — без света, 2 — только свет, 5 — нормали, 12 — SSAO
+			get_viewport().debug_draw = int(args["dbgdraw"]) as Viewport.DebugDraw
 		if args.has("yaw"): p.camera_yaw = float(args["yaw"])
 		if args.has("pitch"): p.camera_pitch = float(args["pitch"])
 		if args.has("dist"): p.camera_distance = float(args["dist"])
@@ -66,12 +68,20 @@ func _process(_delta: float) -> void:
 			_flush()
 		if args.has("gallery"):
 			_gallery(args["gallery"].split(","))
+		if args.has("lookat") and main.island.poi.has(args["lookat"]):   # камерой на сюжетное место
+			var d: Vector3 = main.island.poi[args["lookat"]] - p.global_position
+			p.camera_yaw = atan2(-d.x, -d.z)
 	if args.has("time"):
 		Game.time_of_day = float(args["time"])
 	if args.has("demo") and _frames > 2 and _frames < 6:
 		_flush()
 	if _frames == 8:
 		var hud: HUD = main.hud
+		if args.has("nohud"):   # чистый кадр без интерфейса — для оценки картинки
+			_flush()
+			hud.visible = false
+		if args.has("flush"):   # закрыть вступительные диалоги, интерфейс оставить
+			_flush()
 		match args.get("open", ""):
 			"inventory": hud.open_inventory()
 			"collections":
@@ -100,6 +110,25 @@ func _process(_delta: float) -> void:
 				main.menu.open_settings(main.menu.show_pause)
 	if args.has("gallery") and _frames > 2:
 		p.cam_rig.global_position = main.island.camp_center + Vector3(0, float(args.get("camy", "0.8")), 0)
+	if args.has("fxtest") and _frames == int(args.get("frames", "90")) - int(args.get("fxlead", "2")):
+		# все эффекты сразу перед кадром (время замедлено, чтобы застать их в полёте)
+		Engine.time_scale = float(args.get("fxscale", "0.08"))
+		var fwd := -p.camera.global_transform.basis.z
+		fwd.y = 0.0
+		fwd = fwd.normalized()
+		var right := fwd.cross(Vector3.UP)
+		var base := p.global_position + fwd * 2.2
+		var w: Node3D = main
+		FX.burst(w, base - right * 2.4 + Vector3(0, 0.6, 0), Color("c9a26b"), 14)
+		FX.sparks(w, base - right * 1.2 + Vector3(0, 0.6, 0), 12)
+		FX.burst(w, base - right * 1.2 + Vector3(0, 0.6, 0), Color("a0a4a8"), 8)
+		FX.leaves(w, base + Vector3(0, 0.8, 0), Color("4f9a4a"), 9)
+		FX.poof(w, base + right * 1.3 + Vector3(0, 0.5, 0), Color("8fa850"), 1.0)
+		FX.ring(w, base + right * 2.6 + Vector3(0, 0.08, 0), Color("e6dcc0"), 1.0, 14)
+		FX.dust(w, p.global_position + Vector3(0, 0.05, 0), Color("f1dfb0"), 8, 0.45)
+		FX.popup(w, p.global_position + Vector3(0, 2.1, 0), "wood", 3)
+		FX.popup(w, p.global_position + Vector3(0, 2.55, 0), "stone", 2)
+		FX.flash(p.model, 1.0, 0.6)
 	if args.has("shot") and _frames == int(args.get("frames", "90")):
 		get_viewport().get_texture().get_image().save_png(args["shot"])
 		print("screenshot saved: ", args["shot"])

@@ -33,6 +33,22 @@
   - иконки: `tools/gen_icons.py` → `assets/icons/`;
   - звук: `tools/gen_audio.py` → `assets/audio/`.
 
+## Графика (подробно — `docs/ГРАФИКА.md`)
+- **Где что лежит:**
+  - свет, небо, дымка, SSAO, свечение, постобработка и общие параметры шейдеров — `scripts/world_env.gd`;
+  - цвета — `scripts/palette.gd`;
+  - эффекты — `scripts/fx.gd`, погода — `scripts/weather.gd`.
+- **Шейдеры моделей:**
+  - общий код — `shaders/toon_common.gdshaderinc`, его подключают `toon` и `toon_foliage` (`#define FOLIAGE`);
+  - общие параметры (`g_sun_dir`, `g_player_pos`, `g_wind`, `g_rain`, `g_light`, `g_cloud_*`) объявлены
+    в `project.godot → [shader_globals]`.
+- **Чего не делать — всё это даёт NaN-пиксели, которые свечение раздувает в белые пятна:**
+  - не читать `COLOR` в проходе контура (`outline.gdshader`): у части сеток в моделях нет цвета вершин;
+  - не писать `pow(x, дробное)`, если x может быть 0 (используйте `x * sqrt(x)`, `x * x` или `max(x, 1e-4)`);
+  - не нормировать вектор, который может быть нулевым, без проверки длины.
+- **Не использовать `instance uniform`** в шейдерах, которые попадают в MultiMesh (цветы, частицы):
+  там в нём мусор. Вспышка при ударе сделана через `material_overlay` (`FX.flash`).
+
 ## Правила кода
 - **Предупреждения GDScript считаются ошибками.** Если тип выводится как Variant, пиши тип явно:
   `var t: Vector3 = ...`, `var n: int = dict["x"]`.
@@ -53,6 +69,11 @@ godot --headless --path . -- --autotest --location=fort --chapter=3
 godot --path . --resolution 1600x900 -- --shot=shot.png --frames=90 --location=fort
 ```
 
+Скриншот в Forward+ без видеокарты (облако): поставить `mesa-vulkan-drivers` и запускать так:
+```bash
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 1600x900x24" godot --rendering-driver vulkan --resolution 1600x900 -- --shot=shot.png --frames=60 --nohud --demo
+```
+
 Полезные аргументы для `dev_tools`:
 - `--time=0..1` — время суток;
 - `--demo` — построить лагерь с фермой;
@@ -61,7 +82,13 @@ godot --path . --resolution 1600x900 -- --shot=shot.png --frames=90 --location=f
 - `--deck=N` — ярус баньяна;
 - `--fortview=closed|open|cellar` — вид форта;
 - `--near=stepa` — герой рядом со Стёпой;
-- `--yaw= --pitch= --dist= --camy=` — камера.
+- `--yaw= --pitch= --dist= --camy=` — камера;
+- `--lookat=old_camp` — камера на сюжетное место;
+- `--nohud` — кадр без интерфейса;
+- `--flush` — закрыть вступительные диалоги;
+- `--rain=0.8` — дождь;
+- `--fxtest` — все эффекты перед кадром;
+- `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO.
 
 Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для звука — ffmpeg в PATH):
 ```bash

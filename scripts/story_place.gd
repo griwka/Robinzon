@@ -192,23 +192,9 @@ func _swap_model(animate: bool) -> void:
 func light_fire(animate: bool) -> void:
 	if fire:
 		return
-	fire = Node3D.new()
 	var point := visual.find_child("FirePoint", true, false) as Node3D
-	fire.position = point.position if point else Vector3(0, 5.5, 0)
-	visual.add_child(fire)
-	for spec in [[0.6, 1.6, Color("ff8a1e")], [0.35, 1.1, Color("ffe066")]]:
-		var f := MeshInstance3D.new()
-		f.mesh = Models.cyl(0.0, spec[0], spec[1], 8)
-		f.material_override = Models.unshaded(spec[2])
-		f.position.y = spec[1] * 0.4
-		f.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		fire.add_child(f)
-	var l := OmniLight3D.new()
-	l.light_color = Color("ffb35c")
-	l.light_energy = 4.0
-	l.omni_range = 30.0
-	l.position.y = 1.0
-	fire.add_child(l)
+	var at: Vector3 = point.position if point else Vector3(0, 5.5, 0)
+	fire = Models.flame(visual, at, 2.0, 4.0, 30.0)
 	if animate:
 		fire.scale = Vector3(0.05, 0.05, 0.05)
 		create_tween().tween_property(fire, "scale", Vector3.ONE, 1.5).set_trans(Tween.TRANS_BACK)
@@ -217,5 +203,8 @@ func light_fire(animate: bool) -> void:
 
 func _process(_delta: float) -> void:
 	if fire:
-		var t := Time.get_ticks_msec() / 1000.0
-		fire.scale.y = 0.9 + 0.15 * abs(sin(t * 7.0))
+		# пламя колышется само (шейдер), а свет чуть мерцает
+		var l := visual.get_node_or_null("Light") as OmniLight3D
+		if l:
+			var t := Time.get_ticks_msec() / 1000.0
+			l.light_energy = 4.0 * (0.88 + 0.12 * sin(t * 9.0) * sin(t * 5.7))

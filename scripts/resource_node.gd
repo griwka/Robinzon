@@ -51,6 +51,7 @@ var active := true
 var visual: Node3D
 var coconut_ready := true
 var _base_scale := Vector3.ONE
+var _base_yaw := 0.0
 
 
 func _ready() -> void:
@@ -75,6 +76,7 @@ func _ready() -> void:
 		"driftwood": visual = Models.driftwood(rng)
 		"shell": visual = Models.shell(rng)
 	visual.rotation.y = rng.randf() * TAU if yaw < -50.0 else yaw
+	_base_yaw = visual.rotation.y
 	add_child(visual)
 	_setup_visibility()
 	_base_scale = visual.scale
@@ -188,17 +190,53 @@ const HIT_SOUND := {"palm": "chop", "driftwood": "chop", "rock": "rock", "pebble
 	"jungle_tree": "chop", "fallen_log": "chop", "bamboo": "chop", "cliff": "rock", "thicket": "rustle", "fern": "rustle", "tall_grass": "rustle", "liana_curtain": "rustle", "clay": "plant"}
 
 
-func _hit_fx(_player: Node) -> void:
+const COLORS := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color("a0a4a8"), "cliff": Color("a0a4a8"),
+	"jungle_tree": Color("c9a26b"), "fallen_log": Color("c9a26b"), "bamboo": Color("c9c46a"), "pebble": Color("a0a4a8"),
+	"thicket": Color("3c7a40"), "fern": Color("4f9a4a"), "tall_grass": Color("8fa850"), "liana_curtain": Color("5a9a3a"),
+	"driftwood": Color("d8c3a0"), "shell": Color("f7d6c4"), "clay": Color("b8623a")}
+const STONE := ["rock", "cliff", "pebble"]
+const WOOD := ["palm", "jungle_tree", "fallen_log", "bamboo", "driftwood"]
+const HEAVY := ["rock", "cliff", "jungle_tree", "palm", "fallen_log", "bamboo"]
+var _hit_tw: Tween
+var _hitter: Node
+
+
+func _hit_fx(player: Node) -> void:
+	_hitter = player
 	Audio.play(HIT_SOUND.get(kind, "pickup"), -2.0, 0.12, global_position)
-	var tw := create_tween()
+	# отклик: предмет сплющивается и пружинит обратно, качается и коротко вспыхивает
+	if _hit_tw and _hit_tw.is_valid():
+		_hit_tw.kill()
 	var dir := 1.0 if randf() < 0.5 else -1.0
-	tw.tween_property(visual, "rotation:z", 0.12 * dir, 0.05)
-	tw.tween_property(visual, "rotation:z", -0.06 * dir, 0.08)
-	tw.tween_property(visual, "rotation:z", 0.0, 0.1)
-	var colors := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color("a0a4a8"), "cliff": Color("a0a4a8"),
-		"jungle_tree": Color("c9a26b"), "fallen_log": Color("c9a26b"), "bamboo": Color("c9c46a"),
-		"thicket": Color("3c7a40"), "fern": Color("4f9a4a"), "tall_grass": Color("8fa850")}
-	FX.burst(self, Vector3(0, minf(KINDS[kind]["height"] * 0.3, 1.2), 0), colors.get(kind, Color("e9d8b0")))
+	visual.scale = _base_scale * Vector3(1.1, 0.88, 1.1)
+	_hit_tw = create_tween()
+	_hit_tw.tween_property(visual, "scale", _base_scale, 0.32).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	_hit_tw.parallel().tween_property(visual, "rotation:z", 0.12 * dir, 0.05)
+	_hit_tw.chain().tween_property(visual, "rotation:z", 0.0, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	FX.flash(visual, 0.85, 0.16)
+	var cfg: Dictionary = KINDS[kind]
+	var h := minf(float(cfg["height"]) * 0.3, 1.2)
+	var side := Vector3.ZERO
+	if player is Node3D:
+		side = (player as Node3D).global_position - global_position
+		side.y = 0.0
+		side = side.normalized() * float(cfg["radius"]) * 0.8 if side.length() > 0.01 else Vector3.ZERO
+	var at := Vector3(0, h, 0) + side
+	var col: Color = COLORS.get(kind, Color("e9d8b0"))
+	if kind in STONE:
+		FX.sparks(self, at, 8)
+		FX.burst(self, at, col, 8)
+	elif kind in WOOD:
+		FX.burst(self, at, col, 10)
+		if kind in ["palm", "jungle_tree"]:
+			FX.leaves(self, Vector3(0, float(cfg["height"]) * 0.8, 0), Color("4f9a4a"), 5)
+	else:
+		FX.leaves(self, at, col, 7)
+		FX.puff(self, at, col.lerp(Color("f4ead2"), 0.6), 3, 0.35, 0.9, 0.5)
+	if player and player.has_method("add_trauma"):
+		player.add_trauma(0.13 if kind in HEAVY else 0.05)
+	if kind in HEAVY:
+		FX.hitstop(self, 0.035)
 
 
 func _deplete() -> void:
@@ -206,12 +244,40 @@ func _deplete() -> void:
 	remove_from_group("interactable")
 	var saved_layer := collision_layer
 	collision_layer = 0
+	if _hit_tw and _hit_tw.is_valid():
+		_hit_tw.kill()
+	var cfg: Dictionary = KINDS[kind]
+	var col: Color = COLORS.get(kind, Color("e9d8b0"))
+	var big := kind in HEAVY or kind in ["thicket", "liana_curtain"]
 	var tw := create_tween()
-	if kind == "palm":
-		tw.tween_property(visual, "rotation:x", PI / 2.2, 0.7).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		tw.tween_property(visual, "scale", Vector3(0.01, 0.01, 0.01), 0.3)
+	if kind == "palm" or kind == "jungle_tree":
+		# дерево валится от игрока, бьётся о землю: пыль кольцом, глухой удар, тряска
+		var away := Vector3.FORWARD
+		if _hitter is Node3D:
+			away = global_position - (_hitter as Node3D).global_position
+			away.y = 0.0
+			away = away.normalized() if away.length() > 0.01 else Vector3.FORWARD
+		var axis := Vector3.UP.cross(away).normalized()
+		var fallen := Basis(axis, PI / 2.2) * visual.transform.basis
+		tw.tween_property(visual, "transform:basis", fallen, 0.75).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_callback(func():
+			FX.ring(self, away * float(cfg["height"]) * 0.55 + Vector3(0, 0.1, 0), Color("e6dcc0"), 1.4, 16)
+			Audio.play("thud", -2.0, 0.1, global_position)
+			if _hitter and _hitter.has_method("add_trauma"):
+				_hitter.add_trauma(0.35))
+		tw.tween_interval(0.15)
+		tw.tween_property(visual, "scale", Vector3(0.01, 0.01, 0.01), 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	else:
-		tw.tween_property(visual, "scale", Vector3(0.01, 0.01, 0.01), 0.25)
+		# «пуф»: чуть раздувается и схлопывается в облачко
+		tw.tween_property(visual, "scale", _base_scale * 1.12, 0.07).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(visual, "scale", Vector3(0.01, 0.01, 0.01), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+		var size := clampf(float(cfg["radius"]) * 1.2, 0.5, 1.6)
+		FX.poof(self, Vector3(0, float(cfg["height"]) * 0.35, 0), col, size)
+		if big:
+			if kind in STONE:
+				Audio.play("thud", -6.0, 0.15, global_position)
+			if _hitter and _hitter.has_method("add_trauma"):
+				_hitter.add_trauma(0.22)
 	tw.tween_callback(func(): visual.visible = false)
 	if is_obstacle():
 		Game.bump("cleared", kind)
@@ -224,7 +290,7 @@ func _deplete() -> void:
 
 func _respawn(layer: int) -> void:
 	hp = KINDS[kind]["hp"]
-	visual.rotation.x = 0
+	visual.transform.basis = Basis(Vector3.UP, _base_yaw)
 	visual.visible = true
 	visual.scale = Vector3(0.01, 0.01, 0.01)
 	var tw := create_tween()

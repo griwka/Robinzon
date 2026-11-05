@@ -53,11 +53,11 @@ func setup(isl: Island, p: Node3D) -> void:
 	fireflies.initial_velocity_min = 0.1
 	fireflies.initial_velocity_max = 0.4
 	fireflies.scale_amount_curve = _blink_curve()
-	var m := SphereMesh.new()
-	m.radius = 0.05
-	m.height = 0.1
-	m.material = Models.unshaded(Color("e8ff7a"))
-	fireflies.mesh = m
+	# светящаяся точка (ярче белого) — свечение экрана даёт ей мягкий ореол
+	fireflies.mesh = FX._quad(FX.particle_mat(3.2, 0.55))
+	fireflies.scale_amount_min = 0.07
+	fireflies.scale_amount_max = 0.11
+	fireflies.color = Color("e8ff7a")
 	fireflies.local_coords = false
 	add_child(fireflies)
 

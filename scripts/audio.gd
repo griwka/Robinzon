@@ -12,6 +12,8 @@ var music_day: AudioStreamPlayer
 var music_night: AudioStreamPlayer
 var ocean: AudioStreamPlayer
 var crickets: AudioStreamPlayer
+var rain_loop: AudioStreamPlayer
+var rain_level := 0.0    # 0..1 — сила дождя (задаёт Weather)
 var _bird_t := 3.0
 var _last_play: Dictionary = {}
 var _night_mix := 0.0
@@ -36,6 +38,7 @@ func _ready() -> void:
 	music_night = _loop_player("music_night", "Music")
 	ocean = _loop_player("amb_ocean", "Ambience")
 	crickets = _loop_player("amb_night", "Ambience")
+	rain_loop = _loop_player("amb_rain", "Ambience")
 	# щелчок у всех кнопок интерфейса
 	get_tree().node_added.connect(func(n):
 		if n is BaseButton:
@@ -110,8 +113,9 @@ func _process(delta: float) -> void:
 		var h: float = island.height_at(listener.global_position.x, listener.global_position.z)
 		shore = clampf(1.0 - (h - 0.5) / 9.0, 0.25, 1.0)
 	ocean.volume_db = linear_to_db(shore) - 4.0
-	# птицы днём
-	if not get_tree().paused and _night_mix < 0.5:
+	rain_loop.volume_db = linear_to_db(maxf(rain_level, 0.0001)) - 2.0
+	# птицы днём (в дождь молчат)
+	if not get_tree().paused and _night_mix < 0.5 and rain_level < 0.4:
 		_bird_t -= delta
 		if _bird_t <= 0.0:
 			_bird_t = randf_range(4.0, 11.0)
