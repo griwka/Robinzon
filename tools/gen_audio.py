@@ -799,6 +799,58 @@ def sfx_rumble():
     return normalize(x, 0.7)
 
 
+# ============================================================ глава 7 — Туманный остров
+def sfx_frog():
+    """Лягушка в болоте: два-три низких булькающих «ква»."""
+    r = np.random.default_rng(131)
+    x = np.zeros(int(0.9 * SR))
+    for k in range(r.integers(2, 4)):
+        d = 0.14
+        tt = t_axis(d)
+        f = 180 * (1 + 0.4 * np.sin(np.pi * tt / d))
+        s = signal.square(2 * np.pi * np.cumsum(f) / SR, 0.4) * np.sin(np.pi * tt / d) ** 1.5
+        place(x, bandpass(s, 150, 1200), k * 0.22)
+    return normalize(x, 0.45)
+
+
+def sfx_creak():
+    """Скрип корабля: медленное деревянное «ии-и» с дрожью."""
+    r = np.random.default_rng(137)
+    d = 1.2
+    t = t_axis(d)
+    f = 240 + 80 * np.sin(2 * np.pi * 0.7 * t) + 30 * r.standard_normal(len(t)).cumsum() / len(t)
+    s = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR, 0.2) * (0.5 + 0.5 * (np.sin(2 * np.pi * 23 * t) > 0))
+    env = np.sin(np.pi * t / d) ** 1.2
+    return normalize(bandpass(s, 300, 2400) * env, 0.5)
+
+
+def sfx_sail():
+    """Хлопок паруса: ветер ударяет в ткань — глухой хлопок и шелест."""
+    r = np.random.default_rng(139)
+    d = 0.8
+    t = t_axis(d)
+    pop = lowpass(r.standard_normal(len(t)), 500) * np.exp(-t / 0.05) * 2.0
+    rustle = bandpass(r.standard_normal(len(t)), 800, 4000) * np.exp(-t / 0.3) * 0.4
+    return normalize(pop + rustle, 0.6)
+
+
+def sfx_cheer():
+    """Праздник: несколько голосов «ура!» и хлопки."""
+    r = np.random.default_rng(141)
+    d = 1.6
+    x = np.zeros(int(d * SR))
+    for k in range(5):
+        dd = 0.5
+        tt = t_axis(dd)
+        f = r.uniform(180, 320) * (1 + 0.25 * np.sin(np.pi * tt / dd))
+        v = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * tt / dd)
+        place(x, bandpass(v, 300, 2500) * 0.4, r.uniform(0.0, 0.5))
+    for k in range(10):
+        c = highpass(r.standard_normal(int(0.02 * SR)), 1500) * np.exp(-t_axis(0.02) / 0.004)
+        place(x, c, r.uniform(0.3, 1.5))
+    return normalize(x, 0.6)
+
+
 def main():
     import sys
     os.makedirs(OUT, exist_ok=True)
@@ -808,7 +860,8 @@ def main():
                  "radio": sfx_radio, "honk": sfx_honk, "metal": sfx_metal,
                  "wind": sfx_wind, "ice": sfx_ice, "penguin": sfx_penguin, "snore": sfx_snore, "drip": sfx_drip,
                  "step_snow": sfx_step_snow, "lava": sfx_lava, "steam": sfx_steam, "hammer": sfx_hammer,
-                 "tortoise": sfx_tortoise, "rumble": sfx_rumble}
+                 "tortoise": sfx_tortoise, "rumble": sfx_rumble, "frog": sfx_frog, "creak": sfx_creak, "sail": sfx_sail,
+                 "cheer": sfx_cheer}
         for name in only:
             write_wav("sfx_" + name, table[name]())
         print("audio:", only)
@@ -824,7 +877,8 @@ def main():
         "radio": sfx_radio(), "honk": sfx_honk(), "metal": sfx_metal(),
         "wind": sfx_wind(), "ice": sfx_ice(), "penguin": sfx_penguin(), "snore": sfx_snore(), "drip": sfx_drip(),
         "step_snow": sfx_step_snow(), "lava": sfx_lava(), "steam": sfx_steam(), "hammer": sfx_hammer(),
-        "tortoise": sfx_tortoise(), "rumble": sfx_rumble(),
+        "tortoise": sfx_tortoise(), "rumble": sfx_rumble(), "frog": sfx_frog(), "creak": sfx_creak(), "sail": sfx_sail(),
+        "cheer": sfx_cheer(),
     }
     for i in range(4):
         sfx["bird%d" % i] = bird(100 + i)

@@ -8,7 +8,9 @@ signal sleep_requested
 signal craft_requested(station: String)
 signal choice_requested(title: String, options: Array)
 
-const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe", "boat", "shelter", "stove", "forge"]
+const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe", "boat", "shelter", "stove", "forge",
+	"pumpkin_lantern", "well", "long_table"]
+const SPOT_GROUPS := {"stone_bridge": ["bridge_spot"], "pumpkin_lantern": ["lantern_spot", "shadow_spot"]}
 
 var id := "campfire"
 var variant := ""
@@ -44,17 +46,22 @@ func _ready() -> void:
 func _make_visual() -> void:
 	visual = Models.building(id)
 	add_child(visual)
-	if id == "stone_bridge":
+	if SPOT_GROUPS.has(id):
 		_claim_spot.call_deferred()
 
 
-## Каменный мосток занимает место с колышками над лавой — и лава в этом месте больше не мешает пройти.
+var spot: Node3D   # метка, на которой стоит постройка (мосток, тыквенный фонарь)
+
+
+## Мосток или фонарь занимает свою метку: лава там больше не мешает пройти, туман уходит, тени ложатся.
 func _claim_spot() -> void:
-	for s in get_tree().get_nodes_in_group("bridge_spot"):
-		var sp := s as Node3D
-		if sp.global_position.distance_to(global_position) < 1.2:
-			sp.call("set_bridged", true)
-			return
+	for g in SPOT_GROUPS.get(id, []):
+		for s in get_tree().get_nodes_in_group(g):
+			var sp := s as Node3D
+			if sp.global_position.distance_to(global_position) < 1.2:
+				sp.call("set_bridged", true)
+				spot = sp
+				return
 
 
 func _make_collision() -> void:
@@ -87,9 +94,15 @@ func _make_collision() -> void:
 			_add_box(Vector3(1.1, 1.6, 0.9), Vector3(0, 0.8, 0), 0.0)
 		"forge":
 			_add_box(Vector3(1.8, 1.4, 1.4), Vector3(0, 0.7, 0), 0.0)
-		"stone_bridge", "tortoise_pen":
+		"stone_bridge", "tortoise_pen", "pumpkin_lantern":
 			_add_cyl(r * 0.6, 0.4)
 			collision_layer = 8   # по мостку ходят, в загон заходят
+		"village_house":
+			_add_box(Vector3(3.2, 2.6, 2.8), Vector3(0, 1.3, 0), 0.0)
+		"long_table":
+			_add_box(Vector3(3.4, 0.9, 1.1), Vector3(0, 0.45, 0), 0.0)
+		"well":
+			_add_cyl(0.85, 1.0)
 		"goat_pen", "sheep_pen", "pig_sty", "garden_bed", "torch", "flowerbed", "shell_path":
 			_add_cyl(r * 0.6, 0.6)
 			collision_layer = 8  # не мешают ходить
@@ -174,6 +187,12 @@ func get_hint() -> String:
 		"shelter": return "Навес — переждать грозу здесь" if Game.storm_active() else "Навес — под ним гроза не страшна"
 		"stove": return "Печка — заварить чай" + (", погреться" if Game.cold_active() else "")
 		"forge": return "Кузница — плавить и ковать"
+		"pumpkin_lantern":
+			if spot and spot.is_in_group("shadow_spot"):
+				return "Тыквенный фонарь — забрать (переставить)"
+			return "Тыквенный фонарь — туман здесь больше не вернётся"
+		"well": return "Колодец — вода холодная и чистая"
+		"long_table": return "Длинный стол — вся команда в сборе" if Game.flags.get("village_moved", false) else "Длинный стол"
 		"bench": return "Скамейка — присесть отдохнуть"
 	return Data.BUILDINGS[id]["name"]
 
@@ -183,6 +202,20 @@ func interact(_player: Node) -> void:
 		"campfire": craft_requested.emit("campfire")
 		"stove": craft_requested.emit("stove")
 		"forge": craft_requested.emit("forge")
+		"well":
+			Audio.play("water", -3.0, 0.1, global_position)
+			Game.notified.emit("Ты пьёшь из колодца. Вода пахнет камнем и дождём", Color("bfe3ff"))
+		"long_table":
+			Game.notified.emit("За столом место для всех. Даже для Румбы — на спинке стула" if Game.flags.get("village_moved", false)
+				else "Пустой стол. Скоро за ним будет шумно", Color("ffe08a"))
+		"pumpkin_lantern":
+			if spot and spot.is_in_group("shadow_spot"):
+				# фонарь у стоячих камней можно забрать и переставить — головоломка не заходит в тупик
+				spot.call("set_bridged", false)
+				Game.add_item("pumpkin_lantern", 1, false)
+				queue_free()
+			else:
+				Game.notified.emit(get_hint(), Color("ffe08a"))
 		"workbench": craft_requested.emit("workbench")
 		"tent", "hut", "hammock": sleep_requested.emit()
 		"raft", "canoe", "boat": sail_requested.emit()

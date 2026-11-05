@@ -67,9 +67,21 @@ func frozen() -> bool:
 	return cold_active() and warmth <= 0.0
 
 
-## Подождать до темноты (у телескопа): время идёт, растения растут.
-func wait_until_night() -> void:
-	var target := 0.82
+## Ночь ли сейчас для плавания в туман (с 20:00 до 4:00).
+func fog_hours() -> bool:
+	return time_of_day > 0.83 or time_of_day < 0.17
+
+
+## Прибытие на остров (после плавания): пассажиры сходят на берег.
+func arrive(loc: String) -> void:
+	if loc == "fog" and flags.get("stepa_aboard", false):
+		flags.erase("stepa_aboard")
+		flags["stepa_at_fog"] = true
+		notified.emit("Стёпа сходит на мостки лагеря", Color("ffe08a"))
+
+
+## Подождать до темноты (у телескопа, у причала перед туманом): время идёт, растения растут.
+func wait_until_night(target := 0.82) -> void:
 	var delta_days := target - time_of_day
 	if delta_days <= 0.0:
 		return

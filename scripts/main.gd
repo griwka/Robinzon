@@ -12,6 +12,7 @@ var world_env: WorldEnv
 var weather: Weather
 var warmth: Warmth
 var heat: Heat
+var fog: FogSystem
 var clouds: Array[Node3D] = []
 var _autosave_t := 0.0
 var menu: GameMenu
@@ -21,6 +22,7 @@ var _orbit := 0.0
 
 
 func _ready() -> void:
+	add_to_group("main")
 	Game.load_game()   # заранее: остров должен знать, какие заросли уже расчищены
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--location="):   # для разработки: сразу на нужный остров
@@ -63,6 +65,12 @@ func _ready() -> void:
 		heat.main = self
 		heat.player = player
 		add_child(heat)
+	if Game.location == "fog":
+		fog = FogSystem.new()
+		fog.main = self
+		fog.world_env = world_env
+		fog.player = player
+		add_child(fog)
 
 	if Game.location == "home":
 		_spawn_story_objects()
@@ -85,6 +93,10 @@ func _ready() -> void:
 	add_child(hud)
 	hud.station_check = _near_station
 	hud.build_selected.connect(_on_build_selected)
+	Game.quest_completed.connect(func(q: Dictionary):
+		if q.get("id", "") == "village":
+			Audio.play("cheer", -2.0, 0.0)
+		_spawn_village.call_deferred())
 	hud.panels_changed.connect(_on_panels_changed)
 	Audio.listener = player
 	Audio.island = island
@@ -141,6 +153,7 @@ func start_play() -> void:
 		player.global_position = island.spawn_point
 		player.cam_rig.global_position = player.global_position + Vector3(0, 1.4, 0)
 		hud.toast(Data.LOCATIONS[Game.location]["name"], Color("ffe08a"))
+		Game.arrive(Game.location)
 		Game.bump("sailed", "raft")
 		Game.bump("sailed", Game.location)
 	if not Game.quest_started:
@@ -162,7 +175,7 @@ func _resume() -> void:
 ## Причал на новом острове: плот, на котором мы приплыли (на нём можно уплыть обратно), и Румба на мачте.
 func _spawn_arrival_dock() -> void:
 	var dock := Building.new()
-	var vessel: String = {"fort": "canoe", "storm": "boat", "ice": "boat", "volcano": "boat"}.get(Game.location, "raft")
+	var vessel: String = {"fort": "canoe", "storm": "boat", "ice": "boat", "volcano": "boat", "fog": "boat"}.get(Game.location, "raft")
 	dock.setup(vessel)
 	var w := island.wreck_point
 	w.y = maxf(w.y, 0.0)
@@ -241,9 +254,11 @@ func _update_answer_fire() -> void:
 var _lantern: OmniLight3D
 
 
-## Фонарь в руке светит в бункере и ночью.
+## Фонарь в руке светит в бункере, ночью и в тумане. Фонарь со светлячками — зелёный и вдвое дальше.
 func _update_lantern() -> void:
-	var on: bool = Game.has_tool("lantern") and (world_env.indoor or not Game.is_day())
+	var fogged: bool = Game.location == "fog" and not Game.flags.get("fog_cleared", false)
+	var big := Game.has_tool("firefly_lantern")
+	var on: bool = (Game.has_tool("lantern") or big) and (world_env.indoor or not Game.is_day() or fogged)
 	if on and _lantern == null:
 		_lantern = OmniLight3D.new()
 		_lantern.light_color = Color("ffd59a")
@@ -255,6 +270,8 @@ func _update_lantern() -> void:
 		player.add_child(_lantern)
 	if _lantern:
 		_lantern.visible = on
+		_lantern.light_color = Color("d8ffa0") if big else Color("ffd59a")
+		_lantern.omni_range = 15.0 if big else 9.0
 		if on:
 			var t := Time.get_ticks_msec() / 1000.0
 			_lantern.light_energy = (1.6 if world_env.indoor else 1.1) * (0.94 + 0.06 * sin(t * 7.0))
@@ -270,6 +287,7 @@ func _radio_call() -> void:
 		"storm": "ПРИЁМ! Я тебя ВИЖУ. Помаши. ...Нет, другой рукой. Ладно, конец связи.",
 		"ice": "ПРИЁМ! Как там Ингрид? Передай, что я НЕ кричу. Это у меня голос такой. И надень шапку!",
 		"volcano": "ПРИЁМ! Вера рядом? Спроси про кофе. Нет, не спрашивай. Спроси! ...Ладно, просто понюхай его за меня.",
+		"fog": "ПРИЁМ! Ты там? В ТУМАНЕ? Миша рядом? Скажи ему... скажи, что я СЛЫШАЛ. Каждую ночь слышал.",
 	}
 	if Game.location == "ice" and Game.flags.get("ice_thawed", false):
 		lines["ice"] = "ПРИЁМ! Ингрид мне ответила! САМА! Я чуть рацию не уронил. Конец связи. То есть нет. То есть да."
@@ -413,6 +431,11 @@ func _connect_building(b: Building) -> void:
 
 
 # ================================================================== Плавание между островами
+## Паром Миши (вызывается через группу «main»).
+func choose_destination() -> void:
+	_choose_destination()
+
+
 func _choose_destination() -> void:
 	var options := []
 	for loc in Data.LOCATIONS:
@@ -421,13 +444,20 @@ func _choose_destination() -> void:
 		var cfg: Dictionary = Data.LOCATIONS[loc]
 		if cfg.has("unlock_flag") and not Game.flags.get(cfg["unlock_flag"], false):
 			continue
+		# в туман — только ночью (после седьмого огня остров виден и днём)
+		if cfg.get("night", false) and not Game.flags.get("fog_cleared", false) and not Game.fog_hours():
+			options.append({"text": "%s — днём там сплошной туман. Дождаться ночи и плыть" % cfg["name"], "icon": "sym_moon",
+				"callback": func():
+					Game.wait_until_night(0.86)
+					travel_to(loc)})
+			continue
 		options.append({"text": "Плыть: %s" % cfg["name"], "icon": "sail", "callback": travel_to.bind(loc)})
 	if Game.flags.get("storm_route", false) and not Game.flags.get("restored_stepa_boat", false):
 		options.append({"text": "Грозовой остров — на каноэ не доплыть, нужен бот Стёпы", "icon": "sym_star",
 			"callback": func(): Game.notified.emit("Почини бот Стёпы на берегу форта", Color("ffe08a"))})
-	if Game.flags.get("fog_route", false):
-		options.append({"text": "Туманный остров — глава 7 (в разработке)", "icon": "sym_moon",
-			"callback": func(): Game.notified.emit("Туманный остров появится в следующей версии игры", Color("ffe08a"))})
+	if Game.flags.get("eye_route", false):
+		options.append({"text": "Око шторма — глава 8 (в разработке)", "icon": "sym_sun",
+			"callback": func(): Game.notified.emit("Око шторма появится в следующей версии игры", Color("ffe08a"))})
 	if options.is_empty():
 		Game.notified.emit("Плыть пока некуда. Куда указывает свет?..", Color("ffe08a"))
 		return
@@ -482,12 +512,39 @@ func _load() -> bool:
 	for b in data.get("buildings", []):
 		var node := build.spawn_building(b["id"], Vector3(b["x"], b["y"], b["z"]), b["rot"], b.get("v", ""), b.get("s", {}))
 		_connect_building(node)
+	_spawn_village.call_deferred()
 	var p: Array = data.get("player", [])
 	if p.size() == 3:
 		player.global_position = Vector3(p[0], p[1] + 0.3, p[2])
 		player.cam_rig.global_position = player.global_position + Vector3(0, 1.4, 0)
 	hud.toast("Сохранение загружено (день %d)" % Game.day, Color("bfe3ff"))
 	return true
+
+
+# ================================================================== Деревня (глава 7)
+var _village_done := false
+
+
+## Выжившие с «Альбатроса» живут на острове крушения: вокруг длинного стола (или у лагеря).
+func _spawn_village() -> void:
+	if _village_done or Game.location != "home" or not Game.flags.get("village_moved", false):
+		return
+	_village_done = true
+	var c := island.camp_center
+	for t in get_tree().get_nodes_in_group("station_long_table"):
+		c = (t as Node3D).global_position
+	var who := ["renata", "gosha", "petya", "pasha", "misha"]
+	if Game.flags.get("stepa_at_fog", false):
+		who.append("stepa")
+	for i in who.size():
+		var a := TAU * i / who.size()
+		var p := c + Vector3(cos(a), 0, sin(a)) * 2.6
+		p.y = island.height_at(p.x, p.z)
+		var n := NPCPerson.new()
+		n.npc_id = who[i]
+		n.position = p
+		n.rotation.y = atan2(c.x - p.x, c.z - p.z)
+		add_child(n)
 
 
 func _new_game() -> void:

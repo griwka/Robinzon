@@ -1280,6 +1280,7 @@ def main():
     import icons_storm as storm   # глава 4
     import icons_ice as ice       # глава 5
     import icons_volcano as volcano   # глава 6
+    import icons_fog as fog           # глава 7
     os.makedirs(OUT, exist_ok=True)
     crops = {"carrot": i_carrot, "potato": i_potato, "corn": i_corn, "tomato": i_tomato,
              "cabbage": i_cabbage, "watermelon": i_watermelon}
@@ -1310,6 +1311,7 @@ def main():
     icons.update(ice.ICONS)
     crops.update(volcano.CROPS)
     icons.update(volcano.ICONS)
+    icons.update(fog.ICONS)
     icons.update(crops)
     icons.update(fruits)
     for name, fn in icons.items():
@@ -1336,12 +1338,14 @@ def main():
         save("map_%d" % (i + 1), page(dd))
     for i, dd in enumerate(volcano.PAGES):
         save("page_v%d" % (i + 1), page(dd))
+    for i, dd in enumerate(fog.PAGES):
+        save("letter_%d" % (i + 1), page(dd))
     for scene in ("light", "storm", "map"):
         fresco(scene).save(os.path.join(OUT, "fresco_%s.png" % scene))
     big = 256
     for name, fn in (("portrait_parrot", portrait_parrot), ("portrait_player", portrait_player), ("portrait_journal", portrait_journal),
                      ("portrait_marta", portrait_marta), ("portrait_kesha", portrait_kesha), ("portrait_stepa", portrait_stepa),
-                     ("portrait_timur", storm.portrait_timur), ("portrait_radio", storm.portrait_radio)) + tuple(ice.PORTRAITS.items()) + tuple(volcano.PORTRAITS.items()):
+                     ("portrait_timur", storm.portrait_timur), ("portrait_radio", storm.portrait_radio)) + tuple(ice.PORTRAITS.items()) + tuple(volcano.PORTRAITS.items()) + tuple(fog.PORTRAITS.items()):
         fn().resize((big, big), Image.LANCZOS).save(os.path.join(OUT, name + ".png"))
     save("bubble", bubble(), False)
     save("exclaim", exclaim())

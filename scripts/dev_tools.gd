@@ -13,6 +13,9 @@ extends Node
 ##   --near=vera|springs|temple_gate|crater_top|volcano_tower|crater_foot — герой у места на Острове Вулкана
 ##   --solved=1      на Вулкане: монолит решён, мостки построены (для скриншотов)
 ##   --view=temple   на Вулкане: герой перед входом в храм, камера смотрит на дверь
+##   --near=stilt_camp|signal_rock|fog_shrine|fog_tower|misha|renata — места на Туманном острове
+##   --view=albatros на Туманном: герой на конце мостков, камера смотрит на «Альбатрос»
+##   --fogdone=1     на Туманном: седьмой огонь горит, туман ушёл, «Альбатрос» починен (для скриншотов)
 
 var main: Node
 var args := {}
@@ -45,6 +48,10 @@ func _process(_delta: float) -> void:
 			for id in ["down_jacket", "felt_boots", "mittens"]:
 				Game.inventory[id] = 1
 		p.update_clothes()
+	if _frames == 1 and args.get("fogdone", "") == "1":
+		Game.flags["fog_cleared"] = true
+		for part in StiltCamp.PARTS:
+			Game.flags["restored_" + part] = true
 	if _frames == 2 and args.get("solved", "") == "1":
 		var tp := _temple()
 		if tp:
@@ -55,6 +62,13 @@ func _process(_delta: float) -> void:
 				c.dir = int(VolcanoTemple.TARGET[c.index])
 				c._face(false)
 			tp._open(false)
+	if _frames == 2 and args.get("view", "") == "albatros":
+		var cv := _camp()
+		if cv:
+			p.global_position = cv.to_global(cv.out * 10.5 + Vector3(0, StiltCamp.DECK_TOP + 0.4 - cv.global_position.y, 0))
+			p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+			p.camera_yaw = atan2(-cv.out.x, -cv.out.z) + 0.5
+			_flush()
 	if _frames == 2 and args.get("view", "") == "temple":
 		var tv := _temple()
 		if tv:
@@ -664,6 +678,79 @@ func _test_volcano() -> void:
 	p.global_position = main.island.spawn_point
 
 
+# ------------------------------------------------------------------ Туманный остров
+func _camp() -> StiltCamp:
+	for n in get_tree().get_nodes_in_group("stilt_camp"):
+		return n
+	return null
+
+
+func _shrine() -> FogShrine:
+	for n in get_tree().get_nodes_in_group("fog_shrine"):
+		return n
+	return null
+
+
+func _signal() -> SignalRock:
+	for n in get_tree().get_nodes_in_group("signal_rock"):
+		return n
+	return null
+
+
+func _test_fog() -> void:
+	var camp := _camp()
+	var shrine := _shrine()
+	var sig := _signal()
+	var fs: FogSystem = main.fog
+	var p: Player = main.player
+	_check(camp != null and shrine != null and sig != null and fs != null, "на Туманном острове есть лагерь, святилище, сигнальный камень и туман")
+	if camp == null or shrine == null or sig == null or fs == null:
+		return
+	_check(main.world_env.env.volumetric_fog_enabled, "остров окутан объёмным туманом")
+	# у костра туман расступается
+	var fire: Building = main.build.spawn_building("campfire", main.island.camp_center, 0.0)
+	fs.refresh()
+	_check(fs.clear_at(main.island.camp_center) and not fs.clear_at(sig.global_position + Vector3(0, 0, 9)), "туман расступается у огня, а вдали — стоит")
+	fire.queue_free()
+	# плыть в туман — только ночью
+	Game.time_of_day = 0.5
+	_check(not Game.fog_hours(), "днём в туман не плывут")
+	Game.time_of_day = 0.9
+	_check(Game.fog_hours(), "ночью — можно")
+	# светлячки ловятся сачком
+	var bugs := get_tree().get_nodes_in_group("firefly")
+	_check(bugs.size() >= 10, "над болотом летают светлячки (%d)" % bugs.size())
+	if bugs.size() > 0:
+		Game.inventory.erase("net")
+		var b: FogLife.Bug = bugs[0]
+		b.interact(p)
+		_check(Game.count("firefly") == 0 and b.active, "без сачка светлячка не поймать")
+	# Миша прячется, пока на тропе нет света
+	var misha: NPCPerson = null
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is NPCPerson and n.npc_id == "misha":
+			misha = n
+	_check(misha != null and sig.spots.size() == 5, "у сигнального камня Миша, на тропе пять меток")
+	_check(shrine.spots.size() == 6 and not shrine.solved(), "у стоячих камней шесть меток, проход закрыт")
+	# неверные фонари у камней — проход закрыт; фонарь можно забрать
+	var bs: BuildSystem = main.build
+	var wrong: Building = bs.spawn_building("pumpkin_lantern", shrine.spots[1].global_position, 0.0)
+	wrong._claim_spot()
+	shrine._process(0.0)
+	_check(not shrine.solved() and shrine.spots[1].used, "фонарь не на той метке — скала не открывается")
+	wrong.interact(p)
+	_check(not shrine.spots[1].used and Game.count("pumpkin_lantern") == 1, "фонарь у камней можно забрать и переставить")
+	Game.inventory.erase("pumpkin_lantern")
+	_check(not camp.ship.ready_to_sail(), "«Альбатрос» не готов к выходу, пока не починен")
+	var mangroves := 0
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode and n.kind == "mangrove":
+			mangroves += 1
+	_check(mangroves >= 12, "у берега растут мангры (%d)" % mangroves)
+	Game.inventory = {}
+	p.global_position = main.island.spawn_point
+
+
 # ------------------------------------------------------------------ Форт
 func _fort() -> FortRuin:
 	for n in get_tree().get_nodes_in_group("obstacle"):
@@ -840,8 +927,11 @@ func _build(id: String, variant := "") -> Building:
 		var sp := bs.free_spot(Vector3.ZERO, 9999.0)
 		pos = sp.global_position
 		rot = sp.rotation.y
+	if id == "pumpkin_lantern":
+		var sp2 := bs.free_spot(Vector3.ZERO, 9999.0, ["lantern_spot"])
+		pos = sp2.global_position
 	var b := bs.spawn_building(id, pos, rot, variant)
-	if id == "stone_bridge":
+	if id in ["stone_bridge", "pumpkin_lantern"]:
 		b._claim_spot()
 	main._connect_building(b)
 	Game.bump("built", id)
@@ -892,6 +982,14 @@ func _do_task(t: Dictionary) -> void:
 	var target: String = t["target"]
 	match t["kind"]:
 		"talk":
+			if target == "stepa" and Game.location != "fort":
+				# Стёпа в форте: в игре за ним плывут; здесь — как будто поговорили на берегу
+				Game.bump("talk", "stepa")
+				Game.flags["stepa_aboard"] = true
+				return
+			if target == "misha":
+				Game.flags["trail_lit"] = _signal().lit_count() >= 5 or Game.flags.get("trail_lit", false)
+				_check(Game.flags.get("trail_lit", false), "тропа к Мише освещена всеми пятью фонарями")
 			if target == "parrot":
 				main.parrot.interact(main.player)
 			else:
@@ -1005,6 +1103,15 @@ func _do_task(t: Dictionary) -> void:
 				spot.state = FishingSpot.BITE  # поклёвка
 				spot.interact(main.player)     # подсечь
 		"solved":
+			if target == "shadows":
+				var sh := _shrine()
+				for i in FogShrine.RIGHT:
+					_give({"pumpkin_lantern": 1})
+					Game.pay({"pumpkin_lantern": 1})
+					var lb: Building = main.build.spawn_building("pumpkin_lantern", sh.spots[i].global_position, 0.0)
+					lb._claim_spot()
+				sh._process(0.0)
+				return
 			if target == "monolith":
 				var tp := _temple()
 				for c in tp.chutes:
@@ -1062,16 +1169,32 @@ func _do_task(t: Dictionary) -> void:
 		"caught":
 			if not Game.has_tool("net"):
 				_give({"net": 1})
+			if target == "firefly":
+				var got := 0
+				for c in get_tree().get_nodes_in_group("firefly"):
+					if got < need and c.active:
+						c.interact(main.player)
+						got += 1
+				return
 			var n := 0
 			for c in get_tree().get_nodes_in_group("interactable"):
 				if c is Critters.Butterfly and n < need:
 					c.interact(main.player)
 					n += 1
 		"sailed":
+			if target == "albatros":
+				_camp().ship.sail(false)
+				return
 			# прибытие на новый остров (в игре — после перезагрузки сцены)
+			Game.arrive(target)
 			Game.bump("sailed", "raft")
 			Game.bump("sailed", target)
 		"reached":
+			if target == "stilt_camp":
+				var cp := _camp()
+				main.player.global_position = cp.deck_point()
+				cp._process(0.0)
+				return
 			if target == "temple_gate":
 				var tp := _temple()
 				_check(tp.bridged_count() == 3, "все три мостка лежат на местах")
@@ -1145,6 +1268,8 @@ func _autotest() -> void:
 		await _test_ice()
 	if ch == 5 and Game.location == "volcano":
 		_test_volcano()
+	if ch == 6 and Game.location == "fog" and int(args.get("from", "0")) == 0:
+		_test_fog()
 	if ch > 0:
 		# всё, что открыли предыдущие задания (рецепты, лавки, флаги), — как у игрока, дошедшего сюда
 		var from_q := int(args.get("from", "0"))
@@ -1154,10 +1279,12 @@ func _autotest() -> void:
 				if ci == ch and qi >= from_q:
 					break
 				var rw: Dictionary = cqs[qi].get("reward", {})
-				Game._grant({"unlock": rw.get("unlock", []), "flags": rw.get("flags", [])})
+				Game._grant({"unlock": rw.get("unlock", []), "flags": rw.get("flags", []), "collect": rw.get("collect", {})})
 				for t in cqs[qi]["tasks"]:
 					if t["kind"] == "restored":
 						Game.flags["restored_" + t["target"]] = true
+					if t["kind"] == "lit" and StoryPlace.PLACES.has(t["target"]):
+						Game.flags[StoryPlace.PLACES[t["target"]].get("flag", "lit_" + t["target"])] = true
 		Game.chapter = ch
 		Game.quest_index = from_q
 		Game.quest_started = false
@@ -1188,6 +1315,9 @@ func _autotest() -> void:
 				print("      %s: %d/%d" % [t["text"], Game.task_progress(t), t["count"]])
 			break
 	var done_ch: bool = Game.chapter > ch or (Game.quest_index >= qs.size())
+	if ch == 6 and Game.location == "fog" and done_ch:
+		_check(Game.flags.get("lit_fog_tower", false) and Game.flags.get("eye_route", false), "седьмой огонь горит, «Альбатрос» вышел, открыт путь к Оку")
+		_check(Game.collection_complete("letters"), "все шесть писем команды собраны")
 	if ch == 5 and Game.location == "volcano" and done_ch:
 		_check(Game.flags.get("lit_volcano_tower", false) and Game.flags.get("fog_route", false), "Огонь кратера горит, открыт путь к Туманному острову")
 		_check(Game.collection_complete("journal_volcano"), "все три записи с Вулкана собраны")
