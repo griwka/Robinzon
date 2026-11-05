@@ -36,10 +36,25 @@ const KINDS := {
 		"verb": "Накопать глины", "radius": 0.7, "height": 0.2},
 	"liana_curtain": {"hp": 2, "tool": "machete", "drops": {"liana": 2, "fiber": 1}, "respawn": 0.0,
 		"verb": "Разрубить завесу лиан", "radius": 0.5, "height": 2.6, "long": 1.35},
+	# --- Грозовой остров
+	"heather": {"hp": 1, "tool": "", "drops": {"fiber": 1}, "respawn": 0.0,
+		"verb": "Вырвать вереск", "radius": 0.7, "height": 0.9},
+	"blueberry": {"hp": 1, "tool": "", "drops": {"blueberry": 2}, "respawn": 55.0,
+		"verb": "Собрать чернику", "radius": 0.6, "height": 0.7},
+	"crooked_tree": {"hp": 4, "tool": "stone_axe", "drops": {"wood": 4}, "respawn": 0.0,
+		"verb": "Срубить кривое дерево", "radius": 0.8, "height": 4.0},
+	"scrap_pile": {"hp": 2, "tool": "", "drops": {"scrap": 1}, "respawn": 80.0,
+		"verb": "Разобрать кучу ржавого железа", "radius": 0.8, "height": 0.8},
+	"sand": {"hp": 1, "tool": "shovel", "drops": {"sand": 2}, "respawn": 50.0,
+		"verb": "Накопать песка", "radius": 0.7, "height": 0.2},
+	"rockfall": {"hp": 5, "tool": "pickaxe", "drops": {"stone": 5}, "respawn": 0.0,
+		"verb": "Разобрать обвал", "radius": 0.9, "height": 1.8, "long": 1.7},
 }
 const MODEL_NAMES := {"tall_grass": ["tall_grass"], "fern": ["fern_a", "fern_b"], "thicket": ["thicket"],
 	"bamboo": ["bamboo_clump"], "jungle_tree": ["jungle_tree_a", "jungle_tree_b"], "fallen_log": ["fallen_log"],
-	"cliff": ["cliff_a", "cliff_b"], "liana_curtain": ["liana_curtain"], "clay": ["clay_pit"]}
+	"cliff": ["cliff_a", "cliff_b"], "liana_curtain": ["liana_curtain"], "clay": ["clay_pit"],
+	"heather": ["heather_a", "heather_b"], "blueberry": ["blueberry_bush"], "crooked_tree": ["crooked_tree_a", "crooked_tree_b"],
+	"scrap_pile": ["scrap_pile"], "sand": ["sand_pit"], "rockfall": ["rockfall"]}
 const BUSH_SEEDS := ["seed_carrot", "seed_carrot", "seed_potato", "seed_corn", "seed_cabbage"]
 
 @export var kind := "bush"
@@ -64,7 +79,8 @@ func _ready() -> void:
 	var cfg: Dictionary = KINDS[kind]
 	hp = cfg["hp"]
 	match kind:
-		"tall_grass", "fern", "thicket", "bamboo", "jungle_tree", "fallen_log", "cliff", "liana_curtain", "clay":
+		"tall_grass", "fern", "thicket", "bamboo", "jungle_tree", "fallen_log", "cliff", "liana_curtain", "clay", \
+				"heather", "blueberry", "crooked_tree", "scrap_pile", "sand", "rockfall":
 			var names: Array = MODEL_NAMES[kind]
 			visual = Models.glb(names[rng.randi() % names.size()])
 			if visual == null:
@@ -94,19 +110,19 @@ func _ready() -> void:
 		cs.shape = shape
 	cs.position.y = cfg["height"] * 0.5
 	add_child(cs)
-	if kind in ["pebble", "shell", "driftwood", "clay"]:
+	if kind in ["pebble", "shell", "driftwood", "clay", "sand", "blueberry"]:
 		collision_layer = 8  # мелочь не мешает ходить
 
 
 func _setup_visibility() -> void:
 	# дальние мелкие объекты не рисуем и не даём им тени — так тысяча растений не тормозит
-	var far := 90.0 if kind in ["jungle_tree", "palm", "cliff", "bamboo"] else 55.0
+	var far := 90.0 if kind in ["jungle_tree", "palm", "cliff", "bamboo", "crooked_tree", "rockfall"] else 55.0
 	for mi in visual.find_children("*", "GeometryInstance3D", true, false):
 		var gi := mi as GeometryInstance3D
 		gi.visibility_range_end = far
 		gi.visibility_range_end_margin = 6.0
 		gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-		if kind in ["tall_grass", "fern", "pebble", "shell", "driftwood"]:
+		if kind in ["tall_grass", "fern", "pebble", "shell", "driftwood", "heather", "sand"]:
 			gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
@@ -187,16 +203,19 @@ func _shake_palm() -> void:
 
 
 const HIT_SOUND := {"palm": "chop", "driftwood": "chop", "rock": "rock", "pebble": "rock", "bush": "rustle", "shell": "pickup",
-	"jungle_tree": "chop", "fallen_log": "chop", "bamboo": "chop", "cliff": "rock", "thicket": "rustle", "fern": "rustle", "tall_grass": "rustle", "liana_curtain": "rustle", "clay": "plant"}
+	"jungle_tree": "chop", "fallen_log": "chop", "bamboo": "chop", "cliff": "rock", "thicket": "rustle", "fern": "rustle", "tall_grass": "rustle", "liana_curtain": "rustle", "clay": "plant",
+	"heather": "rustle", "blueberry": "rustle", "crooked_tree": "chop", "scrap_pile": "metal", "sand": "plant", "rockfall": "rock"}
 
 
 const COLORS := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color("a0a4a8"), "cliff": Color("a0a4a8"),
 	"jungle_tree": Color("c9a26b"), "fallen_log": Color("c9a26b"), "bamboo": Color("c9c46a"), "pebble": Color("a0a4a8"),
 	"thicket": Color("3c7a40"), "fern": Color("4f9a4a"), "tall_grass": Color("8fa850"), "liana_curtain": Color("5a9a3a"),
-	"driftwood": Color("d8c3a0"), "shell": Color("f7d6c4"), "clay": Color("b8623a")}
-const STONE := ["rock", "cliff", "pebble"]
-const WOOD := ["palm", "jungle_tree", "fallen_log", "bamboo", "driftwood"]
-const HEAVY := ["rock", "cliff", "jungle_tree", "palm", "fallen_log", "bamboo"]
+	"driftwood": Color("d8c3a0"), "shell": Color("f7d6c4"), "clay": Color("b8623a"),
+	"heather": Color("b07ab8"), "blueberry": Color("4a5ab8"), "crooked_tree": Color("8a6a4a"), "scrap_pile": Color("9a7a5a"),
+	"sand": Color("ecd29a"), "rockfall": Color("8a8a90")}
+const STONE := ["rock", "cliff", "pebble", "rockfall", "scrap_pile"]
+const WOOD := ["palm", "jungle_tree", "fallen_log", "bamboo", "driftwood", "crooked_tree"]
+const HEAVY := ["rock", "cliff", "jungle_tree", "palm", "fallen_log", "bamboo", "crooked_tree", "rockfall"]
 var _hit_tw: Tween
 var _hitter: Node
 
@@ -228,7 +247,7 @@ func _hit_fx(player: Node) -> void:
 		FX.burst(self, at, col, 8)
 	elif kind in WOOD:
 		FX.burst(self, at, col, 10)
-		if kind in ["palm", "jungle_tree"]:
+		if kind in ["palm", "jungle_tree", "crooked_tree"]:
 			FX.leaves(self, Vector3(0, float(cfg["height"]) * 0.8, 0), Color("4f9a4a"), 5)
 	else:
 		FX.leaves(self, at, col, 7)
@@ -250,7 +269,7 @@ func _deplete() -> void:
 	var col: Color = COLORS.get(kind, Color("e9d8b0"))
 	var big := kind in HEAVY or kind in ["thicket", "liana_curtain"]
 	var tw := create_tween()
-	if kind == "palm" or kind == "jungle_tree":
+	if kind in ["palm", "jungle_tree", "crooked_tree"]:
 		# дерево валится от игрока, бьётся о землю: пыль кольцом, глухой удар, тряска
 		var away := Vector3.FORWARD
 		if _hitter is Node3D:

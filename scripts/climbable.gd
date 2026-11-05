@@ -6,12 +6,24 @@ extends Node3D
 var bottom := Vector3.ZERO
 var top := Vector3(0, 5, 0)
 var exit := Vector3.ZERO
+var ladder := false
+var ladder_yaw := 0.0   # железная лестница (бункер): перчатки не нужны, сил тратится меньше
 
 
 func _ready() -> void:
 	add_to_group("climb")
 	var len := top.y - bottom.y
 	var segs := int(ceil(len))
+	if ladder:
+		for i in segs:
+			var lm := Models.glb("ladder")
+			if lm == null:
+				break
+			lm.position = bottom + Vector3(0, i * len / segs, 0)
+			lm.scale = Vector3(1.0, len / segs, 1.0)
+			lm.rotation.y = ladder_yaw
+			add_child(lm)
+		return
 	for i in segs:
 		var m := Models.glb("liana")
 		if m == null:

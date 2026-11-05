@@ -8,7 +8,7 @@ signal sleep_requested
 signal craft_requested(station: String)
 signal choice_requested(title: String, options: Array)
 
-const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe"]
+const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe", "boat", "shelter"]
 
 var id := "campfire"
 var variant := ""
@@ -63,6 +63,15 @@ func _make_collision() -> void:
 			_add_box(Vector3(2.2, 0.4, 3.0), Vector3(0, 0.2, 0), 0.0)
 		"canoe":
 			_add_box(Vector3(1.0, 0.4, 3.0), Vector3(0, 0.2, 0), 0.0)
+		"boat":
+			_add_box(Vector3(1.8, 0.6, 4.2), Vector3(0, 0.3, 0), 0.0)
+		"shelter":
+			# под навесом можно стоять: мешают только столбы
+			for sx in [-1, 1]:
+				for sz in [-1, 1]:
+					_add_box(Vector3(0.2, 2.4, 0.2), Vector3(sx * 1.05, 1.2, sz * 1.05), 0.0)
+		"lightning_rod":
+			_add_cyl(0.25, 4.0)
 		"goat_pen", "sheep_pen", "pig_sty", "garden_bed", "torch", "flowerbed", "shell_path":
 			_add_cyl(r * 0.6, 0.6)
 			collision_layer = 8  # не мешают ходить
@@ -114,7 +123,7 @@ func _process(delta: float) -> void:
 		# живой огонь: свет дрожит неравномерно (сумма двух «шумов»), языки пламени колышет шейдер
 		var n := sin(_t * 11.0) * sin(_t * 7.3) * 0.6 + sin(_t * 23.0 + 1.7) * 0.4
 		_light.light_energy = (2.0 if id == "campfire" else 1.4) * (0.86 + 0.14 * n)
-	if id in ["raft", "canoe"]:
+	if id in ["raft", "canoe", "boat"]:
 		visual.position.y = sin(_t * 1.4) * 0.06
 		visual.rotation.z = sin(_t * 1.1) * 0.03
 	if marker and marker.visible:
@@ -143,6 +152,8 @@ func get_hint() -> String:
 		"torch": return "Факел — " + ("погасить" if lit else "зажечь")
 		"raft": return "Плот — отправиться в плавание!"
 		"canoe": return "Каноэ — плыть"
+		"boat": return "Бот Стёпы — плыть"
+		"shelter": return "Навес — переждать грозу здесь" if Game.storm_active() else "Навес — под ним гроза не страшна"
 		"bench": return "Скамейка — присесть отдохнуть"
 	return Data.BUILDINGS[id]["name"]
 
@@ -152,7 +163,8 @@ func interact(_player: Node) -> void:
 		"campfire": craft_requested.emit("campfire")
 		"workbench": craft_requested.emit("workbench")
 		"tent", "hut", "hammock": sleep_requested.emit()
-		"raft", "canoe": sail_requested.emit()
+		"raft", "canoe", "boat": sail_requested.emit()
+		"shelter": Game.notified.emit("Сухо и спокойно. Дождь стучит по листьям над головой.", Color("ffe08a"))
 		"bench": Game.notified.emit("Ты присел на скамейку. Шумит прибой, кричат чайки...", Color("ffe08a"))
 		"torch":
 			lit = not lit

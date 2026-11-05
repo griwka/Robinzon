@@ -37,6 +37,13 @@ var day := 1
 var world_time := 0.0                  # секунды игрового мира (растения растут по нему)
 var settings: Dictionary = DEFAULT_SETTINGS.duplicate()
 var skip_menu := false                 # true — после перезагрузки сразу в игру, без главного меню
+var storm := 0.0                       # сила грозы 0..1 (задаёт погода на Грозовом острове, не сохраняется)
+var storm_force := false               # для автотеста: гроза «идёт» всегда
+
+
+## Идёт ли сейчас гроза (молнии бьют, громоотводы заряжаются, лазать нельзя).
+func storm_active() -> bool:
+	return storm_force or storm > 0.5
 
 
 func _ready() -> void:
@@ -533,7 +540,7 @@ func _setup_input() -> void:
 		"jump": [KEY_SPACE], "sprint": [KEY_SHIFT], "interact": [KEY_E],
 		"craft_menu": [KEY_C], "build_menu": [KEY_B], "rotate_build": [KEY_R],
 		"inventory": [KEY_TAB, KEY_I], "journal": [KEY_J], "collections": [KEY_K],
-		"help": [KEY_F1, KEY_H], "save": [KEY_F5], "load": [KEY_F9], "eat": [KEY_Q],
+		"help": [KEY_F1, KEY_H], "save": [KEY_F5], "load": [KEY_F9], "eat": [KEY_Q], "radio": [KEY_T],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):

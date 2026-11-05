@@ -1275,6 +1275,9 @@ def save(name, img, do_fit=True):
 
 
 def main():
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import icons_storm as storm   # глава 4
     os.makedirs(OUT, exist_ok=True)
     crops = {"carrot": i_carrot, "potato": i_potato, "corn": i_corn, "tomato": i_tomato,
              "cabbage": i_cabbage, "watermelon": i_watermelon}
@@ -1299,6 +1302,8 @@ def main():
         "sym_moon": symbol("moon", rgb("4f6fb8")), "sym_star": symbol("star", rgb("e8b42a")), "sym_sun": symbol("sun", rgb("e8642a")), "scrap": i_scrap, "bamboo": i_bamboo, "watering_can": i_watering_can, "net": i_net,
         "scallop": i_scallop, "seahorse": i_seahorse, "rapana": i_rapana, "starfish": i_starfish, "pearl": i_pearl,
     }
+    crops.update(storm.CROPS)
+    icons.update(storm.ICONS)
     icons.update(crops)
     icons.update(fruits)
     for name, fn in icons.items():
@@ -1317,11 +1322,16 @@ def main():
         save("page_b%d" % (i + 1), page(dd))
     for i, dd in enumerate((dd_letter, dd_lighthouse, dd_storm)):
         save("page_f%d" % (i + 1), page(dd))
+    for i, dd in enumerate((storm.dd_numbers, dd_storm, dd_letter)):
+        save("page_s%d" % (i + 1), page(dd))
+    for i, dd in enumerate((storm.dd_radio, storm.dd_numbers, storm.dd_tower)):
+        save("page_t%d" % (i + 1), page(dd))
     for scene in ("light", "storm", "map"):
         fresco(scene).save(os.path.join(OUT, "fresco_%s.png" % scene))
     big = 256
     for name, fn in (("portrait_parrot", portrait_parrot), ("portrait_player", portrait_player), ("portrait_journal", portrait_journal),
-                     ("portrait_marta", portrait_marta), ("portrait_kesha", portrait_kesha), ("portrait_stepa", portrait_stepa)):
+                     ("portrait_marta", portrait_marta), ("portrait_kesha", portrait_kesha), ("portrait_stepa", portrait_stepa),
+                     ("portrait_timur", storm.portrait_timur), ("portrait_radio", storm.portrait_radio)):
         fn().resize((big, big), Image.LANCZOS).save(os.path.join(OUT, name + ".png"))
     save("bubble", bubble(), False)
     save("exclaim", exclaim())

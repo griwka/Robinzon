@@ -601,8 +601,74 @@ def sfx_shake():
     return normalize(x + thump * 0.8, 0.75)
 
 
+# ============================================================ глава 4 — Грозовой остров
+def sfx_thunder(seed):
+    """Гром: резкий треск разряда, затем низкий раскатистый гул с «перекатами» (3–4 с)."""
+    r = np.random.default_rng(300 + seed)
+    d = 3.6 + seed * 0.3
+    n = int(d * SR)
+    t = np.arange(n) / SR
+    crack = highpass(r.standard_normal(n), 1500) * np.exp(-t / 0.05) * 0.8
+    rumble = lowpass(r.standard_normal(n), 140 + seed * 30, 3) * 3.0
+    rolls = np.ones(n)
+    for k in range(4 + seed):
+        at = r.uniform(0.15, d * 0.6)
+        rolls += 1.4 * np.exp(-((t - at) / r.uniform(0.15, 0.35)) ** 2)
+    env = (1 - np.exp(-t / 0.08)) * np.exp(-t / (1.1 + seed * 0.2))
+    body = lowpass(r.standard_normal(n), 600) * np.exp(-t / 0.4) * 0.4
+    return normalize(crack + (rumble * rolls + body) * env, 0.9)
+
+
+def sfx_radio():
+    """Рация: щелчок тангенты, шипение эфира с «уплывающим» тоном."""
+    r = np.random.default_rng(41)
+    d = 0.7
+    t = t_axis(d)
+    hiss = bandpass(r.standard_normal(len(t)), 900, 5000) * 0.35
+    tone = np.sin(2 * np.pi * (1200 + 300 * np.sin(2 * np.pi * 3 * t)) * t) * 0.12
+    click = np.zeros(len(t))
+    click[:200] = r.standard_normal(200) * np.linspace(1, 0, 200)
+    env = np.minimum(1, t / 0.03) * np.minimum(1, (d - t) / 0.12)
+    gate = (np.sin(2 * np.pi * 11 * t) > -0.6).astype(float) * 0.5 + 0.5
+    return normalize(click + (hiss * gate + tone) * env, 0.6)
+
+
+def sfx_honk():
+    """Гусь: два гнусавых «га-га» с хрипотцой."""
+    x = np.zeros(int(0.7 * SR))
+    for i, (f, d) in enumerate(((330, 0.16), (300, 0.22))):
+        tt = t_axis(d)
+        freq = f * (1 + 0.08 * np.sin(np.pi * tt / d)) * (1 - 0.15 * tt / d)
+        saw = signal.sawtooth(2 * np.pi * np.cumsum(freq) / SR)
+        s = bandpass(saw, 400, 2600) * np.sin(np.pi * tt / d) ** 0.6
+        s += bandpass(rng.standard_normal(len(tt)), 1500, 4000) * 0.08 * np.sin(np.pi * tt / d)
+        place(x, s, i * 0.24)
+    return normalize(x, 0.6)
+
+
+def sfx_metal():
+    """Удар по ржавому железу: звонкий лязг с быстро гаснущими обертонами."""
+    r = np.random.default_rng(55)
+    d = 0.6
+    t = t_axis(d)
+    x = np.zeros(len(t))
+    for f, a, dec in ((420, 0.5, 0.18), (1130, 0.35, 0.12), (2470, 0.25, 0.07), (3900, 0.15, 0.05)):
+        x += np.sin(2 * np.pi * f * t + r.uniform(0, 6)) * a * np.exp(-t / dec)
+    x += highpass(r.standard_normal(len(t)), 2000) * np.exp(-t / 0.02) * 0.6
+    return normalize(x, 0.7)
+
+
 def main():
+    import sys
     os.makedirs(OUT, exist_ok=True)
+    only = sys.argv[1:]   # имена эффектов (без sfx_) — сгенерировать только их, без музыки и фона
+    if only:
+        table = {"thunder0": lambda: sfx_thunder(0), "thunder1": lambda: sfx_thunder(1), "thunder2": lambda: sfx_thunder(2),
+                 "radio": sfx_radio, "honk": sfx_honk, "metal": sfx_metal}
+        for name in only:
+            write_wav("sfx_" + name, table[name]())
+        print("audio:", only)
+        return
     sfx = {
         "chop": sfx_chop(), "rock": sfx_rock(), "rustle": sfx_rustle(), "pickup": sfx_pickup(),
         "harvest": sfx_harvest(), "plant": sfx_plant(), "water": sfx_water(), "build": sfx_build(),
@@ -610,6 +676,8 @@ def main():
         "open": sfx_open(), "blip": sfx_blip(), "step_sand": sfx_step("sand"), "step_grass": sfx_step("grass"),
         "cluck": sfx_cluck(), "bleat": sfx_bleat(), "squawk": sfx_squawk(), "oink": sfx_oink(), "sleep": sfx_sleep(),
         "shake": sfx_shake(), "thud": sfx_thud(),
+        "thunder0": sfx_thunder(0), "thunder1": sfx_thunder(1), "thunder2": sfx_thunder(2),
+        "radio": sfx_radio(), "honk": sfx_honk(), "metal": sfx_metal(),
     }
     for i in range(4):
         sfx["bird%d" % i] = bird(100 + i)

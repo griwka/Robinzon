@@ -46,8 +46,8 @@ func _process(delta: float) -> void:
 	_voice_t -= delta
 	if _voice_t <= 0.0:
 		_voice_t = randf_range(10.0, 25.0)
-		Audio.play({"chicken": "cluck", "pig": "oink"}.get(kind, "bleat"), -9.0, 0.15, global_position)
-	var speed := 0.7 if kind == "chicken" else 0.5
+		Audio.play({"chicken": "cluck", "pig": "oink", "goose": "honk"}.get(kind, "bleat"), -9.0, 0.15, global_position)
+	var speed := 0.7 if kind in ["chicken", "goose"] else 0.5
 	var to := _target - global_position
 	to.y = 0
 	var moving := false

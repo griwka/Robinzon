@@ -30,6 +30,16 @@ const ITEMS := {
 	"clay": {"name": "Красная глина", "short": "Глина", "color": Color("c87048"), "cat": "material"},
 	"brick": {"name": "Кирпич", "short": "Кирпич", "color": Color("b8583a"), "cat": "material"},
 	"lamp_oil": {"name": "Лампадное масло", "short": "Масло", "color": Color("6b8a3a"), "cat": "material"},
+	# глава 4 — Грозовой остров
+	"copper_wire": {"name": "Медная проволока", "short": "Проволока", "color": Color("d9884a"), "cat": "material"},
+	"sand": {"name": "Песок", "short": "Песок", "color": Color("ecd29a"), "cat": "material"},
+	"glass": {"name": "Стекло", "short": "Стекло", "color": Color("bfe8f0"), "cat": "material"},
+	"battery": {"name": "Пустой аккумулятор", "short": "Аккум.", "color": Color("6b6f75"), "cat": "material"},
+	"battery_charged": {"name": "Заряженный аккумулятор", "short": "Заряд", "color": Color("ffd84a"), "cat": "product"},
+	"fuse": {"name": "Предохранитель", "short": "Предохр.", "color": Color("e8b42a"), "cat": "material"},
+	"radio_tube": {"name": "Радиолампа", "short": "Лампа", "color": Color("ffb36a"), "cat": "quest"},
+	"goose": {"name": "Пара гусей", "short": "Гуси", "color": Color("f4f4ee"), "cat": "livestock"},
+	"radio_set": {"name": "Рация Тимура", "short": "Рация", "color": Color("4a6a5a"), "cat": "quest"},
 	# семена
 	"seed_carrot": {"name": "Семена моркови", "short": "Сем. морк.", "color": Color("f08a2c"), "cat": "seed", "crop": "carrot"},
 	"seed_potato": {"name": "Семенной картофель", "short": "Сем. карт.", "color": Color("c9a26b"), "cat": "seed", "crop": "potato"},
@@ -37,6 +47,7 @@ const ITEMS := {
 	"seed_tomato": {"name": "Семена томата", "short": "Сем. томат", "color": Color("e8443a"), "cat": "seed", "crop": "tomato"},
 	"seed_cabbage": {"name": "Семена капусты", "short": "Сем. капус.", "color": Color("a6dc6a"), "cat": "seed", "crop": "cabbage"},
 	"seed_watermelon": {"name": "Семечки арбуза", "short": "Сем. арбуз", "color": Color("2f8f3a"), "cat": "seed", "crop": "watermelon"},
+	"seed_pumpkin": {"name": "Семена тыквы", "short": "Сем. тыкв.", "color": Color("f0c070"), "cat": "seed", "crop": "pumpkin"},
 	# урожай
 	"carrot": {"name": "Морковь", "short": "Морковь", "color": Color("f58a1f"), "cat": "crop", "food": 8},
 	"potato": {"name": "Картофель", "short": "Картошка", "color": Color("c8a064"), "cat": "crop", "food": 6},
@@ -44,11 +55,13 @@ const ITEMS := {
 	"tomato": {"name": "Томат", "short": "Томат", "color": Color("e8443a"), "cat": "crop", "food": 8},
 	"cabbage": {"name": "Капуста", "short": "Капуста", "color": Color("a6dc6a"), "cat": "crop", "food": 8},
 	"watermelon": {"name": "Арбуз", "short": "Арбуз", "color": Color("3aa64a"), "cat": "crop", "food": 25},
+	"pumpkin": {"name": "Тыква", "short": "Тыква", "color": Color("f08a24"), "cat": "crop", "food": 20},
 	# фрукты
 	"coconut": {"name": "Кокос", "short": "Кокос", "color": Color("7b5230"), "cat": "fruit", "food": 10},
 	"banana": {"name": "Банан", "short": "Банан", "color": Color("ffe14d"), "cat": "fruit", "food": 15},
 	"mango": {"name": "Манго", "short": "Манго", "color": Color("ff9f2e"), "cat": "fruit", "food": 18},
 	"lemon": {"name": "Лимон", "short": "Лимон", "color": Color("f4ee52"), "cat": "fruit", "food": 6},
+	"blueberry": {"name": "Черника", "short": "Черника", "color": Color("4a5ab8"), "cat": "fruit", "food": 5},
 	# саженцы
 	"sapling_banana": {"name": "Саженец банана", "short": "Саж. банан", "color": Color("8bd65a"), "cat": "sapling", "tree": "banana"},
 	"sapling_mango": {"name": "Саженец манго", "short": "Саж. манго", "color": Color("6fbf4a"), "cat": "sapling", "tree": "mango"},
@@ -60,12 +73,17 @@ const ITEMS := {
 	"wool": {"name": "Шерсть", "short": "Шерсть", "color": Color("f4efe6"), "cat": "product"},
 	"fish": {"name": "Рыба", "short": "Рыба", "color": Color("7fa8c8"), "cat": "product", "food": 10},
 	"truffle": {"name": "Трюфель", "short": "Трюфель", "color": Color("4a3a2a"), "cat": "product"},
+	"feather": {"name": "Гусиное перо", "short": "Перо", "color": Color("f4f4ee"), "cat": "product"},
 	# блюда
 	"fried_egg": {"name": "Яичница", "short": "Яичница", "color": Color("ffd75e"), "cat": "food", "food": 30},
 	"baked_potato": {"name": "Печёная картошка", "short": "Печ. карт.", "color": Color("b9793a"), "cat": "food", "food": 30},
 	"cheese": {"name": "Козий сыр", "short": "Сыр", "color": Color("ffe9a6"), "cat": "food", "food": 40},
 	"fruit_salad": {"name": "Фруктовый салат", "short": "Салат", "color": Color("ff8fa3"), "cat": "food", "food": 60},
 	"fish_soup": {"name": "Рыбная похлёбка", "short": "Похлёбка", "color": Color("e8b45a"), "cat": "food", "food": 45},
+	"pumpkin_porridge": {"name": "Тыквенная каша", "short": "Каша", "color": Color("f2a23a"), "cat": "food", "food": 55},
+	# одежда (пригодится на Ледяном острове)
+	"sweater": {"name": "Шерстяной свитер", "short": "Свитер", "color": Color("c8503a"), "cat": "clothes"},
+	"down_jacket": {"name": "Пуховая куртка", "short": "Куртка", "color": Color("4a7ab8"), "cat": "clothes"},
 	# инструменты
 	"machete": {"name": "Мачете", "short": "Мачете", "color": Color("c9cfd6"), "cat": "tool"},
 	"fishing_rod": {"name": "Удочка", "short": "Удочка", "color": Color("b8c450"), "cat": "tool"},
@@ -75,6 +93,7 @@ const ITEMS := {
 	"watering_can": {"name": "Лейка", "short": "Лейка", "color": Color("5fb0e8"), "cat": "tool"},
 	"net": {"name": "Сачок", "short": "Сачок", "color": Color("f2d16b"), "cat": "tool"},
 	"pickaxe": {"name": "Кирка", "short": "Кирка", "color": Color("9a8fb0"), "cat": "tool"},
+	"lantern": {"name": "Фонарь", "short": "Фонарь", "color": Color("ffd27a"), "cat": "tool"},
 }
 
 # ======================================================================= РЕЦЕПТЫ
@@ -98,6 +117,13 @@ const RECIPES := [
 	{"id": "baked_potato", "out": {"baked_potato": 1}, "in": {"potato": 1}, "station": "campfire"},
 	{"id": "cheese", "out": {"cheese": 1}, "in": {"milk": 2}, "station": "workbench"},
 	{"id": "fruit_salad", "out": {"fruit_salad": 1}, "in": {"banana": 1, "coconut": 1, "lemon": 1}, "station": "workbench"},
+	# глава 4
+	{"id": "copper_wire", "out": {"copper_wire": 2}, "in": {"scrap": 1}, "station": "workbench", "unlock": true},
+	{"id": "glass", "out": {"glass": 1}, "in": {"sand": 2, "wood": 1}, "station": "kiln", "unlock": true},
+	{"id": "lantern", "out": {"lantern": 1}, "in": {"glass": 1, "scrap": 1, "lamp_oil": 1}, "station": "workbench", "unlock": true},
+	{"id": "pumpkin_porridge", "out": {"pumpkin_porridge": 1}, "in": {"pumpkin": 1, "milk": 1, "honey": 1}, "station": "campfire"},
+	{"id": "sweater", "out": {"sweater": 1}, "in": {"wool_cloth": 2, "wool": 2}, "station": "workbench", "unlock": true},
+	{"id": "down_jacket", "out": {"down_jacket": 1}, "in": {"feather": 6, "wool_cloth": 2, "rope": 1}, "station": "workbench", "unlock": true},
 ]
 
 # ======================================================================= ПОСТРОЙКИ
@@ -145,6 +171,16 @@ const BUILDINGS := {
 		"desc": "Плитка из камня с ракушками."},
 	"raft": {"name": "Плот", "cost": {"plank": 10, "rope": 6, "sail": 1}, "radius": 1.8, "unlock": true, "tab": "дом", "shore": true,
 		"desc": "Строится у кромки воды. Путь к новым островам!"},
+	# глава 4
+	"shelter": {"name": "Навес", "cost": {"bamboo": 4, "leaf": 6, "rope": 2}, "radius": 1.4, "unlock": true, "tab": "дом",
+		"desc": "Крыша на четырёх столбах. Под ним гроза не страшна."},
+	"lightning_rod": {"name": "Громоотвод", "cost": {"scrap": 4, "copper_wire": 3, "plank": 2}, "radius": 0.7, "unlock": true, "tab": "ферма",
+		"desc": "Ловит молнию в грозу и заряжает пустой аккумулятор."},
+	"goose_house": {"name": "Гусятник", "cost": {"plank": 6, "fiber": 4, "goose": 1}, "radius": 1.6, "unlock": true, "tab": "ферма",
+		"desc": "Для пары гусей. Корми травой — дают перья."},
+	# бот Стёпы у причала — не строится, только для плавания
+	"boat": {"name": "Бот боцмана", "cost": {}, "radius": 1.8, "unlock": true, "tab": "", "hidden": true,
+		"desc": "Крепкий бот с кирпичами в трюме."},
 }
 
 # ======================================================================= ГРЯДКИ
@@ -156,6 +192,7 @@ const CROPS := {
 	"tomato": {"name": "Томат", "time": 100.0, "yield": [3, 4], "seed_back": 0.7},
 	"cabbage": {"name": "Капуста", "time": 120.0, "yield": [1, 2], "seed_back": 0.8},
 	"watermelon": {"name": "Арбуз", "time": 180.0, "yield": [1, 2], "seed_back": 0.7},
+	"pumpkin": {"name": "Тыква", "time": 150.0, "yield": [1, 2], "seed_back": 0.8},
 }
 
 # ======================================================================= ФРУКТОВЫЕ ДЕРЕВЬЯ
@@ -177,6 +214,11 @@ const PENS := {
 		"animal_name": "Овца"},
 	"pig_sty": {"animal": "pig", "count": 1, "feed": {"potato": 1}, "time": 90.0, "product": "truffle", "amount": 1,
 		"animal_name": "Поросёнок"},
+	"goose_house": {"animal": "goose", "count": 2, "feed": {"fiber": 2}, "time": 90.0, "product": "feather", "amount": 2,
+		"animal_name": "Гуси"},
+	# громоотвод: «корм» — пустой аккумулятор, заряжается только в грозу (storm: true)
+	"lightning_rod": {"animal": "", "count": 0, "feed": {"battery": 1}, "time": 40.0, "product": "battery_charged", "amount": 1,
+		"animal_name": "Громоотвод", "storm": true},
 }
 
 # ======================================================================= ЭКОНОМИКА
@@ -188,6 +230,7 @@ const SELL_PRICES := {
 	"coconut": 1, "banana": 2, "mango": 3, "lemon": 2,
 	"egg": 3, "milk": 5, "honey": 8, "wool": 6, "fish": 3, "truffle": 12,
 	"fried_egg": 6, "baked_potato": 6, "cheese": 14, "fruit_salad": 12, "fish_soup": 9,
+	"battery_charged": 8, "pumpkin": 5, "pumpkin_porridge": 14, "feather": 3, "blueberry": 1,
 }
 
 # Лавки. unlock — товар появляется, когда сюжет открыл этот id.
@@ -209,6 +252,11 @@ const SHOPS := {
 		{"item": "seed_potato", "price": 4}, {"item": "seed_corn", "price": 4}, {"item": "copper_nails", "price": 2},
 		{"item": "piglet", "price": 45, "unlock": "buy_piglet"},
 		{"item": "lamp_oil", "price": 15, "unlock": "buy_lamp_oil"},
+	]},
+	"timur": {"name": "Радиорубка Тимура", "who": "timur", "buy": [
+		{"item": "seed_pumpkin", "price": 3}, {"item": "fuse", "price": 15}, {"item": "battery", "price": 20},
+		{"item": "copper_nails", "price": 2}, {"item": "lamp_oil", "price": 15},
+		{"item": "goose", "price": 50, "unlock": "buy_goose"},
 	]},
 }
 
@@ -266,6 +314,29 @@ const COLLECTIONS := {
 			{"id": "page_f3", "name": "Страница 12", "color": Color("f2e2b8"), "text": "Стёпа не верит. Он погасил башню и ждёт, что шторм уйдёт сам. Я плыву на Грозовой: на старой станции есть радио. Если кто-то из команды доплыл до дома, я услышу. Береги себя, упрямец. — Л."},
 		],
 		"reward": {"items": {"coins": 25}}},
+	"fulgurites": {"name": "Стекляшки молний", "source": "После грозы ищи оплавленный песок там, куда ударила молния",
+		"items": [
+			{"id": "fulg_twig", "name": "Стеклянная веточка", "color": Color("d9d0b8")},
+			{"id": "fulg_tube", "name": "Полая трубочка", "color": Color("c9b890")},
+			{"id": "fulg_star", "name": "Звёздочка", "color": Color("e8e0d0")},
+			{"id": "fulg_green", "name": "Зелёная капля", "color": Color("8fd0a0")},
+			{"id": "fulg_blue", "name": "Синий корень", "color": Color("7fb8f0")},
+		],
+		"reward": {"items": {"coins": 25, "glass": 2}}},
+	"journal_station": {"name": "Журнал метеостанции", "source": "Записи 1958 года — на шестом ярусе бункера", "ordered": true,
+		"items": [
+			{"id": "page_s1", "name": "Запись 1", "color": Color("e8e0c8"), "text": "Станция «Ветер-3». Самолёт потерян. Нас пятеро. Шторм стоит стеной, но внутри тепло и всё растёт. Приборы показывают, что центр бури не двигается. Так не бывает."},
+			{"id": "page_s2", "name": "Запись 2", "color": Color("e8e0c8"), "text": "Сегодня видели огонь в центре. Ян говорит, что это маяк. Ян говорит, что он нас зовёт. Мы смеёмся. Ян не смеётся."},
+			{"id": "page_s3", "name": "Запись 3", "color": Color("e8e0c8"), "text": "Ян Ветров ушёл в центр бури на лодке, на вёслах. Оставил записку: «Кто-то должен держать огонь». Огни на островах больше не гаснут."},
+		],
+		"reward": {"items": {"coins": 15}}},
+	"journal_storm": {"name": "Записи с Грозового", "source": "Что Лёва оставил на радиостанции", "ordered": true,
+		"items": [
+			{"id": "page_t1", "name": "Страница 13", "color": Color("f2e2b8"), "text": "Запись для тебя — на радио, внизу. Я наговорил её три раза, пока не перестал запинаться. Если слушаешь — значит, ты здесь, упрямец. Тимур покажет, где выключатель."},
+			{"id": "page_t2", "name": "Страница 14", "color": Color("f2e2b8"), "text": "Ночной сигнал шёл с юго-востока, оттуда, где днём ничего не видно. Только туман. Повторялся каждые шесть часов: «...живы... туман...». Наши. Кто-то из команды жив."},
+			{"id": "page_t3", "name": "Страница 15", "color": Color("f2e2b8"), "text": "Башня громов: медная жила от шпиля вниз, к чаше. Её зажигает не человек, а молния. Чашу нужно накрыть стеклом — иначе дождь зальёт огонь. Древние знали, что делают."},
+		],
+		"reward": {"items": {"coins": 20}}},
 }
 
 # ======================================================================= ОСТРОВА
@@ -277,6 +348,9 @@ const LOCATIONS := {
 	# flat — плато под форт на вершине холма: [центр, радиус, высота]
 	"fort": {"name": "Старый форт", "seed": 3033, "radius": 46.0, "peak": Vector2(0, -6), "peak_h": 5.0, "mix": "fort",
 		"unlock_flag": "fort_route", "flat": [Vector2(0, -6), 15.0, 5.5]},
+	# Грозовой: скалистый холм со станцией на севере, мыс с Башней громов на востоке
+	"storm": {"name": "Грозовой остров", "seed": 4044, "radius": 50.0, "peak": Vector2(-4, -16), "peak_h": 11.0, "mix": "storm",
+		"unlock_flag": "restored_stepa_boat", "flat": [Vector2(-4, -16), 7.0, 11.5]},
 }
 
 # ======================================================================= ЗАДАНИЯ — ГЛАВА 1
@@ -290,6 +364,8 @@ const SPEAKERS := {
 	"marta": {"name": "Марта, повар «Альбатроса»", "color": Color("6f8fb0")},
 	"kesha": {"name": "Обезьянка Кешью", "color": Color("8a5a32")},
 	"stepa": {"name": "Боцман Стёпа", "color": Color("2f3e5c")},
+	"timur": {"name": "Радист Тимур", "color": Color("4a6a5a")},
+	"radio": {"name": "Голос Лёвы (запись)", "color": Color("8a6a3a")},
 }
 
 # Сюжет: три года назад у неизвестного архипелага пропала шхуна «Альбатрос» и её капитан — твой брат Лёва.
@@ -666,5 +742,137 @@ const CHAPTERS := [
 			["parrot", "Румба боится молний. Но Румба полетит."],
 			["narrator", "Конец третьей главы. Впереди — Грозовой остров."]],
 		"reward": {"items": {"coins": 20}, "flags": ["storm_route"]}},
+	]},
+	{"title": "Глава 4. Грозовой остров", "quests": [
+	{"id": "stepa_boat", "title": "Бот боцмана",
+		"intro": [["narrator", "«Каждый огонь, что я зажигал, гас у меня за спиной». Так Лёва написал в последней записке из форта."],
+			["parrot", "Грозовой! Туда! Каноэ — быстро, каноэ — храбро!"],
+			["stepa", "На каноэ в шторм? Утонешь у первой же волны. Иди сюда, поговорим."]],
+		"tasks": [{"kind": "talk", "target": "stepa", "count": 1, "text": "Поговори со Стёпой", "fresh": true},
+			{"kind": "bought", "target": "copper_nails", "count": 10, "text": "Купи медные гвозди (по 2 монеты)", "fresh": true},
+			{"kind": "restored", "target": "stepa_boat", "count": 1, "text": "Почини бот Стёпы на берегу форта"}],
+		"outro": [["stepa", "Бери мой бот. Три года сох на берегу — я всё собирался домой."],
+			["stepa", "Не смотри так. Дом подождёт. Найди своего брата, а потом и меня забери."],
+			["stepa", "И ещё. На Грозовом гроза ходит по кругу, как часы. Построй навес — переждёшь."]],
+		"reward": {"unlock": ["shelter"]}},
+	{"id": "storm_landing", "title": "Сквозь грозу",
+		"intro": [["stepa", "Бот у берега. Садись и плыви на север."],
+			["parrot", "Румба не боится. Румба просто посидит у тебя под курткой."]],
+		"tasks": [{"kind": "sailed", "target": "storm", "count": 1, "text": "Доплыви на боте до Грозового острова"},
+			{"kind": "built", "target": "campfire", "count": 1, "text": "Разведи костёр на Грозовом", "where": "storm"},
+			{"kind": "built", "target": "shelter", "count": 1, "text": "Построй навес от грозы", "where": "storm"}],
+		"outro": [["narrator", "Бот прыгает по волнам. Над островом висит чёрная туча, и в ней всё время что-то вспыхивает."],
+			["parrot", "Слышишь? Там, за холмом. Кто-то кричит. Кричит на небо!"]],
+		"reward": {}},
+	{"id": "timur", "title": "Голос за холмом",
+		"intro": [["narrator", "Ветер доносит с холма, где торчит мачта антенны: «ДАВАЙ, РОДИМАЯ! ЕЩЁ ЧУТЬ-ЧУТЬ!»"],
+			["parrot", "Станция на самом высоком холме. Вокруг скалы — бери кирку."]],
+		"tasks": [{"kind": "talk", "target": "timur", "count": 1, "text": "Найди, кто кричит у станции на холме"}],
+		"outro": [["timur", "О! ЖИВОЙ ЧЕЛОВЕК! Ты кто? ЧТО? Брат Лёвы? ГРОМЧЕ! А, вижу — нос тот же."],
+			["timur", "Я Тимур, радист «Альбатроса». От грома почти оглох, так что не обижайся, что ору. ПРИЁМ!"],
+			["timur", "Лёва был тут пять месяцев назад. Мы починили радио, и оно... кое-что поймало. А потом молния — БАХ! — и всё сгорело."],
+			["timur", "Он оставил тебе запись. Но чтобы её услышать, нужна ЭНЕРГИЯ. А энергия здесь одна — молния."]],
+		"reward": {"unlock": ["copper_wire", "lightning_rod"]}},
+	{"id": "rod", "title": "Ловец молний",
+		"intro": [["timur", "Громоотвод: железный шест, медная проволока и доски, чтобы не упал. Железа тут полно — у станции и у старого самолёта в бухте."],
+			["timur", "Проволоку тяни на верстаке из обломков. Ставь громоотвод на открытом месте, но НЕ на вершине — там бьёт куда хочет."]],
+		"tasks": [{"kind": "collected", "target": "scrap", "count": 8, "text": "Собери обломки металла"},
+			{"kind": "crafted", "target": "copper_wire", "count": 4, "text": "Сделай медную проволоку на верстаке"},
+			{"kind": "built", "target": "lightning_rod", "count": 1, "text": "Поставь громоотвод"}],
+		"outro": [["timur", "КРАСАВЕЦ! Держи два пустых аккумулятора. Повесь на громоотвод и жди грозу."],
+			["timur", "Гроза приходит сама, каждые несколько минут. Услышишь гром — беги под навес. В грозу НЕ лазай: скалы мокрые."]],
+		"reward": {"items": {"battery": 2}}},
+	{"id": "battery", "title": "Пойманная молния",
+		"intro": [["timur", "Подойди к громоотводу и повесь аккумулятор. Одна гроза — один заряд."]],
+		"tasks": [{"kind": "product", "target": "battery_charged", "count": 2, "text": "Заряди два аккумулятора в грозу"}],
+		"outro": [["timur", "Слышишь, как гудит? Это ДЕНЬГИ гудят! Заряженные аккумуляторы беру по восемь монет. Мне их всегда мало."],
+			["timur", "Заходи в мою радиорубку. Пустые аккумуляторы тоже продаю — чем больше висит на громоотводах, тем больше заряда."]],
+		"reward": {"items": {"coins": 10}, "unlock": ["shop_timur", "buy_goose", "goose_house"]}},
+	{"id": "geese", "title": "Гуси Тимура",
+		"intro": [["timur", "Есть у меня пара гусей. Я их не уберегу — с ногой за ними не набегаешься. Продам за пятьдесят. Это почти даром, они ОЧЕНЬ умные."]],
+		"tasks": [{"kind": "bought", "target": "goose", "count": 1, "text": "Купи у Тимура пару гусей (50 монет)"},
+			{"kind": "built", "target": "goose_house", "count": 1, "text": "Построй гусятник"},
+			{"kind": "product", "target": "feather", "count": 4, "text": "Собери гусиные перья"}],
+		"outro": [["parrot", "Гуси громкие. Громче Тимура. Румба уважает."],
+			["timur", "Перья береги. На севере есть остров, где ИДЁТ СНЕГ. Я сам не верил."]],
+		"reward": {}},
+	{"id": "pumpkins", "title": "Тыквы под дождём",
+		"intro": [["timur", "Два года — консервы и черника. Слушай, сделай тыквенную кашу! Семена у меня. Тыква любит дождь, а дождя тут — хоть отбавляй."],
+			["timur", "Каша — тыква, молоко и мёд, на костре. Молоко и мёд — с твоего хозяйства на других островах."]],
+		"tasks": [{"kind": "bought", "target": "seed_pumpkin", "count": 4, "text": "Купи семена тыквы", "fresh": true},
+			{"kind": "planted", "target": "pumpkin", "count": 4, "text": "Посади тыквы"},
+			{"kind": "harvested", "target": "pumpkin", "count": 4, "text": "Вырасти тыквы"},
+			{"kind": "crafted", "target": "pumpkin_porridge", "count": 1, "text": "Свари тыквенную кашу на костре"},
+			{"kind": "delivered", "target": "pumpkin_porridge", "count": 1, "to": "timur", "text": "Отнеси кашу Тимуру"}],
+		"outro": [["timur", "Я забыл, что еда бывает тёплой."],
+			["timur", "(тихо) Спасибо."],
+			["timur", "Теперь о деле. Внизу, под станцией, — бункер. Там темно, как в кармане. Сделаешь фонарь — полезешь. Я бы сам, но нога..."],
+			["timur", "Для фонаря нужно стекло. Стекло — это песок и жар. Печь у тебя есть? Глину привези из форта."]],
+		"reward": {"unlock": ["glass"]}},
+	{"id": "glass", "title": "Стекло из песка",
+		"intro": [["timur", "Песок копай лопатой на пляже. Печь сложи здесь, из камня и глины. Два песка и полено — вот тебе стекло."]],
+		"tasks": [{"kind": "crafted", "target": "shovel", "count": 1, "text": "Сделай лопату (если её нет)"},
+			{"kind": "collected", "target": "sand", "count": 6, "text": "Накопай песка на пляже"},
+			{"kind": "built", "target": "kiln", "count": 1, "text": "Сложи печь на Грозовом", "where": "storm"},
+			{"kind": "crafted", "target": "glass", "count": 4, "text": "Расплавь песок в стекло"}],
+		"outro": [["parrot", "Прозрачное! Румба видит сквозь него Тимура. Тимур всё равно громкий."],
+			["timur", "Фонарь — стекло, железо и масло. Масло у Стёпы, у меня тоже есть."]],
+		"reward": {"unlock": ["lantern"]}},
+	{"id": "bunker", "title": "Бункер метеостанции",
+		"intro": [["timur", "Бункер старый. Не наш — древний. Каменная шахта на семь ярусов. Метеорологи в пятьдесят восьмом поставили там приборы."],
+			["timur", "Сначала почини генератор на первом ярусе: два заряженных аккумулятора, проволока и два предохранителя. Тогда на трёх ярусах загорится свет."]],
+		"tasks": [{"kind": "crafted", "target": "lantern", "count": 1, "text": "Сделай фонарь на верстаке"},
+			{"kind": "bought", "target": "fuse", "count": 2, "text": "Купи у Тимура предохранители"},
+			{"kind": "restored", "target": "generator", "count": 1, "text": "Почини генератор на первом ярусе бункера"},
+			{"kind": "reached", "target": "bunker3", "count": 1, "text": "Спустись на третий ярус"}],
+		"outro": [["timur", "(кричит в шахту) ВИДИШЬ ЛАМПОЧКИ? ЭТО Я ИХ ПОВЕСИЛ! В ПЕРВЫЙ ГОД!"],
+			["player", "Ниже света нет. Только лестницы и темнота. Хорошо, что есть фонарь."]],
+		"reward": {}},
+	{"id": "logs", "title": "Журнал 1958 года",
+		"intro": [["timur", "На шестом ярусе была комната метеорологов. Я туда не дошёл. Нога."]],
+		"tasks": [{"kind": "reached", "target": "bunker6", "count": 1, "text": "Спустись на шестой ярус"},
+			{"kind": "found", "target": "station_logs", "count": 1, "text": "Найди журнал метеостанции"}],
+		"outro": [["player", "Ветров. Как наш дед. Он пропал в море в пятьдесят восьмом... Совпадение. Конечно, совпадение."],
+			["parrot", "Карр... Румба знает это имя. Откуда Румба знает это имя?"]],
+		"reward": {}},
+	{"id": "radio", "title": "Радиорубка",
+		"intro": [["timur", "На самом дне — радиорубка. Лёва сказал: нужны две радиолампы, проволока и заряд. Лампы ты уже нашёл, да?"]],
+		"tasks": [{"kind": "reached", "target": "bunker7", "count": 1, "text": "Спустись на самое дно бункера"},
+			{"kind": "restored", "target": "radio", "count": 1, "text": "Почини радиостанцию"}],
+		"outro": [["narrator", "Тесная рубка. Стены покрыты древними знаками, поверх них — провода. Лампы теплеют, в динамике шипит."]],
+		"reward": {}},
+	{"id": "message", "title": "Голос брата",
+		"intro": [["parrot", "Включай. Румба слушает. Румба очень слушает."]],
+		"tasks": [{"kind": "found", "target": "radio_record", "count": 1, "text": "Включи запись Лёвы"}],
+		"outro": [["radio", "Говорит Лев Ветров, капитан «Альбатроса». Если это слышит кто-то из команды — я жив. Повторяю: я жив."],
+			["radio", "А если это ты, малой... Я знал, что ты придёшь. Ты упрямее меня."],
+			["radio", "Журнал внизу ты уже видел. Да. Это наш дед. Он не утонул. Он дошёл до центра бури и держал там огонь шестьдесят лет."],
+			["radio", "Маяки гаснут, потому что слабеет главный огонь, в центре. Каждый огонь, что я зажигал, гас у меня за спиной. Одному их не удержать."],
+			["radio", "И ещё. Ночью радио поймало сигнал. Слабый. «...живы... туман...». Это наши. Я не знаю, где они. Тимур будет слушать."],
+			["radio", "Я ухожу на Ледяной, к Ингрид. Только она умеет считать путь по звёздам. Зажги здешнюю башню — и шторм пропустит тебя на север."],
+			["radio", "И корми Румбу рыбой. Он врёт, что не любит."],
+			["parrot", "(голосом Лёвы, тихо) ...одному не удержать..."],
+			["parrot", "Румба не врёт. Румба любит рыбу немножко."],
+			["timur", "Я эту запись слышал сто раз. Каждый раз думаю — может, в этот раз он скажет что-то другое."]],
+		"reward": {}},
+	{"id": "storm_tower", "title": "Башня громов",
+		"intro": [["timur", "Башня на восточном мысу. Тропу завалило камнями — бери кирку."],
+			["timur", "Древние ставили медь на шпиль. ТЫСЯЧУ лет назад! Я в восторге и в ужасе одновременно."],
+			["timur", "Протяни проволоку от шпиля к чаше и накрой чашу стеклом. А зажжёт её молния — жди грозу."]],
+		"tasks": [{"kind": "cleared", "target": "rockfall", "count": 2, "text": "Разбери обвал на тропе к мысу", "where": "storm"},
+			{"kind": "restored", "target": "storm_tower", "count": 1, "text": "Почини Башню громов"},
+			{"kind": "lit", "target": "storm_tower", "count": 1, "text": "Дождись грозы — молния зажжёт башню"}],
+		"outro": [["narrator", "Молния бьёт в шпиль, и чаша вспыхивает белым. Далеко на западе отвечает огонь форта, потом Баньян, потом твоя гора."],
+			["narrator", "Шторм на севере расходится. Там остров, белый, как сахар. Над тропическим морем идёт снег."]],
+		"reward": {}},
+	{"id": "north", "title": "На север",
+		"intro": [["timur", "Иди сюда! Попрощаться-то надо по-человечески."]],
+		"tasks": [{"kind": "talk", "target": "timur", "count": 1, "text": "Попрощайся с Тимуром", "fresh": true}],
+		"outro": [["timur", "Держи рацию. Я её собрал из того, что было. С ней ты услышишь меня на любом острове. Нажми T — и говори."],
+			["timur", "Я буду слушать ночью. Если те, в тумане, ещё раз выйдут в эфир — ты узнаешь первым."],
+			["timur", "ПРИЁМ! Слышишь меня? Это я проверяю. Иди уже. И ОДЕНЬСЯ ТЕПЛЕЕ!"],
+			["parrot", "Свитер. Румбе тоже свитер. Маленький."],
+			["narrator", "Конец четвёртой главы. Впереди — Ледяной остров."]],
+		"reward": {"items": {"coins": 25, "radio_set": 1}, "flags": ["ice_route"], "unlock": ["sweater", "down_jacket"]}},
 	]},
 ]

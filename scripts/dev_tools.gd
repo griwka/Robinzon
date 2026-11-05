@@ -4,7 +4,9 @@ extends Node
 ##   --time=0..1     время суток
 ##   --demo          построить лагерь с фермой рядом с игроком (для скриншотов)
 ##   --yaw= --pitch= --dist=  положение камеры
-##   --autotest      пройти всю первую главу через игровую логику и вывести результат
+##   --autotest      пройти главу через игровую логику и вывести результат
+##                   (--chapter=N — какую; --from=K — начать с K-го задания главы, с нуля; --upto=K — остановиться после K заданий)
+##   --bunker=N      поставить героя на ярус N бункера (Грозовой остров)
 
 var main: Node
 var args := {}
@@ -54,6 +56,15 @@ func _process(_delta: float) -> void:
 				else:
 					p.global_position = f.global_position + f.gate_dir * 16.0 + Vector3(0, 0.5, 0)
 					p.camera_yaw = atan2(f.gate_dir.x, f.gate_dir.z)
+				p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+			_flush()
+		if args.has("bunker"):
+			var stn := _station()
+			if stn:
+				if args.get("lit", "") == "1":
+					Game.flags["restored_generator"] = true
+					Game.inventory["lantern"] = 1
+				p.global_position = stn.deck_point("bunker" + args["bunker"])
 				p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
 			_flush()
 		if args.has("near") and main.island.poi_extra.has(args["near"]):
@@ -301,6 +312,108 @@ func _validate_only() -> void:
 	_validate()
 	print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
 	get_tree().quit(0 if fails.is_empty() else 1)
+
+
+# ------------------------------------------------------------------ Грозовой остров
+func _station() -> StormStation:
+	for n in get_tree().get_nodes_in_group("bunker"):
+		return n
+	return null
+
+
+func _test_storm() -> void:
+	var stn := _station()
+	_check(stn != null, "на вершине стоит метеостанция с бункером")
+	if stn == null:
+		return
+	var ladders := 0
+	for c in get_tree().get_nodes_in_group("climb"):
+		if c.ladder:
+			ladders += 1
+	_check(ladders == StormStation.DECKS - 1, "в бункере %d лестниц между 7 ярусами" % ladders)
+	# без света проёмы вниз закрыты
+	Game.flags.erase("restored_generator")
+	Game.inventory.erase("lantern")
+	stn._update_gates()
+	_check(not stn._gates[1].disabled and not stn._gates[3].disabled, "без генератора и фонаря вниз не спуститься")
+	Game.flags["restored_generator"] = true
+	stn._update_gates()
+	_check(stn._gates[1].disabled and not stn._gates[3].disabled, "генератор открывает ярусы 2–3, ниже нужен фонарь")
+	Game.inventory["lantern"] = 1
+	stn._update_gates()
+	_check(stn._gates[3].disabled, "с фонарём можно спуститься до дна")
+	Game.flags.erase("restored_generator")
+	Game.inventory.erase("lantern")
+	stn._update_gates()
+	# громоотвод заряжает только в грозу
+	Game.unlocked["lightning_rod"] = true
+	var rod := _pen("lightning_rod")
+	_give({"battery": 1})
+	Game.storm_force = false
+	main.weather._storm_forced = 0
+	main.weather._process(0.0)
+	rod.interact(main.player)
+	_check(rod.fed, "на громоотвод вешается пустой аккумулятор")
+	rod._process(0.0)
+	Game.world_time += 3.0
+	rod._process(0.0)
+	_check(rod.progress == 0.0, "без грозы аккумулятор не заряжается")
+	Game.storm_force = true
+	Game.world_time += Data.PENS["lightning_rod"]["time"] * 0.5
+	rod._process(0.0)
+	_check(rod.progress > 0.0 and not rod.product_ready, "в грозу заряд растёт (%d%%)" % int(rod.progress * 100))
+	Game.world_time += 4.0
+	for i in 20:
+		Game.world_time += 3.0
+		rod._process(0.0)
+	_check(rod.product_ready, "за грозу аккумулятор заряжается")
+	rod.interact(main.player)
+	_check(Game.count("battery_charged") >= 1, "заряженный аккумулятор попадает в сумку")
+	Game.inventory.erase("battery_charged")
+	# в грозу по лиане не лезут, а по лестнице — можно
+	var p: Player = main.player
+	var lad: Climbable = null
+	for c in get_tree().get_nodes_in_group("climb"):
+		lad = c
+	_check(Game.storm_active(), "гроза идёт (принудительно)")
+	if lad:
+		p.global_position = lad.world_bottom() + Vector3(0.6, 0.3, 0)
+		p._find_climb()
+		_check(p.near_climb == lad and lad.ladder, "у лестницы бункера можно лезть без перчаток")
+	# молния у героя на вершине: отбросит и уронит вещи, которые можно подобрать
+	var isl: Island = main.island
+	var top: Vector3 = isl.poi["station"] + Vector3(2.0, 0.5, -2.0)
+	p.global_position = top
+	_give({"wood": 5, "stone": 5})
+	var before := Game.count("wood") + Game.count("stone")
+	main.weather._hit_player_cd = 0.0
+	main.weather._random_strike()
+	var dropped := get_tree().get_nodes_in_group("pickup")
+	_check(Game.count("wood") + Game.count("stone") < before and dropped.size() > 0, "молния на вершине роняет вещи (%d на земле)" % dropped.size())
+	for d in dropped:
+		if d.item_id != "":
+			d.interact(p)
+	_check(Game.count("wood") + Game.count("stone") == before, "выроненное можно подобрать — ничего не теряется")
+	Game.inventory.erase("wood")
+	Game.inventory.erase("stone")
+	# ливень поливает грядки
+	Game.unlocked["garden_bed"] = true
+	var bed := _bed()
+	_give({"seed_pumpkin": 1})
+	bed.plant("pumpkin")
+	main.weather._storm_process(0.1)
+	_check(bed.watered, "в грозу грядки поливаются сами")
+	# песок и железо есть на острове
+	var sand := 0
+	var scrap := 0
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode and n.kind == "sand":
+			sand += 1
+		if n is ResourceNode and n.kind == "scrap_pile":
+			scrap += 1
+	_check(sand >= 4, "на пляже есть песок (%d ям)" % sand)
+	_check(scrap >= 8, "у станции и самолёта есть железо (%d куч)" % scrap)
+	main.weather._storm_forced = -1
 
 
 # ------------------------------------------------------------------ Форт
@@ -577,7 +690,8 @@ func _do_task(t: Dictionary) -> void:
 				pen.interact(main.player)
 				guard += 1
 		"cleared":
-			var tools := {"thicket": "machete", "bamboo": "machete", "jungle_tree": "stone_axe", "fallen_log": "stone_axe", "cliff": "pickaxe", "rock": "pickaxe", "liana_curtain": "machete"}
+			var tools := {"thicket": "machete", "bamboo": "machete", "jungle_tree": "stone_axe", "fallen_log": "stone_axe", "cliff": "pickaxe", "rock": "pickaxe", "liana_curtain": "machete",
+				"crooked_tree": "stone_axe", "rockfall": "pickaxe"}
 			if tools.has(target) and not Game.has_tool(tools[target]):
 				_give({tools[target]: 1})
 			var done := 0
@@ -664,7 +778,13 @@ func _do_task(t: Dictionary) -> void:
 		"sailed":
 			# прибытие на новый остров (в игре — после перезагрузки сцены)
 			Game.bump("sailed", "raft")
+			Game.bump("sailed", target)
 		"reached":
+			if target.begins_with("bunker"):
+				var stn := _station()
+				main.player.global_position = stn.deck_point(target)
+				stn._process(0.0)
+				return
 			var tree := get_tree().get_first_node_in_group("obstacle")
 			for n in get_tree().get_nodes_in_group("obstacle"):
 				if n is BanyanTree:
@@ -696,8 +816,8 @@ func _autotest() -> void:
 	_check(get_tree().get_nodes_in_group("interactable").size() > 150, "на острове есть ресурсы и живность")
 	_check(Game.quest_started and Game.current_quest()["id"] == "wake", "первое задание началось")
 	for poi_id in main.island.poi.keys():
-		if poi_id == "fort":
-			continue   # форт закрыт стенами, а не зарослями — проверяется отдельно (_test_fort)
+		if not Island.RINGS.has(poi_id):
+			continue   # без кольца преград (форт закрыт стенами, самолёт и камни — открыты)
 		_check(not _reachable(poi_id), "к месту «%s» не пройти без инструментов" % poi_id)
 
 	var ch := int(args.get("chapter", "1")) - 1
@@ -708,17 +828,35 @@ func _autotest() -> void:
 		_flush()
 	if ch == 1:
 		_test_climb()
-	if ch == 2:
+	if ch == 2 or (ch == 3 and Game.location == "fort"):
 		_test_fort()
+	if ch == 3 and Game.location == "storm":
+		_test_storm()
+		Game.storm_force = true   # молнии нужны для громоотвода и Башни громов
 	if ch > 0:
+		# всё, что открыли предыдущие задания (рецепты, лавки, флаги), — как у игрока, дошедшего сюда
+		var from_q := int(args.get("from", "0"))
+		for ci in ch + 1:
+			var cqs: Array = Data.CHAPTERS[ci]["quests"]
+			for qi in cqs.size():
+				if ci == ch and qi >= from_q:
+					break
+				var rw: Dictionary = cqs[qi].get("reward", {})
+				Game._grant({"unlock": rw.get("unlock", []), "flags": rw.get("flags", [])})
+				for t in cqs[qi]["tasks"]:
+					if t["kind"] == "restored":
+						Game.flags["restored_" + t["target"]] = true
 		Game.chapter = ch
-		Game.quest_index = 0
+		Game.quest_index = from_q
 		Game.quest_started = false
 		Game.start_current_quest()
 		_flush()
 	var qs: Array = Data.CHAPTERS[ch]["quests"]
 	var guard := 0
-	while not Game.current_quest().is_empty() and Game.chapter == ch and guard < 60:
+	var upto := int(args.get("upto", "999"))
+	var done_q := 0
+	while not Game.current_quest().is_empty() and Game.chapter == ch and guard < 60 and done_q < upto:
+		done_q += 1
 		guard += 1
 		var q := Game.current_quest()
 		_flush()
@@ -738,6 +876,12 @@ func _autotest() -> void:
 				print("      %s: %d/%d" % [t["text"], Game.task_progress(t), t["count"]])
 			break
 	var done_ch: bool = Game.chapter > ch or (Game.quest_index >= qs.size())
+	if upto < 999:
+		var target_i := int(args.get("from", "0")) + upto
+		_check(Game.quest_index >= target_i or Game.chapter > ch, "пройдено %d заданий главы %d" % [upto, ch + 1])
+		print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
+		get_tree().quit(0 if fails.is_empty() else 1)
+		return
 	_check(done_ch, "глава %d пройдена" % (ch + 1))
 	print("      ₭ заработано продажей урожая по ходу главы: %d монет" % earned_by_selling)
 	if ch + 1 < Data.CHAPTERS.size():

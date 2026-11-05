@@ -286,6 +286,19 @@ func _place_pois() -> void:
 		c.y = height_at(0, 0)
 		poi["banyan_roots"] = c
 		return
+	if mix == "storm":
+		# станция — на плато вершины, Башня громов — на восточном мысу, самолёт — в западной бухте
+		var st := Vector3(flat[0].x, 0, flat[0].y)
+		st.y = height_at(st.x, st.z)
+		poi["station"] = st
+		poi["storm_tower"] = _shore_point(0.15, 7.5)
+		poi["seaplane"] = _shore_point(PI * 1.08, -1.5)
+		var gv := st + Vector3(12.0, 0, 9.0)
+		gv.y = height_at(gv.x, gv.z)
+		poi["graves"] = gv
+		for k in ["storm_tower", "seaplane", "graves"]:
+			poi_extra[k] = poi[k]
+		return
 	# старый лагерь Лёвы — на западе, в глубине джунглей
 	var oc := Vector3(-radius * 0.5, 0, radius * 0.08)
 	oc.y = height_at(oc.x, oc.z)
@@ -308,6 +321,16 @@ func _place_pois() -> void:
 	poi["lighthouse"] = best
 
 
+## Точка у берега под углом a: inland > 0 — столько метров вглубь суши от кромки, < 0 — в воду.
+func _shore_point(a: float, inland: float) -> Vector3:
+	var r := 15.0
+	while r < 95.0 and height_at(cos(a) * r, sin(a) * r) > 0.7:
+		r += 0.5
+	var p := Vector3(cos(a) * (r - inland), 0, sin(a) * (r - inland))
+	p.y = maxf(height_at(p.x, p.z), -0.4)
+	return p
+
+
 func _spawn_resources() -> void:
 	_place_pois()
 	var holder := Node3D.new()
@@ -328,10 +351,21 @@ func _spawn_resources() -> void:
 			fort.position = poi[id]
 			holder.add_child(fort)
 			continue
+		if id == "station":
+			var stn := StormStation.new()
+			stn.site = poi[id]
+			stn.position = Vector3(poi[id].x, 0, poi[id].z)
+			holder.add_child(stn)
+			poi_extra["timur"] = poi[id] + Vector3(-1.2, 0, 2.4)
+			continue
 		var sp := StoryPlace.new()
 		sp.id = id
 		sp.position = poi[id]
 		sp.rotation.y = rng.randf() * TAU
+		if id == "seaplane":
+			sp.rotation.y = atan2(poi[id].x, poi[id].z) + PI * 0.5
+		elif id == "storm_tower":
+			sp.rotation.y = 0.0
 		holder.add_child(sp)
 
 	var patch := FastNoiseLite.new()
@@ -353,10 +387,12 @@ func _spawn_resources() -> void:
 			var p2 := Vector2(x, z)
 			var dc := p2.distance_to(camp2)
 			var dw := p2.distance_to(wreck2)
-			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5}.get(mix, 5.0)):
+			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5, "storm": 10.5}.get(mix, 5.0)):
 				continue
 			var kind := ""
-			if dc < 9.5 or dw < 7.0:
+			if mix == "storm" and dc >= 9.5 and dw >= 7.0:
+				kind = _storm_kind(h, dc, roll, seed_v)
+			elif dc < 9.5 or dw < 7.0:
 				# стартовая полянка: только мелочь на песке
 				if h < 1.05 and roll < 0.12:
 					kind = ["pebble", "shell", "driftwood"][seed_v % 3]
@@ -416,6 +452,78 @@ func _spawn_resources() -> void:
 	if mix == "fort":
 		_spawn_stepa(holder)
 		_spawn_clay(holder)
+	if mix == "storm":
+		_spawn_scrap(holder)
+		_spawn_pits(holder, "sand", 6, "storm:sand_%d")
+
+
+## Грозовой остров: вереск и черника на холмах, кривые деревья, валуны; у вершины — камни.
+func _storm_kind(h: float, dc: float, roll: float, seed_v: int) -> String:
+	if h < 1.05:
+		if roll < 0.06: return "crooked_tree"
+		if roll < 0.14: return "tall_grass"
+		if roll < 0.22: return ["pebble", "shell", "driftwood"][seed_v % 3]
+		if roll < 0.25: return "rock"
+		return ""
+	if h > 8.0:
+		if roll < 0.3: return "rock"
+		if roll < 0.55: return "heather"
+		return ""
+	if dc < 17.0:
+		if roll < 0.3: return "heather"
+		if roll < 0.45: return "tall_grass"
+		if roll < 0.55: return "blueberry"
+		if roll < 0.62: return "bush"
+		if roll < 0.68: return "rock"
+		return ""
+	if roll < 0.14: return "crooked_tree"
+	if roll < 0.38: return "heather"
+	if roll < 0.48: return "blueberry"
+	if roll < 0.6: return "tall_grass"
+	if roll < 0.66: return "bush"
+	if roll < 0.74: return "rock"
+	if roll < 0.78: return "fallen_log"
+	return ""
+
+
+## Кучи ржавого железа — у станции (снаружи скал) и у самолёта в бухте. Железо со временем находится снова.
+func _spawn_scrap(holder: Node3D) -> void:
+	var k := 0
+	for spec in [["station", 12.5, 7], ["seaplane", 6.0, 7]]:
+		var c: Vector3 = poi[spec[0]]
+		var n: int = spec[2]
+		var rad: float = spec[1]
+		for i in n:
+			var a := TAU * i / n + 0.4
+			var p := c + Vector3(cos(a), 0, sin(a)) * rad
+			var h := height_at(p.x, p.z)
+			if h < 0.25:
+				continue
+			k += 1
+			_spawn(holder, "scrap_pile", Vector3(p.x, h - 0.03, p.z), 7000 + k, "storm:scrap_%d" % k, -100.0)
+
+
+## Ямы у воды недалеко от лагеря (песок на Грозовом) — восстанавливаются.
+func _spawn_pits(holder: Node3D, kind: String, want: int, uid_fmt: String) -> void:
+	var c := Vector2(camp_center.x, camp_center.z)
+	var placed: Array[Vector2] = []
+	var a0 := atan2(wreck_point.z, wreck_point.x)
+	for k in 400:
+		if placed.size() >= want:
+			break
+		var a := a0 + (k % 40 - 20) * 0.05
+		var r := 8.0 + (k / 40) * 2.5
+		var p := c + Vector2(cos(a), sin(a)) * r
+		var h := height_at(p.x, p.y)
+		if h < 0.3 or h > 1.0 or p.distance_to(Vector2(wreck_point.x, wreck_point.z)) < 5.0:
+			continue
+		var ok := true
+		for q in placed:
+			ok = ok and q.distance_to(p) > 3.5
+		if not ok:
+			continue
+		placed.append(p)
+		_spawn(holder, kind, Vector3(p.x, h - 0.03, p.y), 4000 + k, uid_fmt % placed.size(), -100.0)
 
 
 ## Глиняные ямы — ровно 6 штук на песке недалеко от лагеря (глина восстанавливается).
@@ -443,7 +551,7 @@ func _spawn_clay(holder: Node3D) -> void:
 
 ## Места для рыбалки — бурлящая вода у берега недалеко от лагеря.
 func _spawn_fishing_spots(holder: Node3D) -> void:
-	var want: int = {"fort": 4, "home": 2, "banyan": 2}.get(mix, 2)
+	var want: int = {"fort": 4, "home": 2, "banyan": 2, "storm": 3}.get(mix, 2)
 	var c := Vector2(camp_center.x, camp_center.z)
 	var placed: Array[Vector2] = []
 	var a0 := atan2(wreck_point.z, wreck_point.x)
@@ -497,6 +605,15 @@ func _spawn_stepa(holder: Node3D) -> void:
 	st.position = sp
 	holder.add_child(st)
 	poi_extra["stepa"] = sp
+	# бот боцмана лежит на берегу у хижины, кормой к воде (глава 4)
+	var bp := hp - side * 4.5 - to_camp.normalized() * 2.0
+	bp.y = maxf(height_at(bp.x, bp.z), 0.05)
+	var boat := StoryPlace.new()
+	boat.id = "stepa_boat"
+	boat.position = bp
+	boat.rotation.y = atan2(to_camp.x, to_camp.z)
+	holder.add_child(boat)
+	poi_extra["stepa_boat"] = bp
 
 
 var poi_extra: Dictionary = {}
@@ -511,12 +628,18 @@ func _near_poi(p2: Vector2, r: float) -> bool:
 
 
 ## Кольца преград вокруг сюжетных мест — без нужного инструмента не пройти.
+## [вид преграды, радиус кольца, сколько штук]
+const RINGS := {"old_camp": [["thicket", 5.4, 18], ["jungle_tree", 7.6, 17]],
+	"banyan_roots": [["liana_curtain", 11.5, 28], ["thicket", 13.2, 30]],
+	"lifeboat": [["cliff", 6.0, 10]],
+	"lighthouse": [["cliff", 6.2, 11]],
+	"station": [["cliff", 9.4, 17]],
+	"storm_tower": [["rockfall", 5.2, 12]]}
+
+
 func _barrier_rings(holder: Node3D) -> void:
 	# шаг по кольцу меньше диаметра преграды + игрока — щелей нет
-	var specs_all := {"old_camp": [["thicket", 5.4, 18], ["jungle_tree", 7.6, 17]],
-		"banyan_roots": [["liana_curtain", 11.5, 28], ["thicket", 13.2, 30]],
-		"lifeboat": [["cliff", 6.0, 10]],
-		"lighthouse": [["cliff", 6.2, 11]]}
+	var specs_all := RINGS
 	for id in specs_all:
 		if not poi.has(id):
 			continue
@@ -531,7 +654,7 @@ func _barrier_rings(holder: Node3D) -> void:
 				var a := TAU * i / cnt + (0.15 if kind == "jungle_tree" else 0.0)
 				var pos := c + Vector3(cos(a) * rad, 0, sin(a) * rad)
 				pos.y = height_at(pos.x, pos.z) - 0.05
-				var yaw := -a + PI / 2 if kind in ["cliff", "liana_curtain"] else -100.0
+				var yaw := -a + PI / 2 if kind in ["cliff", "liana_curtain", "rockfall"] else -100.0
 				_spawn(holder, kind, pos, k * 7919 + i, "%s:r_%s_%d" % [loc, id, k], yaw)
 
 

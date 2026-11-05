@@ -217,7 +217,9 @@ func _physics_process(delta: float) -> void:
 		return
 	_find_climb()
 	if near_climb and controls_enabled and Input.is_action_just_pressed("jump"):
-		if not Game.has_tool("climbing_gloves"):
+		if not near_climb.ladder and Game.storm_active():
+			Game.notified.emit("В грозу лианы и скалы мокрые — соскользнёшь. Переждите грозу", Color("ff9d7a"))
+		elif not near_climb.ladder and not Game.has_tool("climbing_gloves"):
 			Game.notified.emit("Голыми руками по лиане не залезть — нужны перчатки лазальщика", Color("ff9d7a"))
 		elif stamina < 10.0:
 			Game.notified.emit("Нет сил. Отдохни или поешь (Q)", Color("ff9d7a"))
@@ -307,8 +309,11 @@ func _update_camera(delta: float) -> void:
 	# плавное следование, одинаковое при любом FPS (экспоненциальное сглаживание)
 	cam_rig.global_position = cam_rig.global_position.lerp(global_position + Vector3(0, 1.4, 0), 1.0 - exp(-11.0 * delta))
 	cam_rig.rotation.y = camera_yaw
-	cam_pitch_node.rotation.x = camera_pitch
-	spring.spring_length = lerpf(spring.spring_length, camera_distance, 1.0 - exp(-8.0 * delta))
+	# в бункере потолок низкий: камера ближе и почти на уровне глаз, чтобы не упираться в ярус выше
+	var indoor := global_position.y < -8.0
+	cam_pitch_node.rotation.x = clampf(camera_pitch, -0.32, 0.35) if indoor else camera_pitch
+	var want_dist := minf(camera_distance, 4.2) if indoor else camera_distance
+	spring.spring_length = lerpf(spring.spring_length, want_dist, 1.0 - exp(-8.0 * delta))
 	# тряска: шум Перлина, сила = trauma², затухает сама
 	_shake_t += delta * 28.0
 	var k := trauma * trauma
@@ -423,7 +428,7 @@ func _climb(delta: float) -> void:
 	var up := 0.0
 	if controls_enabled:
 		up = Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
-	stamina -= (9.0 if abs(up) > 0.1 else 2.5) * delta
+	stamina -= (9.0 if abs(up) > 0.1 else 2.5) * delta * (0.35 if climbing.ladder else 1.0)
 	var y := global_position.y + up * CLIMB_SPEED * delta
 	global_position = Vector3(b.x, 0, b.z) + _climb_side * 0.45 + Vector3(0, y, 0)
 	model.rotation.y = lerp_angle(model.rotation.y, atan2(_climb_side.x, _climb_side.z), 10.0 * delta)
@@ -470,7 +475,7 @@ func _find_target() -> void:
 		var reach := INTERACT_RANGE
 		if n is Building and n.id in ["hut", "goat_pen", "coop", "tent"]:
 			reach = 3.2
-		if n is ResourceNode and n.kind in ["rock", "jungle_tree", "cliff", "fallen_log", "thicket", "bamboo"]:
+		if n is ResourceNode and n.kind in ["rock", "jungle_tree", "cliff", "fallen_log", "thicket", "bamboo", "crooked_tree", "rockfall"]:
 			reach = 3.4
 		if n is StoryPlace:
 			reach = 3.6
@@ -499,8 +504,10 @@ func try_interact() -> void:
 
 func get_hint() -> String:
 	if climbing:
-		return "W — вверх,  S — вниз,  Пробел — спрыгнуть,  Q — поесть"
+		return "W — вверх,  S — вниз,  Пробел — спрыгнуть" + ("" if climbing.ladder else ",  Q — поесть")
 	if near_climb and (target == null or not is_instance_valid(target)):
+		if near_climb.ladder:
+			return "[Пробел]  Лезть по лестнице"
 		return "[Пробел]  Лезть по лиане" if Game.has_tool("climbing_gloves") else "Лиана (нужны перчатки лазальщика)"
 	if target == null or not is_instance_valid(target):
 		return ""
