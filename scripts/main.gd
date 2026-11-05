@@ -7,6 +7,8 @@ var hud: HUD
 var build: BuildSystem
 var buildings_root: Node3D
 var critters: Critters
+var guide: QuestGuide
+var map: MapScreen
 var parrot: NPCParrot
 var env: Environment
 var sky_mat: ProceduralSkyMaterial
@@ -77,6 +79,15 @@ func _ready() -> void:
 	hud.panels_changed.connect(_on_panels_changed)
 	Audio.listener = player
 	Audio.island = island
+
+	guide = QuestGuide.new()
+	guide.name = "QuestGuide"
+	add_child(guide)
+	guide.setup(hud, player)
+	map = MapScreen.new()
+	map.name = "Map"
+	add_child(map)
+	map.setup(hud, island, player, guide)
 
 	menu = GameMenu.new()
 	menu.hud = hud
@@ -192,10 +203,7 @@ func _spawn_story_objects() -> void:
 	# ящик неподалёку
 	var crate := SupplyCrate.new()
 	add_child(crate)
-	var side := Vector3(cos(wreck.rotation.y), 0, -sin(wreck.rotation.y))
-	var cp := w + side * 4.0 + to_camp.normalized() * 1.0
-	cp.y = island.height_at(cp.x, cp.z)
-	crate.position = cp
+	crate.position = island.crate_point   # место заранее освобождено от зарослей
 	crate.rotation.y = 0.4
 
 
@@ -390,7 +398,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	var toggles := {"craft_menu": hud.craft_panel, "build_menu": hud.build_panel, "inventory": hud.inv_panel,
-		"collections": hud.col_panel, "journal": hud.journal_panel, "help": hud.help_panel}
+		"collections": hud.col_panel, "journal": hud.journal_panel, "help": hud.help_panel, "map": map.panel}
 	for action in toggles:
 		if event.is_action_pressed(action):
 			var p: PanelContainer = toggles[action]
@@ -406,6 +414,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					"collections": hud.open_collections()
 					"journal": hud.open_journal()
 					"help": hud.show_help()
+					"map": map.open()
 			get_viewport().set_input_as_handled()
 			return
 	if event.is_action_pressed("save"):
@@ -499,7 +508,7 @@ func _save() -> void:
 		list.append({"id": b.id, "v": b.variant, "x": b.global_position.x, "y": b.global_position.y,
 			"z": b.global_position.z, "rot": b.rotation.y, "s": b.get_state()})
 	var p := player.global_position
-	Game.save_game({"buildings": list, "player": [p.x, p.y, p.z]})
+	Game.save_game({"buildings": list, "player": [p.x, p.y, p.z], "explored": map.to_save()})
 
 
 func _load() -> bool:
@@ -510,6 +519,7 @@ func _load() -> bool:
 	for b in data.get("buildings", []):
 		var node := build.spawn_building(b["id"], Vector3(b["x"], b["y"], b["z"]), b["rot"], b.get("v", ""), b.get("s", {}))
 		_connect_building(node)
+	map.from_save(str(data.get("explored", "")))
 	var p: Array = data.get("player", [])
 	if p.size() == 3:
 		player.global_position = Vector3(p[0], p[1] + 0.3, p[2])

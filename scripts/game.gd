@@ -367,6 +367,24 @@ func task_progress(task: Dictionary) -> int:
 	return p
 
 
+## Невыполненные пункты текущего задания в виде ключей «вид:цель» (для компаса, меток и карты).
+## Для «отдай» добавляется ещё и «give:<кому>».
+func pending_keys() -> Array[String]:
+	var out: Array[String] = []
+	var q := current_quest()
+	if q.is_empty() or not quest_started:
+		return out
+	for t in q["tasks"]:
+		if task_progress(t) >= t["count"]:
+			continue
+		if t.has("where") and t["where"] != location:
+			continue
+		out.append(str(t["kind"]) + ":" + str(t["target"]))
+		if t.has("to"):
+			out.append("give:" + str(t["to"]))
+	return out
+
+
 func quest_done(q: Dictionary) -> bool:
 	for t in q["tasks"]:
 		if task_progress(t) < t["count"]:
@@ -531,7 +549,7 @@ func _setup_input() -> void:
 		"jump": [KEY_SPACE], "sprint": [KEY_SHIFT], "interact": [KEY_E],
 		"craft_menu": [KEY_C], "build_menu": [KEY_B], "rotate_build": [KEY_R],
 		"inventory": [KEY_TAB, KEY_I], "journal": [KEY_J], "collections": [KEY_K],
-		"help": [KEY_F1, KEY_H], "save": [KEY_F5], "load": [KEY_F9], "eat": [KEY_Q],
+		"help": [KEY_F1, KEY_H], "save": [KEY_F5], "load": [KEY_F9], "eat": [KEY_Q], "map": [KEY_M],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):

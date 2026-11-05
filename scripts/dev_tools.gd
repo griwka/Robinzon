@@ -18,6 +18,8 @@ func _ready() -> void:
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	if args.has("autotest"):
 		_autotest.call_deferred()
+	if args.has("layout"):
+		_layout_only.call_deferred()
 	if args.has("validate"):
 		_validate_only.call_deferred()
 
@@ -66,6 +68,15 @@ func _process(_delta: float) -> void:
 			_flush()
 		if args.has("gallery"):
 			_gallery(args["gallery"].split(","))
+		if args.has("overview"):
+			_overview()
+		if args.has("mapshot"):
+			# карта острова картинкой — без 3D, работает и в --headless
+			var img: Image = main.map.render_image(args.get("fog", "0") == "1")
+			img.resize(img.get_width() * 3, img.get_height() * 3, Image.INTERPOLATE_NEAREST)
+			img.save_png(args["mapshot"])
+			print("map saved: ", args["mapshot"])
+			get_tree().quit()
 	if args.has("time"):
 		Game.time_of_day = float(args["time"])
 	if args.has("demo") and _frames > 2 and _frames < 6:
@@ -95,6 +106,9 @@ func _process(_delta: float) -> void:
 				Game.inventory["coins"] = 47
 				main.hud._shop_tab = args.get("tab", "buy")
 				main.hud.open_shop("marta")
+			"map":
+				main.map.reveal(main.player.global_position, float(args.get("reveal", "40")))
+				main.map.open()
 			"settings":
 				main._pause()
 				main.menu.open_settings(main.menu.show_pause)
@@ -139,6 +153,29 @@ func _gallery(names: PackedStringArray) -> void:
 	p.camera_yaw = 0.0
 	p.controls_enabled = false
 	main.hud.visible = false
+
+
+# ------------------------------------------------------------------ Вид сверху
+## --overview — весь остров сверху (ортографическая камера), чтобы проверить расстановку.
+## --overview=N — квадрат N метров вокруг героя (с --at= или --near=).
+func _overview() -> void:
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	var isl: Island = main.island
+	var span: float = float(args["overview"]) if args["overview"] != "1" else isl.radius * 2.7
+	cam.size = span
+	cam.far = 400.0
+	main.add_child(cam)
+	var pl: Player = main.player
+	var c: Vector3 = Vector3.ZERO if args["overview"] == "1" else pl.global_position
+	cam.global_position = Vector3(c.x, 120.0, c.z)
+	cam.rotation = Vector3(-PI / 2, 0, 0)
+	cam.current = true
+	main.hud.visible = false
+	main.player.controls_enabled = false
+	# дальние объекты не прячем: смотрим на весь остров сразу
+	for gi in main.island.find_children("*", "GeometryInstance3D", true, false):
+		(gi as GeometryInstance3D).visibility_range_end = 0.0
 
 
 # ------------------------------------------------------------------ Демо-лагерь
@@ -350,6 +387,131 @@ func _test_climb() -> void:
 	_check(p.climbing == null and p.global_position.y > c.world_top().y - 1.5, "лазание доводит до яруса (высота %.1f м за %.1f c)" % [p.global_position.y - b.y, steps / 60.0])
 	_check(p.stamina < start_stamina - 10.0, "подъём тратит силы (%d → %d)" % [start_stamina, p.stamina])
 	Game.inventory.erase("climbing_gloves")
+
+
+# ------------------------------------------------------------------ Расстановка
+## Круг, который объект занимает на земле: [центр, радиус, описание] (или пусто — не мешает).
+func _footprint(n: Node) -> Array:
+	var p := (n as Node3D).global_position
+	var c := Vector2(p.x, p.z)
+	if n is ResourceNode:
+		var r := n as ResourceNode
+		if not r.active or r.collision_layer != 2:
+			return []
+		var cfg: Dictionary = ResourceNode.KINDS[r.kind]
+		return [c, maxf(float(cfg["radius"]), float(cfg.get("long", 0.0)) * 0.7), r.kind]
+	if n is FruitTree and n.wild:
+		return [c, 0.6, "wild_" + n.tree_type]
+	if n is StoryPlace and float(StoryPlace.PLACES[n.id]["radius"]) > 0.0:
+		return [c, float(StoryPlace.PLACES[n.id]["radius"]), n.id]
+	if n is NPCPerson:
+		return [c, 0.5, "npc_" + n.npc_id]
+	if n is SupplyCrate:
+		return [c, 0.6, "crate"]
+	return []
+
+
+## Проверка расстановки: объекты не налезают друг на друга и на важные места, не стоят в воде,
+## к жителям, ящику, глине и рыбалке можно подойти. Возвращает число проблем (и печатает их).
+func _layout_problems(verbose := true) -> int:
+	var isl: Island = main.island
+	var items: Array = []
+	var seen := {}
+	for g in ["obstacle", "interactable"]:
+		for n in get_tree().get_nodes_in_group(g):
+			if seen.has(n):
+				continue
+			seen[n] = true
+			var f := _footprint(n)
+			if not f.is_empty():
+				items.append(f)
+	for e in isl.reserved:
+		items.append([e[0], e[1], "место:" + str(e[2])])
+	var problems := 0
+	var cell := 4.0
+	var grid := {}
+	for i in items.size():
+		var k := Vector2i(int(floor(items[i][0].x / cell)), int(floor(items[i][0].y / cell)))
+		if not grid.has(k):
+			grid[k] = []
+		grid[k].append(i)
+	var overl := {}
+	for i in items.size():
+		var a: Array = items[i]
+		var k := Vector2i(int(floor(a[0].x / cell)), int(floor(a[0].y / cell)))
+		for dx in [-1, 0, 1]:
+			for dz in [-1, 0, 1]:
+				for j in grid.get(k + Vector2i(dx, dz), []):
+					if j <= i:
+						continue
+					var b: Array = items[j]
+					if str(a[2]).begins_with("место:") and str(b[2]).begins_with("место:"):
+						continue
+					var d: float = a[0].distance_to(b[0])
+					if d < 0.3 and (str(a[2]).begins_with("место:") or str(b[2]).begins_with("место:")):
+						continue   # сам объект на своём месте
+					# мелкая трава может касаться соседей, крупное — нет
+					var small: bool = a[2] in Island.SMALL_KINDS or b[2] in Island.SMALL_KINDS
+					if d < (a[1] + b[1]) * (0.5 if small else 0.75):
+						var key := "%s + %s" % [a[2], b[2]] if str(a[2]) < str(b[2]) else "%s + %s" % [b[2], a[2]]
+						overl[key] = overl.get(key, 0) + 1
+						problems += 1
+	if verbose:
+		for key in overl:
+			print("      наложение: %s ×%d" % [key, overl[key]])
+	var wet := 0
+	for n in get_tree().get_nodes_in_group("obstacle"):
+		if n is ResourceNode and n.active and not (n.kind in ["shell", "pebble", "driftwood"]):
+			var p: Vector3 = n.global_position
+			if isl.height_at(p.x, p.z) < 0.12:
+				wet += 1
+	if verbose and wet > 0:
+		print("      в воде: %d" % wet)
+	problems += wet
+	# подходы: вокруг важных мест должна быть свободная точка
+	var blockers: Array = []
+	for f in items:
+		if not str(f[2]).begins_with("место:"):
+			blockers.append(f)
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if not (n is NPCPerson or n is SupplyCrate or n is FishingSpot or (n is ResourceNode and n.kind == "clay")):
+			continue
+		var p: Vector3 = (n as Node3D).global_position
+		var c := Vector2(p.x, p.z)
+		var free := false
+		for s in 16:
+			var a := TAU * s / 16.0
+			var q := c + Vector2(cos(a), sin(a)) * (2.4 if n is FishingSpot else 1.3)
+			if isl.height_at(q.x, q.y) < -0.8:
+				continue
+			var ok := true
+			for f in blockers:
+				if f[0] != c and q.distance_to(f[0]) < f[1] + 0.35:
+					ok = false
+					break
+			free = free or ok
+		if not free:
+			problems += 1
+			if verbose:
+				print("      не подойти: %s" % QuestGuide.name_of(n))
+	return problems
+
+
+func _layout_only() -> void:
+	print("=== LAYOUT %s ===" % Game.location)
+	var isl: Island = main.island
+	print("      лагерь %s, берег %s, герой %s" % [isl.camp_center, isl.wreck_point, isl.spawn_point])
+	await get_tree().process_frame
+	var n := _layout_problems(true)
+	var kinds := {}
+	for r in get_tree().get_nodes_in_group("obstacle"):
+		if r is ResourceNode:
+			kinds[r.kind] = kinds.get(r.kind, 0) + 1
+		elif r is FruitTree:
+			kinds["wild_" + r.tree_type] = kinds.get("wild_" + r.tree_type, 0) + 1
+	print("      состав: ", kinds)
+	print("=== %d проблем ===" % n)
+	get_tree().quit(0)
 
 
 # ------------------------------------------------------------------ Проходимость
@@ -670,6 +832,10 @@ func _autotest() -> void:
 		if poi_id == "fort":
 			continue   # форт закрыт стенами, а не зарослями — проверяется отдельно (_test_fort)
 		_check(not _reachable(poi_id), "к месту «%s» не пройти без инструментов" % poi_id)
+	_check(_layout_problems(false) == 0, "заросли не налезают друг на друга и на особые места, к жителям и ящикам можно подойти")
+	var guide: QuestGuide = main.guide
+	guide._find_target()
+	_check(guide.has_target(), "компас задания находит цель (%s)" % guide.target_name)
 
 	var ch := int(args.get("chapter", "1")) - 1
 	if ch == 0:
@@ -716,6 +882,7 @@ func _autotest() -> void:
 		_check(Game.chapter == ch + 1 and not nq.is_empty() and nq["id"] == Data.CHAPTERS[ch + 1]["quests"][0]["id"],
 			"после главы %d сразу начинается глава %d («%s»)" % [ch + 1, ch + 2, nq.get("title", "—")])
 	if ch > 0:
+		Game.delete_save()
 		print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
 		get_tree().quit(0 if fails.is_empty() else 1)
 		return

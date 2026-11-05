@@ -44,6 +44,9 @@ var climbing: Climbable = null
 var near_climb: Climbable = null
 var _climb_side := Vector3.FORWARD
 var _climb_phase := 0.0
+var _ring: MeshInstance3D       # кольцо на земле вокруг объекта, с которым сейчас взаимодействуем
+var _ring_mat: StandardMaterial3D
+var _ring_t := 0.0
 
 
 func _ready() -> void:
@@ -61,6 +64,7 @@ func _ready() -> void:
 	floor_max_angle = deg_to_rad(50)
 	_build_model()
 	_build_camera()
+	_build_ring()
 	Game.inventory_changed.connect(_update_tool)
 	_update_tool()
 
@@ -201,6 +205,7 @@ func _physics_process(delta: float) -> void:
 		var v := Game.eat_best_food()
 		stamina = minf(STAMINA_MAX, stamina + v * 2.0)
 	if climbing:
+		_ring.visible = false
 		_climb(delta)
 		return
 	_find_climb()
@@ -266,6 +271,7 @@ func _physics_process(delta: float) -> void:
 	_animate(delta, flat.length())
 	_update_camera(delta)
 	_find_target()
+	_update_ring(delta)
 
 	if controls_enabled and can_interact:
 		var pressed := Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("interact")
@@ -419,6 +425,76 @@ func _find_target() -> void:
 	if best != target:
 		target = best
 		_update_tool()
+
+
+# ------------------------------------------------------------------ Подсветка цели
+func _build_ring() -> void:
+	_ring = MeshInstance3D.new()
+	_ring.name = "TargetRing"
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.84
+	tm.outer_radius = 1.0
+	tm.rings = 40
+	tm.ring_segments = 6
+	_ring.mesh = tm
+	_ring_mat = StandardMaterial3D.new()
+	_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_ring_mat.albedo_color = Color(1.0, 0.93, 0.55, 0.9)
+	_ring_mat.render_priority = 1
+	_ring.material_override = _ring_mat
+	_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_ring.top_level = true
+	_ring.visible = false
+	add_child(_ring)
+
+
+## Радиус кольца под объектом — по его размеру.
+func _ring_radius(n: Node) -> float:
+	if n is ResourceNode:
+		var cfg: Dictionary = ResourceNode.KINDS[n.kind]
+		return maxf(float(cfg["radius"]), float(cfg.get("long", 0.0)) * 0.8) + 0.3
+	if n is StoryPlace:
+		return maxf(float(StoryPlace.PLACES[n.id]["radius"]) + 0.5, 0.8)
+	if n is Building:
+		return maxf(float(Data.BUILDINGS[n.id]["radius"]) * 0.9, 0.6)
+	return 0.6
+
+
+## Можно ли прямо сейчас что-то сделать с объектом (иначе кольцо красноватое).
+func _target_ready(n: Node) -> bool:
+	if n is ResourceNode:
+		var tool: String = ResourceNode.KINDS[n.kind]["tool"]
+		if n.kind == "palm" and not Game.has_tool("stone_axe"):
+			return n.coconut_ready
+		return tool == "" or Game.has_tool(tool)
+	if n is StoryPlace:
+		var cfg: Dictionary = StoryPlace.PLACES[n.id]
+		if cfg.has("needs_flag") and not Game.flags.get(cfg["needs_flag"], false):
+			return false
+		if cfg.has("needs") and not Game.flags.get("poi_" + n.id, false) and Game.count(cfg["needs"]) == 0:
+			return false
+	return true
+
+
+func _update_ring(delta: float) -> void:
+	var show := target != null and is_instance_valid(target) and controls_enabled and can_interact
+	_ring.visible = show
+	if not show:
+		return
+	var t := target as Node3D
+	var p := t.global_position
+	if t is NPCParrot:
+		# попугай сидит на мачте — кольцо на земле под ним
+		var isl := get_tree().get_first_node_in_group("island")
+		if isl:
+			p.y = isl.height_at(p.x, p.z)
+	_ring_t += delta
+	var r := _ring_radius(t) * (1.0 + 0.05 * sin(_ring_t * 5.0))
+	_ring.global_position = p + Vector3(0, 0.07, 0)
+	_ring.scale = Vector3(r, 0.12, r)
+	var ok := _target_ready(t)
+	_ring_mat.albedo_color = Color(1.0, 0.93, 0.55, 0.9) if ok else Color(1.0, 0.5, 0.42, 0.85)
 
 
 func try_interact() -> void:

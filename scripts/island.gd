@@ -325,9 +325,24 @@ func _spawn_resources() -> void:
 		sp.rotation.y = rng.randf() * TAU
 		holder.add_child(sp)
 
+	# сначала — всё, что стоит на своих местах: кольца преград, причал, хижина, глина, ящик.
+	# Заросли растут потом и только там, где свободно (порядок случайных чисел прежний — сохранения не ломаются).
+	_reserve_places()
+	_barrier_rings(holder)
+	if mix == "fort":
+		_spawn_stepa(holder)
+		_spawn_clay(holder)
+
 	var patch := FastNoiseLite.new()
 	patch.seed = seed_value + 5
 	patch.frequency = 0.045
+	# пальмовые рощи на пляже и солнечные поляны в чаще — чтобы лес не был ровной сеткой
+	var grove := FastNoiseLite.new()
+	grove.seed = seed_value + 11
+	grove.frequency = 0.07
+	var glade := FastNoiseLite.new()
+	glade.seed = seed_value + 13
+	glade.frequency = 0.055
 	var camp2 := Vector2(camp_center.x, camp_center.z)
 	var wreck2 := Vector2(wreck_point.x, wreck_point.z)
 	var step := 2.25
@@ -352,12 +367,13 @@ func _spawn_resources() -> void:
 				if h < 1.05 and roll < 0.12:
 					kind = ["pebble", "shell", "driftwood"][seed_v % 3]
 			elif h < 1.05:
-				# пляж: пальмы, дюнная трава, дары моря
-				if roll < 0.13: kind = "palm"
-				elif roll < 0.2: kind = "tall_grass"
-				elif roll < 0.27: kind = ["pebble", "shell"][seed_v % 2]
-				elif roll < 0.31: kind = "driftwood"
-				elif roll < 0.33: kind = "rock"
+				# пляж: пальмы рощицами, дюнная трава, дары моря у воды
+				var palms := 0.04 + 0.3 * clampf(grove.get_noise_2d(x, z) * 2.0, 0.0, 1.0)
+				if roll < palms: kind = "palm"
+				elif roll < palms + 0.07: kind = "tall_grass" if h > 0.5 else "driftwood"
+				elif roll < palms + 0.15: kind = ["pebble", "shell"][seed_v % 2]
+				elif roll < palms + 0.18: kind = "driftwood"
+				elif roll < palms + 0.2: kind = "rock"
 			elif h > 9.0:
 				if roll < 0.25: kind = "rock"
 				elif roll < 0.55: kind = "tall_grass"
@@ -369,6 +385,12 @@ func _spawn_resources() -> void:
 				elif roll < 0.8: kind = "thicket"
 				elif roll < 0.88: kind = "palm"
 				elif roll < 0.92: kind = "banana"
+			elif glade.get_noise_2d(x, z) > 0.4:
+				# поляна в чаще: светло, трава по пояс, цветы и фруктовые деревья
+				if roll < 0.3: kind = "tall_grass"
+				elif roll < 0.42: kind = "fern"
+				elif roll < 0.47: kind = "banana" if seed_v % 2 == 0 else "mango"
+				elif roll < 0.53: kind = "bush"
 			elif mix == "banyan":
 				# остров Баньяна: чаще великаны, папоротники, завесы лиан и фруктовые деревья
 				if roll < 0.18: kind = "jungle_tree"
@@ -398,15 +420,73 @@ func _spawn_resources() -> void:
 				elif roll < 0.9: kind = "rock"
 			_uid += 1
 			if kind == "":
-				if h > 1.1 and roll > 0.94 and dc > 9.5:
+				var flowers := 0.94 if glade.get_noise_2d(x, z) < 0.4 else 0.75
+				if h > 1.1 and roll > flowers and dc > 9.5 and _is_free(p2, 0.8, 0.5):
 					_add_decor(decor, "flower_patch", Vector3(x, h - 0.03, z), seed_v)
 				continue
+			# не ставим одно в другое: стволы, камни и кусты не налезают друг на друга и на особые места
+			var fr := footprint(kind)
+			if not _is_free(p2, fr, 0.55 if kind in SMALL_KINDS else 0.85):
+				continue
+			_occupy(p2, fr)
 			_spawn(holder, kind, Vector3(x, h - 0.05, z), seed_v, ("j%d" if loc == "home" else loc + ":j%d") % _uid, -100.0)
-	_barrier_rings(holder)
 	_spawn_fishing_spots(holder)
-	if mix == "fort":
-		_spawn_stepa(holder)
-		_spawn_clay(holder)
+
+
+# ------------------------------------------------------------------ Занятые места
+const SMALL_KINDS := ["tall_grass", "fern", "bush", "pebble", "shell", "driftwood"]
+const OCC_CELL := 3.0
+var _occ: Dictionary = {}   # Vector2i -> [[центр, радиус], ...]
+var crate_point := Vector3.ZERO   # ящик с «Альбатроса» на острове крушения
+
+
+## Сколько места на земле занимает заросль/ресурс.
+static func footprint(kind: String) -> float:
+	if kind in ["banana", "mango"]:
+		return 0.7
+	var cfg: Dictionary = ResourceNode.KINDS[kind]
+	return maxf(float(cfg["radius"]), float(cfg.get("long", 0.0)) * 0.75)
+
+
+func _occupy(p: Vector2, r: float) -> void:
+	var k := Vector2i(int(floor(p.x / OCC_CELL)), int(floor(p.y / OCC_CELL)))
+	if not _occ.has(k):
+		_occ[k] = []
+	_occ[k].append([p, r])
+
+
+## Свободно ли место: ни с чем уже стоящим круги не пересекаются больше, чем на (1 - k).
+func _is_free(p: Vector2, r: float, k: float) -> bool:
+	var c := Vector2i(int(floor(p.x / OCC_CELL)), int(floor(p.y / OCC_CELL)))
+	var reach := int(ceil((r + 3.0) / OCC_CELL))
+	for dz in range(-reach, reach + 1):
+		for dx in range(-reach, reach + 1):
+			for e in _occ.get(c + Vector2i(dx, dz), []):
+				if p.distance_to(e[0]) < (r + float(e[1])) * k:
+					return false
+	return true
+
+
+func _reserve(p: Vector3, r: float, what: String) -> void:
+	var p2 := Vector2(p.x, p.z)
+	reserved.append([p2, r, what])
+	_occupy(p2, r)
+
+
+## Места, где ничего не должно расти: обломки, ящик, причал, хижина Стёпы, глиняные ямы.
+func _reserve_places() -> void:
+	var to_camp := camp_center - wreck_point
+	to_camp.y = 0
+	if loc == "home":
+		_reserve(wreck_point, 2.6, "обломки «Чайки»")
+		# ящик — сбоку от обломков (там же его ставит main.gd)
+		var yaw := atan2(to_camp.x, to_camp.z) + PI / 2
+		var side := Vector3(cos(yaw), 0, -sin(yaw))
+		crate_point = wreck_point + side * 4.0 + to_camp.normalized() * 1.0
+		crate_point.y = height_at(crate_point.x, crate_point.z)
+		_reserve(crate_point, 1.3, "ящик")
+	else:
+		_reserve(wreck_point, 2.8, "причал")
 
 
 ## Глиняные ямы — ровно 6 штук на песке недалеко от лагеря (глина восстанавливается).
@@ -429,6 +509,7 @@ func _spawn_clay(holder: Node3D) -> void:
 		if not ok:
 			continue
 		placed.append(p)
+		_reserve(Vector3(p.x, h, p.y), 1.1, "глина")
 		_spawn(holder, "clay", Vector3(p.x, h - 0.03, p.y), 4000 + k, "fort:clay_%d" % placed.size(), -100.0)
 
 
@@ -467,6 +548,8 @@ func _spawn_stepa(holder: Node3D) -> void:
 	var side := Vector3(-to_camp.z, 0, to_camp.x).normalized()
 	var hp := wreck_point + side * 9.0 + to_camp.normalized() * 3.0
 	hp.y = height_at(hp.x, hp.z)
+	_reserve(hp, 2.4, "хижина Стёпы")
+	_reserve(hp + to_camp.normalized() * 2.6, 1.3, "Стёпа")
 	var hut := Models.glb("fisher_hut")
 	if hut:
 		hut.position = hp
@@ -491,6 +574,7 @@ func _spawn_stepa(holder: Node3D) -> void:
 
 
 var poi_extra: Dictionary = {}
+var reserved: Array = []   # [центр Vector2, радиус, что там] — места, где не растут заросли
 
 
 func _near_poi(p2: Vector2, r: float) -> bool:
@@ -523,6 +607,7 @@ func _barrier_rings(holder: Node3D) -> void:
 				var pos := c + Vector3(cos(a) * rad, 0, sin(a) * rad)
 				pos.y = height_at(pos.x, pos.z) - 0.05
 				var yaw := -a + PI / 2 if kind in ["cliff", "liana_curtain"] else -100.0
+				_occupy(Vector2(pos.x, pos.z), footprint(kind))
 				_spawn(holder, kind, pos, k * 7919 + i, "%s:r_%s_%d" % [loc, id, k], yaw)
 
 

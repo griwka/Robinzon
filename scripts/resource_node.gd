@@ -130,7 +130,21 @@ func get_hint() -> String:
 		return "Потрясти пальму (листья и кокосы)" if coconut_ready else "Кокосы ещё не выросли. Нужен топор, чтобы рубить"
 	if cfg["tool"] != "" and not Game.has_tool(cfg["tool"]):
 		return "%s — нужен инструмент: %s" % [cfg["verb"], Game.item_name(cfg["tool"])]
+	var max_hp: int = cfg["hp"]
+	if max_hp > 1:
+		# сколько ещё ударов — чтобы было видно, что дело движется
+		return "%s  (ещё %s)" % [cfg["verb"], hits_text(hp)]
 	return cfg["verb"]
+
+
+static func hits_text(n: int) -> String:
+	var m10 := n % 10
+	var m100 := n % 100
+	if m10 == 1 and m100 != 11:
+		return "%d удар" % n
+	if m10 >= 2 and m10 <= 4 and (m100 < 12 or m100 > 14):
+		return "%d удара" % n
+	return "%d ударов" % n
 
 
 func interact(player: Node) -> void:
