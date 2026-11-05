@@ -139,6 +139,55 @@ func _demo() -> void:
 	main.player.cam_rig.global_position = main.player.global_position
 
 
+# ------------------------------------------------------------------ Проходимость
+## Заливка по сетке от внешнего края кольца к сюжетному месту: можно ли дойти, ничего не расчищая.
+func _reachable(poi_id: String) -> bool:
+	var isl: Island = main.island
+	var c: Vector3 = isl.poi[poi_id]
+	var R := 11.0
+	var cell := 0.4
+	var blockers := []
+	for n in get_tree().get_nodes_in_group("obstacle"):
+		if n is ResourceNode and n.collision_layer == 2:
+			var cfg: Dictionary = ResourceNode.KINDS[n.kind]
+			var p: Vector3 = n.global_position
+			if Vector2(p.x - c.x, p.z - c.z).length() < R + 3.0:
+				blockers.append([Vector2(p.x, p.z), cfg["radius"], cfg.get("long", 0.0), n.visual.rotation.y])
+	var size := int(R * 2 / cell)
+	var blocked := func(x: float, z: float) -> bool:
+		if isl.height_at(x, z) < -0.9:
+			return true
+		var q := Vector2(x, z)
+		for b in blockers:
+			var d: Vector2 = q - b[0]
+			if b[2] > 0.0:
+				var local := d.rotated(b[3])
+				if abs(local.x) < b[2] + 0.3 and abs(local.y) < b[1] * 0.8 + 0.3:
+					return true
+			elif d.length() < b[1] + 0.3:
+				return true
+		return false
+	var seen := {}
+	var queue := []
+	for i in size:
+		for edge in [Vector2i(i, 0), Vector2i(i, size - 1), Vector2i(0, i), Vector2i(size - 1, i)]:
+			queue.append(edge)
+	while not queue.is_empty():
+		var g: Vector2i = queue.pop_back()
+		if seen.has(g) or g.x < 0 or g.y < 0 or g.x >= size or g.y >= size:
+			continue
+		seen[g] = true
+		var x := c.x - R + g.x * cell
+		var z := c.z - R + g.y * cell
+		if blocked.call(x, z):
+			continue
+		if Vector2(x - c.x, z - c.z).length() < 2.5:
+			return true
+		for dlt in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			queue.append(g + dlt)
+	return false
+
+
 # ------------------------------------------------------------------ Автотест
 var fails := []
 
@@ -328,6 +377,8 @@ func _autotest() -> void:
 	_check(p.global_position.y > 0.0, "игрок появился на суше")
 	_check(get_tree().get_nodes_in_group("interactable").size() > 150, "на острове есть ресурсы и живность")
 	_check(Game.quest_started and Game.current_quest()["id"] == "wake", "первое задание началось")
+	for poi_id in ["old_camp", "lifeboat", "lighthouse"]:
+		_check(not _reachable(poi_id), "к месту «%s» не пройти без инструментов" % poi_id)
 
 	# проходим главу 1 целиком
 	var qs: Array = Data.CHAPTERS[0]["quests"]

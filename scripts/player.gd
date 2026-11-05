@@ -146,7 +146,7 @@ func _update_tool() -> void:
 	for c in hand_tool.get_children():
 		c.queue_free()
 	var want := ""
-	if target and target.has_method("tool_hint"):
+	if target and is_instance_valid(target) and target.has_method("tool_hint"):
 		want = target.tool_hint()
 	if want == "" or not Game.has_tool(want):
 		want = "stone_axe" if Game.has_tool("stone_axe") else ""
@@ -188,6 +188,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # ------------------------------------------------------------------ Движение
 func _physics_process(delta: float) -> void:
+	if target != null and not is_instance_valid(target):
+		target = null   # объект расчищен и удалён
 	var input := Vector2.ZERO
 	if controls_enabled:
 		input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
@@ -305,7 +307,11 @@ func _find_target() -> void:
 	var best: Node = null
 	var best_score := INF
 	var forward := -Basis(Vector3.UP, model.rotation.y).z
+	var me := global_position
 	for n in get_tree().get_nodes_in_group("interactable"):
+		# быстрый отсев по расстоянию — объектов на острове больше тысячи
+		if (n as Node3D).global_position.distance_squared_to(me) > 49.0:
+			continue
 		var p: Vector3 = n.interact_point()
 		var to := p - global_position
 		to.y *= 0.5
@@ -313,8 +319,10 @@ func _find_target() -> void:
 		var reach := INTERACT_RANGE
 		if n is Building and n.id in ["hut", "goat_pen", "coop", "tent"]:
 			reach = 3.2
-		if n is ResourceNode and n.kind == "rock":
-			reach = 3.0
+		if n is ResourceNode and n.kind in ["rock", "jungle_tree", "cliff", "fallen_log", "thicket", "bamboo"]:
+			reach = 3.4
+		if n is StoryPlace:
+			reach = 3.6
 		if d > reach:
 			continue
 		var facing := forward.dot(Vector3(to.x, 0, to.z).normalized())
@@ -339,6 +347,6 @@ func try_interact() -> void:
 
 
 func get_hint() -> String:
-	if target == null:
+	if target == null or not is_instance_valid(target):
 		return ""
 	return "[ЛКМ / E]  " + target.get_hint()

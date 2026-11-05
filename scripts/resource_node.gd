@@ -41,7 +41,7 @@ const BUSH_SEEDS := ["seed_carrot", "seed_carrot", "seed_potato", "seed_corn", "
 @export var kind := "bush"
 var rng_seed := 0
 var uid := ""   # постоянный номер преграды — чтобы сохранить, что её расчистили
-var yaw := -1.0
+var yaw := -100.0   # < -50 — случайный поворот
 var hp := 1
 var active := true
 var visual: Node3D
@@ -70,7 +70,7 @@ func _ready() -> void:
 		"pebble": visual = Models.rock(rng, false)
 		"driftwood": visual = Models.driftwood(rng)
 		"shell": visual = Models.shell(rng)
-	visual.rotation.y = rng.randf() * TAU if yaw < 0.0 else yaw
+	visual.rotation.y = rng.randf() * TAU if yaw < -50.0 else yaw
 	add_child(visual)
 	_setup_visibility()
 	_base_scale = visual.scale
