@@ -904,20 +904,29 @@ def fresco(scene):
         for k in range(6):
             r = 120 + k * 60
             d.arc((S - r, 470 - r * 0.6, S + r, 470 + r * 0.6), 200, 340, fill=ink, width=6)
-    else:  # map
-        isl = [(150, 330, 60), (360, 200, 70), (560, 380, 55), (760, 220, 65), (920, 380, 50)]
-        for x, y, r in isl:
+    else:  # map: шесть островов с башнями по кругу, седьмой (Туманный) пунктиром, в центре — Око
+        cx, cy, rx, ry = S, S // 2, 400, 175
+        def at(deg):
+            a = math.radians(deg)
+            return cx + rx * math.sin(a), cy - ry * math.cos(a) + 20
+        # по часовой от севера: Грозовой, Ледяной, Вулкан, (Туманный), твой остров, Баньян, форт
+        isl = [(at(0), 50), (at(55), 52), (at(115), 55), (at(180), 60), (at(245), 62), (at(305), 52)]
+        for (x, y), r in isl:
             d.ellipse((x - r, y - r * 0.6, x + r, y + r * 0.6), outline=ink, width=8)
             d.polygon([(x - 8, y - 5), (x + 8, y - 5), (x + 5, y - 45), (x - 5, y - 45)], fill=red)
-        for (a, b) in zip(isl, isl[1:]):
-            for t in range(0, 10, 2):
-                x0 = a[0] + (b[0] - a[0]) * t / 10
-                y0 = a[1] + (b[1] - a[1]) * t / 10
-                x1 = a[0] + (b[0] - a[0]) * (t + 1) / 10
-                y1 = a[1] + (b[1] - a[1]) * (t + 1) / 10
-                d.line([(x0, y0), (x1, y1)], fill=ink, width=6)
-        d.ellipse((S - 70, 60, S + 70, 160), outline=red, width=10)
-        d.line([(S, 160), (S, 210)], fill=red, width=8)
+        fx, fy = at(148)
+        for k in range(0, 360, 30):   # седьмой остров — пунктиром, без башни
+            d.arc((fx - 46, fy - 28, fx + 46, fy + 28), k, k + 16, fill=ink, width=7)
+        for (x, y), r in isl:         # пунктир от каждого маяка к центру
+            for t in range(2, 8, 2):
+                x0, y0 = x + (cx - x) * t / 10, y + (cy + 20 - y) * t / 10
+                x1, y1 = x + (cx - x) * (t + 1) / 10, y + (cy + 20 - y) * (t + 1) / 10
+                d.line([(x0, y0), (x1, y1)], fill=ink, width=5)
+        oy = cy + 20
+        d.ellipse((cx - 78, oy - 50, cx + 78, oy + 50), outline=red, width=10)
+        d.ellipse((cx - 50, oy - 30, cx + 50, oy + 30), outline=red, width=6)
+        d.polygon([(cx - 12, oy + 8), (cx + 12, oy + 8), (cx + 8, oy - 60), (cx - 8, oy - 60)], fill=ink)
+        d.polygon([(cx - 14, oy - 60), (cx, oy - 92), (cx + 14, oy - 60)], fill=red)
     return img
 
 
