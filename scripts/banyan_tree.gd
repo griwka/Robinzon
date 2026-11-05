@@ -79,21 +79,11 @@ func _ready() -> void:
 	if fb:
 		fb.position = top + Vector3(0, 0.05, 0)
 		add_child(fb)
+	# тот же огонь, что у костров и маяков: светящиеся языки, дым, угольки, мерцающий свет
 	bowl_fire = Node3D.new()
 	bowl_fire.position = top + Vector3(0, 1.2, 0)
 	add_child(bowl_fire)
-	for spec in [[0.55, 1.4, Color("ff8a1e")], [0.3, 0.9, Color("ffe066")]]:
-		var f := MeshInstance3D.new()
-		f.mesh = Models.cyl(0.0, spec[0], spec[1], 8)
-		f.material_override = Models.unshaded(spec[2])
-		f.position.y = spec[1] * 0.4
-		f.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		bowl_fire.add_child(f)
-	var l := OmniLight3D.new()
-	l.light_color = Color("ffb35c")
-	l.light_energy = 4.0
-	l.omni_range = 28.0
-	bowl_fire.add_child(l)
+	Models.flame(bowl_fire, Vector3.ZERO, 1.8, 4.0, 28.0)
 	# Марта на втором ярусе
 	var mel := NPCPerson.new()
 	mel.npc_id = "marta"
@@ -133,7 +123,9 @@ func block_radius() -> float:
 
 func _process(_delta: float) -> void:
 	var t := Time.get_ticks_msec() / 1000.0
-	bowl_fire.scale.y = 0.9 + 0.15 * abs(sin(t * 6.0))
+	var fl := bowl_fire.get_node_or_null("Light") as OmniLight3D
+	if fl:   # языки пламени колышет шейдер, а свет чуть мерцает
+		fl.light_energy = 4.0 * (0.88 + 0.12 * sin(t * 9.0) * sin(t * 5.3))
 	var p := get_tree().get_first_node_in_group("player") as Node3D
 	if p == null:
 		return

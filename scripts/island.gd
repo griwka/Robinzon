@@ -130,8 +130,14 @@ func _build_terrain() -> void:
 	var m := ShaderMaterial.new()
 	m.shader = preload("res://shaders/terrain.gdshader")
 	m.set_shader_parameter("noise_tex", noise_tex)
+	m.set_shader_parameter("painted", Models.PAINTED)
 	m.set_shader_parameter("camp_pos", camp_center)
 	m.set_shader_parameter("camp_radius", 5.5)
+	for pair in [["sand", Palette.SAND], ["sand_dark", Palette.SAND_DARK], ["sand_light", Palette.SAND_LIGHT],
+			["wet_sand", Palette.WET_SAND], ["seabed", Palette.SEABED], ["grass", Palette.GRASS],
+			["grass_light", Palette.GRASS_LIGHT], ["grass_dark", Palette.GRASS_DARK], ["grass_warm", Palette.GRASS_WARM],
+			["rock", Palette.ROCK], ["rock_dark", Palette.ROCK_DARK], ["dirt", Palette.DIRT], ["dirt_dark", Palette.DIRT_DARK]]:
+		m.set_shader_parameter(pair[0], pair[1])
 	mi.material_override = m
 	add_child(mi)
 
@@ -232,12 +238,15 @@ func _build_grass() -> void:
 	fmat.shader = Models.TOON
 	fmat.set_shader_parameter("use_vertex_color", true)
 	fmat.set_shader_parameter("rim_amount", 0.0)
+	fmat.set_shader_parameter("paint_amount", 0.0)
 	_add_multimesh("Flowers", Models.flower_mesh(), ft, fc, fmat, true)
 
 
 func _grass_mat() -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = preload("res://shaders/grass.gdshader")
+	m.set_shader_parameter("base_color", Palette.TUFT_BASE)
+	m.set_shader_parameter("tip_color", Palette.TUFT_TIP)
 	return m
 
 

@@ -111,10 +111,9 @@ func world_dt() -> float:
 func _process(delta: float) -> void:
 	_t += delta
 	if _light and lit:
-		_light.light_energy = (2.0 if id == "campfire" else 1.4) * (0.85 + 0.15 * sin(_t * 11.0) * sin(_t * 7.3))
-		var fire := visual.get_node_or_null("Fire")
-		if fire:
-			fire.scale = Vector3(1, 0.85 + 0.2 * abs(sin(_t * 9.0)), 1)
+		# живой огонь: свет дрожит неравномерно (сумма двух «шумов»), языки пламени колышет шейдер
+		var n := sin(_t * 11.0) * sin(_t * 7.3) * 0.6 + sin(_t * 23.0 + 1.7) * 0.4
+		_light.light_energy = (2.0 if id == "campfire" else 1.4) * (0.86 + 0.14 * n)
 	if id in ["raft", "canoe"]:
 		visual.position.y = sin(_t * 1.4) * 0.06
 		visual.rotation.z = sin(_t * 1.1) * 0.03
@@ -158,7 +157,12 @@ func interact(_player: Node) -> void:
 		"torch":
 			lit = not lit
 			_light.visible = lit
-			visual.get_node("Flame").visible = lit
+			var fire := visual.get_node_or_null("Fire")
+			if fire:
+				fire.visible = lit
+				for p in fire.find_children("*", "CPUParticles3D", true, false):
+					(p as CPUParticles3D).emitting = lit
+			FX.puff(self, Vector3(0, 1.9, 0), Color("cfc7d6"), 4, 0.3, 0.8, 0.6)
 
 
 # Сохранение состояния (переопределяют наследники)

@@ -6,6 +6,8 @@ const TOON := preload("res://shaders/toon.gdshader")
 const OUTLINE := preload("res://shaders/outline.gdshader")
 const WING := preload("res://shaders/wing.gdshader")
 const TOON_FOLIAGE := preload("res://shaders/toon_foliage.gdshader")
+const FLAME := preload("res://shaders/flame.gdshader")
+const CLOUD := preload("res://shaders/cloud.gdshader")
 
 const PAINTED := preload("res://assets/textures/painted.png")
 
@@ -64,6 +66,7 @@ static func clear_caches() -> void:
 	_mat_cache.clear()
 	_outline_cache.clear()
 	_unshaded_cache.clear()
+	FX.clear_caches()
 
 
 # ============================================================== Материалы
@@ -72,14 +75,14 @@ static func mat(color: Color, outline := true, wind := 0.0, fade := false, gloss
 	if _mat_cache.has(key):
 		return _mat_cache[key]
 	var m := ShaderMaterial.new()
-	m.shader = TOON
+	m.shader = TOON_FOLIAGE if fade else TOON
 	m.set_shader_parameter("albedo", color)
 	m.set_shader_parameter("wind_strength", wind)
 	m.set_shader_parameter("near_fade", 1.0 if fade else 0.0)
 	m.set_shader_parameter("gloss", gloss)
 	m.set_shader_parameter("painted", PAINTED)
 	if outline:
-		m.next_pass = outline_mat(0.03)
+		m.next_pass = outline_mat(0.03, 0.35, color)
 	_mat_cache[key] = m
 	return m
 
@@ -89,7 +92,7 @@ static func vc_mat(base: Color, wind := 0.0, fade := false) -> ShaderMaterial:
 	if _mat_cache.has(key):
 		return _mat_cache[key]
 	var m := ShaderMaterial.new()
-	m.shader = TOON
+	m.shader = TOON_FOLIAGE if fade else TOON
 	m.set_shader_parameter("albedo", base)
 	m.set_shader_parameter("use_vertex_color", true)
 	m.set_shader_parameter("wind_strength", wind)
@@ -99,14 +102,59 @@ static func vc_mat(base: Color, wind := 0.0, fade := false) -> ShaderMaterial:
 	return m
 
 
-static func outline_mat(width: float) -> ShaderMaterial:
-	if _outline_cache.has(width):
-		return _outline_cache[width]
+## Обводка. tint — насколько она окрашена в тёмный оттенок цвета предмета base (0 — чисто коричневая).
+static func outline_mat(width: float, tint := 0.0, base := Color.WHITE) -> ShaderMaterial:
+	var key := "%s|%s|%s" % [width, tint, base.to_html()]
+	if _outline_cache.has(key):
+		return _outline_cache[key]
 	var o := ShaderMaterial.new()
 	o.shader = OUTLINE
 	o.set_shader_parameter("width", width)
-	_outline_cache[width] = o
+	o.set_shader_parameter("tint", tint)
+	o.set_shader_parameter("base_tint", base)
+	_outline_cache[key] = o
 	return o
+
+
+## Материал пламени (светится, подхватывается свечением экрана).
+static func flame_mat(core: Color, edge: Color, energy := 3.0) -> ShaderMaterial:
+	var key := "flame|%s|%s|%s" % [core.to_html(), edge.to_html(), energy]
+	if _mat_cache.has(key):
+		return _mat_cache[key]
+	var m := ShaderMaterial.new()
+	m.shader = FLAME
+	m.set_shader_parameter("core", core)
+	m.set_shader_parameter("edge", edge)
+	m.set_shader_parameter("energy", energy)
+	_mat_cache[key] = m
+	return m
+
+
+## Огонь целиком: два языка пламени, мерцающий тёплый свет, дым и угольки.
+## size — масштаб (1 — костёр, 0.45 — факел, 2 — чаша маяка). Узлы: Fire (языки) и Light — их ищут постройки.
+static func flame(root: Node3D, pos: Vector3, size := 1.0, light_energy := 2.0, light_range := 9.0) -> Node3D:
+	var fire := Node3D.new()
+	fire.name = "Fire"
+	fire.position = pos
+	root.add_child(fire)
+	for spec in [[0.3, 0.85, 0.42, Color("ffd36b"), Color("ff7a1e"), 3.2], [0.17, 0.55, 0.3, Color("fff6c8"), Color("ffc23a"), 4.5]]:
+		var f := MeshInstance3D.new()
+		f.mesh = cyl(0.0, spec[0] * size, spec[1] * size, 8)
+		f.material_override = flame_mat(spec[3], spec[4], spec[5])
+		f.position.y = spec[2] * size
+		f.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		fire.add_child(f)
+	var light := OmniLight3D.new()
+	light.name = "Light"
+	light.light_color = Color("ffb35c")
+	light.light_energy = light_energy
+	light.omni_range = light_range
+	light.omni_attenuation = 1.4
+	light.light_specular = 0.2
+	light.position = pos + Vector3(0, 0.9 * size, 0)
+	root.add_child(light)
+	FX.fire_smoke(fire, Vector3(0, 0.4 * size, 0), size)
+	return fire
 
 
 static func unshaded(color: Color) -> StandardMaterial3D:
@@ -504,11 +552,11 @@ static func distant_island(rng: RandomNumberGenerator, radius: float) -> Node3D:
 
 static func cloud(rng: RandomNumberGenerator) -> Node3D:
 	var root := Node3D.new()
-	var m := ShaderMaterial.new()
-	m.shader = TOON
-	m.set_shader_parameter("albedo", Color(1, 1, 1))
-	m.set_shader_parameter("rim_amount", 0.6)
-	m.set_shader_parameter("gloss", 0.0)
+	var m: ShaderMaterial = _mat_cache.get("cloud")
+	if m == null:
+		m = ShaderMaterial.new()
+		m.shader = CLOUD
+		_mat_cache["cloud"] = m
 	for i in rng.randi_range(3, 6):
 		var mi := MeshInstance3D.new()
 		mi.mesh = sphere(rng.randf_range(3.0, 6.0), 12, 7)
@@ -785,39 +833,13 @@ static func tent() -> Node3D:
 
 
 static func _add_fire(root: Node3D) -> void:
-	var fire := Node3D.new()
-	fire.name = "Fire"
-	root.add_child(fire)
-	for spec in [[0.3, 0.85, 0.5, Color("ff8a1e")], [0.17, 0.55, 0.42, Color("ffe066")]]:
-		var f := MeshInstance3D.new()
-		f.mesh = cyl(0.0, spec[0], spec[1], 7)
-		f.material_override = unshaded(spec[3])
-		f.position.y = spec[2]
-		f.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		fire.add_child(f)
-	var light := OmniLight3D.new()
-	light.name = "Light"
-	light.light_color = Color("ffb35c")
-	light.light_energy = 2.0
-	light.omni_range = 9.0
-	light.position.y = 1.0
-	root.add_child(light)
+	var point := root.find_child("FirePoint", true, false) as Node3D
+	flame(root, point.position if point else Vector3(0, 0.08, 0), 1.0, 2.0, 9.0)
 
 
 static func _add_torch_flame(root: Node3D) -> void:
-	var f := MeshInstance3D.new()
-	f.name = "Flame"
-	f.mesh = cyl(0.0, 0.14, 0.4, 6)
-	f.material_override = unshaded(Color("ffb030"))
-	f.position.y = 1.92
-	root.add_child(f)
-	var light := OmniLight3D.new()
-	light.name = "Light"
-	light.light_color = Color("ffb35c")
-	light.light_energy = 1.4
-	light.omni_range = 7.0
-	light.position.y = 2.1
-	root.add_child(light)
+	var point := root.find_child("FirePoint", true, false) as Node3D
+	flame(root, point.position if point else Vector3(0, 1.75, 0), 0.45, 1.4, 7.0)
 
 
 static func campfire() -> Node3D:
@@ -828,26 +850,7 @@ static func campfire() -> Node3D:
 	for i in 4:
 		var a := TAU * i / 4.0 + 0.4
 		part(root, cyl(0.06, 0.07, 0.9, 6), Color("7a5230"), Vector3(cos(a) * 0.18, 0.25, sin(a) * 0.18), Vector3(sin(a) * 0.9, 0, cos(a) * -0.9))
-	var fire := Node3D.new()
-	fire.name = "Fire"
-	root.add_child(fire)
-	var f1 := MeshInstance3D.new()
-	f1.mesh = cyl(0.0, 0.3, 0.8, 7)
-	f1.material_override = unshaded(Color("ff8a1e"))
-	f1.position.y = 0.5
-	fire.add_child(f1)
-	var f2 := MeshInstance3D.new()
-	f2.mesh = cyl(0.0, 0.17, 0.5, 7)
-	f2.material_override = unshaded(Color("ffe066"))
-	f2.position.y = 0.4
-	fire.add_child(f2)
-	var light := OmniLight3D.new()
-	light.name = "Light"
-	light.light_color = Color("ffb35c")
-	light.light_energy = 2.0
-	light.omni_range = 9.0
-	light.position.y = 1.0
-	root.add_child(light)
+	flame(root, Vector3(0, 0.08, 0), 1.0, 2.0, 9.0)
 	return root
 
 
@@ -855,19 +858,7 @@ static func torch() -> Node3D:
 	var root := Node3D.new()
 	part(root, cyl(0.05, 0.07, 1.6, 6), Color("6e4a2a"), Vector3(0, 0.8, 0))
 	part(root, cyl(0.16, 0.1, 0.18, 8), Color("4a3b30"), Vector3(0, 1.62, 0))
-	var f := MeshInstance3D.new()
-	f.name = "Flame"
-	f.mesh = cyl(0.0, 0.14, 0.4, 6)
-	f.material_override = unshaded(Color("ffb030"))
-	f.position.y = 1.9
-	root.add_child(f)
-	var light := OmniLight3D.new()
-	light.name = "Light"
-	light.light_color = Color("ffb35c")
-	light.light_energy = 1.4
-	light.omni_range = 7.0
-	light.position.y = 2.1
-	root.add_child(light)
+	flame(root, Vector3(0, 1.72, 0), 0.45, 1.4, 7.0)
 	return root
 
 

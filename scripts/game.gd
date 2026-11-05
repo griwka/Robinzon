@@ -3,6 +3,7 @@ extends Node
 ## Сами данные (предметы, рецепты, задания) — в data.gd.
 
 signal inventory_changed
+signal item_gained(id: String, amount: int)   # предмет попал в сумку (для всплывающего значка)
 signal notified(text: String, color: Color)
 signal quest_changed
 signal quest_completed(quest: Dictionary)
@@ -16,7 +17,7 @@ const SAVE_PATH := "user://save.json"
 const SAVE_VERSION := 4
 const SETTINGS_PATH := "user://settings.cfg"
 const DEFAULT_SETTINGS := {"music": 0.6, "sfx": 0.8, "ambience": 0.7, "mouse": 1.0,
-	"shadows": 2, "msaa": 2, "fullscreen": false, "vsync": true, "sharpen": 2}
+	"shadows": 2, "msaa": 2, "fullscreen": false, "vsync": true, "sharpen": 1, "effects": 2, "shake": true}
 const DAY_LENGTH := 600.0  # секунд на сутки (ночь идёт вдвое быстрее)
 
 var inventory: Dictionary = {}
@@ -127,6 +128,7 @@ func add_item(id: String, amount: int = 1, track := true, quiet := false) -> voi
 	inventory_changed.emit()
 	if not quiet:
 		notified.emit("+%d %s" % [amount, item_name(id)], item(id).get("color", Color.WHITE))
+		item_gained.emit(id, amount)
 		Audio.play("pickup", -6.0, 0.15)
 	if track:
 		bump("collected", id, amount)

@@ -356,6 +356,41 @@ def amb_night():
     write_ogg("amb_night", L * 0.9, R * 0.9, 4)
 
 
+def amb_rain():
+    """Тёплый тропический дождь: ровный шелест + капли по листьям, бесшовная петля."""
+    r = np.random.default_rng(11)
+    dur = 20.0
+    n = int((dur + 3) * SR)
+    out = []
+    for ch in range(2):
+        hiss = bandpass(r.standard_normal(n), 500, 7000) * 0.35
+        body = lowpass(r.standard_normal(n), 900) * 0.5
+        drops = np.zeros(n)
+        for k in range(int(dur * 55)):
+            at = r.uniform(0, dur + 2.5)
+            m = int(0.03 * SR)
+            tt = np.arange(m) / SR
+            f = r.uniform(1800, 5200)
+            d = np.sin(2 * np.pi * f * tt * (1.0 - tt * 8.0)) * np.exp(-tt / 0.006)
+            i = int(at * SR)
+            if i + m < n:
+                drops[i:i + m] += d * r.uniform(0.05, 0.22)
+        swell = 0.85 + 0.15 * np.sin(2 * np.pi * np.arange(n) / SR / 6.3 + ch)
+        x = (hiss + body) * swell + drops
+        out.append(crossfade_loop(x, 3.0))
+    m = max(np.max(np.abs(out[0])), np.max(np.abs(out[1])))
+    write_ogg("amb_rain", out[0] / m * 0.7, out[1] / m * 0.7, 4)
+
+
+def sfx_thud():
+    """Глухой удар о землю: упало дерево, разбился валун."""
+    r = np.random.default_rng(12)
+    t = t_axis(0.6)
+    low = np.sin(2 * np.pi * (70 - 30 * t) * t) * np.exp(-t / 0.12)
+    crunch = lowpass(r.standard_normal(len(t)), 1400) * np.exp(-t / 0.08) * 0.5
+    return normalize(low + crunch, 0.85)
+
+
 def bird(seed):
     r = np.random.default_rng(seed)
     x = np.zeros(int(1.2 * SR))
@@ -574,7 +609,7 @@ def main():
         "craft": sfx_craft(), "quest": sfx_quest(), "rare": sfx_rare(), "click": sfx_click(),
         "open": sfx_open(), "blip": sfx_blip(), "step_sand": sfx_step("sand"), "step_grass": sfx_step("grass"),
         "cluck": sfx_cluck(), "bleat": sfx_bleat(), "squawk": sfx_squawk(), "oink": sfx_oink(), "sleep": sfx_sleep(),
-        "shake": sfx_shake(),
+        "shake": sfx_shake(), "thud": sfx_thud(),
     }
     for i in range(4):
         sfx["bird%d" % i] = bird(100 + i)
@@ -582,6 +617,7 @@ def main():
         write_wav("sfx_" + name, x)
     amb_ocean()
     amb_night()
+    amb_rain()
     music_day()
     music_night()
     print("audio:", sorted(os.listdir(OUT)))

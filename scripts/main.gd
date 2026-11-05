@@ -8,12 +8,8 @@ var build: BuildSystem
 var buildings_root: Node3D
 var critters: Critters
 var parrot: NPCParrot
-var env: Environment
-var sky_mat: ProceduralSkyMaterial
-var sun: DirectionalLight3D
-var moon: DirectionalLight3D
-var fill: DirectionalLight3D
-var sharpen: ColorRect
+var world_env: WorldEnv
+var weather: Weather
 var clouds: Array[Node3D] = []
 var _autosave_t := 0.0
 var menu: GameMenu
@@ -21,18 +17,14 @@ var menu_cam: Camera3D
 var in_menu := false
 var _orbit := 0.0
 
-# палитры: [верх неба, горизонт, цвет солнца, сила солнца, цвет теней, яркость теней, яркость воды]
-const SKY_DAY := [Color("3a9cf0"), Color("bde9ff"), Color("fff4dc"), 0.5, Color("9a92cf"), 0.92, 1.0]
-const SKY_SUNSET := [Color("4f63b8"), Color("ffb47a"), Color("ffb070"), 0.5, Color("8d6fb0"), 0.62, 0.85]
-const SKY_NIGHT := [Color("0b1633"), Color("27406f"), Color("8fa8ff"), 0.0, Color("4a5c9a"), 0.48, 0.42]
-
 
 func _ready() -> void:
 	Game.load_game()   # заранее: остров должен знать, какие заросли уже расчищены
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--location="):   # для разработки: сразу на нужный остров
 			Game.location = a.split("=")[1]
-	_setup_environment()
+	world_env = WorldEnv.new()
+	add_child(world_env)
 
 	island = Island.new()
 	island.configure(Game.location)
@@ -41,6 +33,7 @@ func _ready() -> void:
 	add_child(island)
 	island.build()
 	island.spawn_distant_scenery(self)
+	world_env.island = island
 
 	buildings_root = Node3D.new()
 	buildings_root.name = "Buildings"
@@ -52,6 +45,12 @@ func _ready() -> void:
 	player.global_position = island.spawn_point
 	var to_sea := island.wreck_point - island.spawn_point
 	player.camera_yaw = atan2(to_sea.x, to_sea.z) + PI * 0.85
+	world_env.player = player
+	weather = Weather.new()
+	weather.world_env = world_env
+	weather.player = player
+	weather.island = island
+	add_child(weather)
 
 	if Game.location == "home":
 		_spawn_story_objects()
@@ -199,110 +198,7 @@ func _spawn_story_objects() -> void:
 	crate.rotation.y = 0.4
 
 
-# ================================================================== Окружение
-func _setup_environment() -> void:
-	env = Environment.new()
-	env.background_mode = Environment.BG_SKY
-	var sky := Sky.new()
-	sky_mat = ProceduralSkyMaterial.new()
-	sky_mat.sky_curve = 0.1
-	sky_mat.sun_angle_max = 8.0
-	sky_mat.sun_curve = 0.05
-	sky.sky_material = sky_mat
-	env.sky = sky
-	# Тени — не серые, а тёплого сиреневого оттенка, как в мультфильмах
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("8f86c9")
-	env.ambient_light_energy = 0.78
-	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
-	# Чёткая картинка: без свечения, без размывающего тонмаппинга, туман только вдали
-	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
-	env.glow_enabled = false
-	env.fog_enabled = true
-	env.fog_mode = Environment.FOG_MODE_DEPTH
-	env.fog_depth_begin = 140.0
-	env.fog_depth_end = 520.0
-	env.fog_density = 1.0
-	env.fog_light_color = Color("bde9ff")
-	env.fog_sky_affect = 0.0
-	env.adjustment_enabled = true
-	env.adjustment_saturation = 0.97
-	env.adjustment_contrast = 1.07
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-	# резкость поверх 3D, под интерфейсом
-	var post := CanvasLayer.new()
-	post.layer = 1
-	add_child(post)
-	sharpen = ColorRect.new()
-	sharpen.set_anchors_preset(Control.PRESET_FULL_RECT)
-	sharpen.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sm := ShaderMaterial.new()
-	sm.shader = preload("res://shaders/sharpen.gdshader")
-	sharpen.material = sm
-	post.add_child(sharpen)
-
-	sun = DirectionalLight3D.new()
-	sun.name = "Sun"
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 60.0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.shadow_blur = 0.0   # резкие мультяшные тени
-	sun.light_specular = 0.6
-	add_child(sun)
-	# мягкий заполняющий свет без теней: теневая сторона персонажей не уходит в грязь
-	fill = DirectionalLight3D.new()
-	fill.name = "Fill"
-	fill.light_color = Color("ffe6c8")
-	fill.light_energy = 0.16
-	fill.light_specular = 0.0
-	fill.shadow_enabled = false
-	add_child(fill)
-	moon = DirectionalLight3D.new()
-	moon.name = "Moon"
-	moon.light_color = Color("9fb4ff")
-	moon.light_energy = 0.0
-	moon.rotation = Vector3(-1.0, 0.6, 0)
-	add_child(moon)
-
-
-func _update_sky() -> void:
-	var t := Game.time_of_day
-	var angle := (t - 0.25) * TAU
-	var elev := sin(angle)
-	sun.rotation = Vector3(-angle, deg_to_rad(-35), 0)
-	fill.rotation = Vector3(-0.5, deg_to_rad(145), 0)
-	fill.light_energy = 0.22 * clampf(elev * 3.0, 0.0, 1.0)
-	var a: Array
-	var b: Array
-	var k: float
-	if elev > 0.25:
-		a = SKY_DAY; b = SKY_DAY; k = 0.0
-	elif elev > 0.0:
-		a = SKY_SUNSET; b = SKY_DAY; k = elev / 0.25
-	elif elev > -0.2:
-		a = SKY_NIGHT; b = SKY_SUNSET; k = (elev + 0.2) / 0.2
-	else:
-		a = SKY_NIGHT; b = SKY_NIGHT; k = 0.0
-	var top: Color = a[0].lerp(b[0], k)
-	var hor: Color = a[1].lerp(b[1], k)
-	sky_mat.sky_top_color = top
-	sky_mat.sky_horizon_color = hor
-	sky_mat.ground_horizon_color = hor
-	sky_mat.ground_bottom_color = top.darkened(0.3)
-	env.fog_light_color = hor
-	sun.light_color = a[2].lerp(b[2], k)
-	sun.light_energy = lerpf(a[3], b[3], k) if elev > -0.05 else 0.0
-	sun.visible = sun.light_energy > 0.01
-	sun.shadow_opacity = clampf((elev - 0.05) * 5.0, 0.0, 1.0)
-	env.ambient_light_color = a[4].lerp(b[4], k)
-	env.ambient_light_energy = lerpf(a[5], b[5], k)
-	moon.light_energy = clampf(-elev * 1.2, 0.0, 0.25)
-	if island and island.water_mat:
-		island.water_mat.set_shader_parameter("brightness", lerpf(a[6], b[6], k))
-
-
+# ================================================================== Ответный огонь
 var _answer_fire: Node3D
 
 
@@ -315,7 +211,7 @@ func _update_answer_fire() -> void:
 	_answer_fire.position = Vector3(0, 40.0, 0)
 	var f := MeshInstance3D.new()
 	f.mesh = Models.sphere(2.2, 10, 6)
-	f.material_override = Models.unshaded(Color("ffb030"))
+	f.material_override = Models.flame_mat(Color("fff0b0"), Color("ff9a30"), 4.0)
 	_answer_fire.add_child(f)
 	var l := OmniLight3D.new()
 	l.light_color = Color("ffb35c")
@@ -324,22 +220,26 @@ func _update_answer_fire() -> void:
 	_answer_fire.add_child(l)
 
 
+func rain_wind() -> float:
+	return weather.rain * 3.0 if weather else 0.0
+
+
 func _spawn_clouds() -> void:
 	var g := RandomNumberGenerator.new()
 	g.seed = 4242
-	for i in 14:
+	# облака — кольцом у горизонта и пониже: так их видно в кадре, а не только если задрать камеру
+	for i in 18:
 		var c := Models.cloud(g)
-		c.position = Vector3(g.randf_range(-250, 250), g.randf_range(55, 80), g.randf_range(-250, 250))
-		c.scale = Vector3.ONE * g.randf_range(0.8, 1.6)
+		var a := g.randf() * TAU
+		var r := g.randf_range(170.0, 360.0)
+		c.position = Vector3(cos(a) * r, g.randf_range(24.0, 46.0), sin(a) * r)
+		c.scale = Vector3.ONE * g.randf_range(1.3, 2.6)
 		add_child(c)
 		clouds.append(c)
 
 
 func _process(delta: float) -> void:
-	_update_sky()
-	var sh := int(Game.settings.get("sharpen", 2))
-	sharpen.visible = sh > 0
-	(sharpen.material as ShaderMaterial).set_shader_parameter("strength", 0.25 if sh == 1 else 0.5)
+	world_env.update(delta)
 	_update_answer_fire()
 	if in_menu:
 		# камера медленно облетает остров
@@ -348,9 +248,9 @@ func _process(delta: float) -> void:
 		menu_cam.global_position = c + Vector3(cos(_orbit) * 34.0, 16.0, sin(_orbit) * 34.0)
 		menu_cam.look_at(c + Vector3(0, 2.0, 0))
 	for c in clouds:
-		c.position.x += delta * 2.0
-		if c.position.x > 280:
-			c.position.x = -280
+		c.position.x += delta * (1.5 + rain_wind())
+		if c.position.x > 340:
+			c.position.x = -340
 	if not hud.any_open():
 		if build.is_active():
 			hud.set_hint("ЛКМ — поставить «%s»,  R — повернуть,  ПКМ — отмена" % Data.BUILDINGS[build.active_id]["name"])
@@ -432,6 +332,12 @@ func _on_build_selected(id: String, variant: String) -> void:
 
 func _on_building_placed(b: Building) -> void:
 	_connect_building(b)
+	# постройка «встаёт» на место: кольцо пыли по земле и лёгкий толчок камеры
+	var r: float = Data.BUILDINGS[b.id].get("radius", 1.0)
+	get_tree().create_timer(0.18, false).timeout.connect(func():
+		if is_instance_valid(b):
+			FX.ring(b, Vector3(0, 0.08, 0), Color("e6dcc0"), clampf(r, 0.6, 2.4), 14)
+			player.add_trauma(0.12))
 	if not build.is_active():
 		get_tree().create_timer(0.2).timeout.connect(func(): player.can_interact = true)
 
@@ -528,7 +434,6 @@ func _new_game() -> void:
 
 func _exit_tree() -> void:
 	Models.clear_caches()
-	FX._tex_cache.clear()
 
 
 func _notification(what: int) -> void:

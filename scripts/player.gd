@@ -44,6 +44,15 @@ var climbing: Climbable = null
 var near_climb: Climbable = null
 var _climb_side := Vector3.FORWARD
 var _climb_phase := 0.0
+# ощущение от управления: тряска камеры, бег, приземление, вода, всплывающие значки
+const FOV := 52.0
+var trauma := 0.0              # 0..1, тряска = trauma² (мелкие толчки почти не видны, сильные — заметны)
+var _shake_t := 0.0
+var _shake := FastNoiseLite.new()
+var _fall_speed := 0.0
+var _in_water := false
+var _popup_stack := 0
+var _popup_t := 0.0
 
 
 func _ready() -> void:
@@ -62,7 +71,10 @@ func _ready() -> void:
 	_build_model()
 	_build_camera()
 	Game.inventory_changed.connect(_update_tool)
+	Game.item_gained.connect(_on_item_gained)
 	_update_tool()
+	_shake.seed = 17
+	_shake.frequency = 0.9
 
 
 # ------------------------------------------------------------------ Модель
@@ -249,10 +261,24 @@ func _physics_process(delta: float) -> void:
 		velocity.y = maxf(velocity.y, 1.5)
 	move_and_slide()
 
+	if not is_on_floor():
+		_fall_speed = maxf(_fall_speed, -velocity.y)
 	if is_on_floor() and not _was_on_floor:
-		_squash = 0.75  # приземление — сплющиваемся
+		_squash = 0.75 if _fall_speed < 8.0 else 0.62  # приземление — сплющиваемся
 		Audio.play("step_sand", -4.0, 0.1)
+		var hard := clampf((_fall_speed - 4.0) / 8.0, 0.0, 1.0)
+		if _fall_speed > 3.0 and global_position.y > -0.3:
+			FX.dust(self, Vector3(0, 0.05, 0), _ground_dust(), int(5 + hard * 8), 0.35 + hard * 0.25)
+		if hard > 0.3:
+			add_trauma(0.2 * hard)
+		_fall_speed = 0.0
 	_was_on_floor = is_on_floor()
+	# вошли в воду — брызги
+	var wet := global_position.y < -0.35
+	if wet and not _in_water and velocity.length() > 1.5:
+		FX.splash(get_parent(), Vector3(global_position.x, -0.1, global_position.z))
+		Audio.play("water", -8.0, 0.2)
+	_in_water = wet
 
 	# поворот модели в сторону движения
 	var flat := Vector2(velocity.x, velocity.z)
@@ -278,10 +304,47 @@ func _physics_process(delta: float) -> void:
 
 
 func _update_camera(delta: float) -> void:
-	cam_rig.global_position = cam_rig.global_position.lerp(global_position + Vector3(0, 1.4, 0), 10.0 * delta)
+	# плавное следование, одинаковое при любом FPS (экспоненциальное сглаживание)
+	cam_rig.global_position = cam_rig.global_position.lerp(global_position + Vector3(0, 1.4, 0), 1.0 - exp(-11.0 * delta))
 	cam_rig.rotation.y = camera_yaw
 	cam_pitch_node.rotation.x = camera_pitch
-	spring.spring_length = lerpf(spring.spring_length, camera_distance, 8.0 * delta)
+	spring.spring_length = lerpf(spring.spring_length, camera_distance, 1.0 - exp(-8.0 * delta))
+	# тряска: шум Перлина, сила = trauma², затухает сама
+	_shake_t += delta * 28.0
+	var k := trauma * trauma
+	camera.h_offset = _shake.get_noise_2d(_shake_t, 0.0) * 0.32 * k
+	camera.v_offset = _shake.get_noise_2d(_shake_t, 40.0) * 0.26 * k
+	camera.rotation.z = _shake.get_noise_2d(_shake_t, 80.0) * 0.045 * k
+	trauma = maxf(0.0, trauma - delta * 1.8)
+	# на бегу кадр чуть «раскрывается» — скорость чувствуется
+	var running := Input.is_action_pressed("sprint") and Vector2(velocity.x, velocity.z).length() > WALK_SPEED + 0.5
+	camera.fov = lerpf(camera.fov, FOV + (5.0 if running else 0.0), 1.0 - exp(-4.0 * delta))
+
+
+## Встряхнуть камеру (удар, падение дерева, тяжёлое приземление). amount ~0.1 — лёгкий толчок, 0.5 — сильный.
+func add_trauma(amount: float) -> void:
+	if not Game.settings.get("shake", true):
+		return
+	trauma = minf(1.0, trauma + amount)
+
+
+func _ground_dust() -> Color:
+	var isl := get_tree().get_first_node_in_group("island")
+	if isl and isl.height_at(global_position.x, global_position.z) < 1.1:
+		return Color("f1dfb0")
+	return Color("d9cfa8")
+
+
+## Предмет попал в сумку — значок «+N» над головой (несколько подряд — стопкой).
+func _on_item_gained(id: String, amount: int) -> void:
+	if not is_inside_tree() or DisplayServer.get_name() == "headless":
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _popup_t > 0.6:
+		_popup_stack = 0
+	_popup_t = now
+	FX.popup(get_parent(), global_position + Vector3(0, 2.1 + _popup_stack * 0.42, 0), id, amount)
+	_popup_stack = (_popup_stack + 1) % 4
 
 
 # ------------------------------------------------------------------ Анимация
@@ -294,6 +357,8 @@ func _animate(delta: float, speed: float) -> void:
 		var isl := get_tree().get_first_node_in_group("island")
 		var on_sand: bool = isl != null and isl.height_at(global_position.x, global_position.z) < 1.1
 		Audio.play("step_sand" if on_sand else "step_grass", -10.0 + moving * 2.0, 0.15)
+		if on_sand and moving > 1.2 and global_position.y > -0.3:
+			FX.dust(self, Vector3(0, 0.05, 0.1), Color("f1dfb0"), 2, 0.22)
 	var swing := sin(_walk_phase) * 0.75 * moving
 	if not is_on_floor():
 		leg_l.rotation.x = lerpf(leg_l.rotation.x, -0.6, 10 * delta)
