@@ -492,8 +492,9 @@ func _update_ring(delta: float) -> void:
 	var isl := get_tree().get_first_node_in_group("island")
 	if isl:
 		var ground: float = isl.height_at(p.x, p.z)
-		if t is NPCParrot:
-			p.y = ground   # попугай сидит на мачте — кольцо на земле под ним
+		var me_on_ground: bool = absf(global_position.y - isl.height_at(global_position.x, global_position.z)) < 1.0
+		if t is NPCParrot or (me_on_ground and p.y - ground > 1.0):
+			p.y = ground   # попугай на мачте, бабочка в воздухе — кольцо на земле под ними
 		if absf(p.y - ground) < 0.6:
 			up = isl.normal_at(p.x, p.z)   # на склоне кольцо ложится по земле, а не тонет в ней
 	_ring_t += delta
