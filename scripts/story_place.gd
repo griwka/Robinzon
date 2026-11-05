@@ -78,6 +78,26 @@ const PLACES := {
 		"loot": {}, "pages": 0, "restore": {"copper_wire": 6, "glass": 4, "scrap": 4}, "fuel": {}, "needs_storm": true,
 		"restored_model": "storm_tower", "restored_name": "Башня громов",
 		"lines": [["player", "Чёрная башня, а наверху — медный шпиль, позеленевший от времени. От шпиля к чаше когда-то шла медная жила. Теперь она оборвана."]]},
+	# ---------------------------------------------------------------- глава 5
+	# ледяные ларцы: сундук вмёрз в лёд; рядом ставят жаровню (brazier), лёд тает melt секунд
+	"ice_chest_1": {"model": "ice_chest", "name": "Ледяной ларец на уступе", "radius": 0.7, "brazier": {"wood": 5}, "melt": 10.0,
+		"climb": true, "loot": {"coins": 8}, "pages": 0, "journal": "star_maps", "journal_pages": 1,
+		"lines": [["narrator", "Лёд стекает с крышки ручьями. Внутри — сухой ящик, обёрнутый клеёнкой, и лист, исписанный рукой Лёвы."]]},
+	"ice_chest_2": {"model": "ice_chest", "name": "Ларец под водопадом", "radius": 0.7, "brazier": {"wood": 5}, "melt": 10.0,
+		"loot": {"coins": 8}, "pages": 0, "journal": "star_maps", "journal_pages": 1,
+		"lines": [["narrator", "Под замёрзшим водопадом тихо, как в комнате. Ларец оттаял. Внутри — лист с рисунком созвездия."]]},
+	"ice_chest_3": {"model": "ice_chest", "name": "Ларец у соснового бора", "radius": 0.7, "brazier": {"wood": 5}, "melt": 10.0,
+		"loot": {"coins": 8, "resin": 2}, "pages": 0, "journal": "star_maps", "journal_pages": 1,
+		"lines": [["narrator", "Пахнет смолой и мокрым деревом. В ларце — два куска смолы, завёрнутые в тряпку, и ещё один лист расчётов."]]},
+	"sextant": {"model": "sextant_broken", "name": "Секстант Ингрид", "radius": 0.6,
+		"loot": {}, "pages": 0, "restore": {"glass": 2, "scrap": 2, "copper_wire": 1},
+		"restored_model": "sextant", "restored_name": "Секстант",
+		"lines": [["player", "Медная дуга, зеркальце треснуло, винты погнуты. На ручке нацарапано: «И. Л. — 1998». Стекло, железо и проволока — и он снова будет мерить."]]},
+	"ice_tower": {"model": "ice_tower_frozen", "name": "Холодное сердце", "radius": 2.2, "flag": "lit_ice_tower",
+		"loot": {}, "pages": 0, "restore": {"wood": 12, "resin": 4, "lamp_oil": 2}, "fuel": {},
+		"restored_model": "ice_tower", "restored_name": "Холодное сердце",
+		"lines": [["player", "Маяк вмёрз в лёд целиком, как муха в янтарь. Если сколоть лёд у входа и сложить в чашу дрова со смолой и маслом, огонь, может быть, примется."],
+			["parrot", "Холодное сердце. Румба слышал это имя. Румба не помнит где."]]},
 }
 
 var id := "old_camp"
@@ -108,6 +128,8 @@ func _ready() -> void:
 		_swap_model(false)
 	if cfg.has("fuel") and Game.flags.get(_lit_flag(), false):
 		light_fire(false)
+	if cfg.has("brazier") and Game.flags.has("melt_" + id):
+		_place_brazier(false)
 
 
 func block_radius() -> float:
@@ -139,6 +161,12 @@ func _lit_flag() -> String:
 
 func get_hint() -> String:
 	var cfg: Dictionary = PLACES[id]
+	if cfg.has("brazier") and not Game.flags.get("poi_" + id, false):
+		if not Game.flags.has("melt_" + id):
+			return "%s — вмёрз в лёд. Поставить жаровню (дрова %d/%d)" % [cfg["name"], Game.count("wood"), int(cfg["brazier"]["wood"])]
+		if melt_left() > 0.0:
+			return "Лёд тает... ещё ~%d c" % int(ceil(melt_left()))
+		return "Открыть: %s" % cfg["name"]
 	if cfg.has("needs_flag") and not Game.flags.get(cfg["needs_flag"], false):
 		return cfg.get("locked_hint", "%s — за водой, не подойти. Сначала спусти воду" % cfg["name"])
 	if cfg.has("needs") and not Game.flags.get("poi_" + id, false) and not Game.has_tool(cfg["needs"]) and Game.count(cfg["needs"]) == 0:
@@ -155,8 +183,33 @@ func get_hint() -> String:
 	return cfg.get("restored_name", cfg["name"]) if Game.flags.get("restored_" + id, false) else cfg["name"]
 
 
+## Сколько секунд ещё тает лёд у ларца с жаровней (по игровому времени — сон тоже считается).
+func melt_left() -> float:
+	var cfg: Dictionary = PLACES[id]
+	if not Game.flags.has("melt_" + id):
+		return float(cfg.get("melt", 0.0))
+	return maxf(0.0, float(cfg.get("melt", 0.0)) - (Game.world_time - float(Game.flags["melt_" + id])))
+
+
 func interact(_player: Node) -> void:
 	var cfg: Dictionary = PLACES[id]
+	if cfg.has("brazier") and not Game.flags.get("poi_" + id, false):
+		if not Game.flags.has("melt_" + id):
+			if Game.pay(cfg["brazier"]):
+				Game.flags["melt_" + id] = Game.world_time
+				_place_brazier(true)
+				Game.notified.emit("Жаровня горит. Лёд начал таять", Color("ffe08a"))
+			else:
+				Game.notified.emit("Для жаровни нужно дров: %d" % int(cfg["brazier"]["wood"]), Color("ff9d7a"))
+			return
+		if melt_left() > 0.0:
+			Game.notified.emit(get_hint(), Color("ffe08a"))
+			return
+		var lid := visual.find_child("Lid", true, false) as Node3D
+		if lid:
+			create_tween().tween_property(lid, "rotation:x", -1.6, 0.4)
+		if id.begins_with("ice_chest"):
+			Game.bump("found", "ice_chest")
 	if cfg.has("needs_flag") and not Game.flags.get(cfg["needs_flag"], false):
 		Game.notified.emit(cfg.get("locked_hint", "Не подойти — мешает вода"), Color("ff9d7a"))
 		return
@@ -228,6 +281,27 @@ func _swap_model(animate: bool) -> void:
 		create_tween().tween_property(m, "scale", Vector3.ONE, 0.6).set_trans(Tween.TRANS_BACK)
 
 
+var brazier: Node3D
+var _ice_block: Node3D
+
+
+## Жаровня у ларца: ставится рядом, горит, пока лёд не растает (и потом тоже — для уюта).
+func _place_brazier(animate: bool) -> void:
+	if brazier:
+		return
+	brazier = Models.glb("brazier")
+	if brazier == null:
+		brazier = Node3D.new()
+	brazier.position = Vector3(1.1, 0, 0.5)
+	add_child(brazier)
+	var point := brazier.find_child("FirePoint", true, false) as Node3D
+	Models.flame(brazier, point.position if point else Vector3(0, 0.75, 0), 0.6, 1.6, 7.0)
+	if animate:
+		brazier.scale = Vector3(0.05, 0.05, 0.05)
+		create_tween().tween_property(brazier, "scale", Vector3.ONE, 0.4).set_trans(Tween.TRANS_BACK)
+		Audio.play("build", -4.0, 0.05)
+
+
 func light_fire(animate: bool) -> void:
 	if fire:
 		return
@@ -241,6 +315,10 @@ func light_fire(animate: bool) -> void:
 			l.light_color = Color("cfe4ff")
 		if animate:
 			get_tree().call_group("weather", "strike_at", global_position + Vector3(0, 13.0, 0))
+	if id == "ice_tower":
+		Game.flags["ice_thawed"] = true
+		if animate:   # при загрузке остров и так строится уже оттаявшим
+			get_tree().call_group("island", "thaw", true)
 	if animate:
 		fire.scale = Vector3(0.05, 0.05, 0.05)
 		create_tween().tween_property(fire, "scale", Vector3.ONE, 1.5).set_trans(Tween.TRANS_BACK)
@@ -248,6 +326,16 @@ func light_fire(animate: bool) -> void:
 
 
 func _process(_delta: float) -> void:
+	if brazier and visual and not Game.flags.get("poi_" + id, false):
+		# лёд вокруг ларца оседает, пока горит жаровня
+		if _ice_block == null:
+			_ice_block = visual.find_child("Ice", true, false) as Node3D
+		if _ice_block:
+			var k := clampf(melt_left() / float(PLACES[id].get("melt", 1.0)), 0.0, 1.0)
+			_ice_block.scale = Vector3(lerpf(0.75, 1.0, k), k, lerpf(0.75, 1.0, k))
+			_ice_block.visible = k > 0.02
+	elif _ice_block and Game.flags.get("poi_" + id, false):
+		_ice_block.visible = false
 	if fire:
 		# пламя колышется само (шейдер), а свет чуть мерцает
 		var l := visual.get_node_or_null("Light") as OmniLight3D

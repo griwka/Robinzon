@@ -22,6 +22,14 @@ uniform vec4 rock_dark : source_color = vec4(0.53, 0.51, 0.49, 1.0);
 uniform vec4 dirt : source_color = vec4(0.79, 0.64, 0.45, 1.0);
 uniform vec4 dirt_dark : source_color = vec4(0.68, 0.53, 0.36, 1.0);
 uniform vec3 camp_pos = vec3(0.0, -100.0, 0.0);
+// Ледяной остров: снег выше снеговой линии, голубой лёд на обрывах. snow_amount 1 → 0 — оттепель:
+// линия снега поднимается до вершины ледника.
+uniform float snow_on = 0.0;
+uniform float snow_amount = 1.0;
+uniform float snow_line = 2.1;
+uniform vec4 snow_col : source_color = vec4(0.96, 0.98, 1.0, 1.0);
+uniform vec4 snow_shade : source_color = vec4(0.8, 0.88, 0.97, 1.0);
+uniform vec4 ice_col : source_color = vec4(0.6, 0.84, 0.94, 1.0);
 uniform float camp_radius = 5.5;
 
 global uniform float g_rain;
@@ -79,6 +87,22 @@ void fragment() {
 	float r = max(aastep(0.3 + edge_noise * 0.2, slope), aastep(10.5 + edge_noise * 3.0, h)) * aastep(0.6, h);
 	vec3 rcol = mix(rock.rgb, rock_dark.rgb, aastep(0.55, mid));
 	col = mix(col, rcol, r);
+
+	// снег и лёд (Ледяной остров)
+	if (snow_on > 0.5) {
+		float sline = mix(11.3, snow_line, snow_amount);
+		float sn = aastep(sline + edge_noise * 1.4 + (big - 0.5) * 1.2, h);
+		vec3 scol = mix(snow_col.rgb, snow_shade.rgb, aastep(0.62, mid) * 0.7);
+		scol = mix(scol, snow_shade.rgb * 0.95, (1.0 - aastep(0.25, world_normal.y - 0.6)) * 0.5);
+		scol = mix(scol, vec3(1.0), aastep(0.9, fine) * 0.5);   // искорки на снегу
+		col = mix(col, scol, sn);
+		// крутые склоны выше берега — голубой лёд с трещинами
+		float icy = aastep(0.45 + edge_noise * 0.2, slope) * aastep(1.5, h) * max(sn, aastep(8.0, h));
+		vec3 icol = mix(ice_col.rgb, ice_col.rgb * 0.82, aastep(0.6, mid));
+		icol = mix(icol, vec3(0.92, 0.97, 1.0), aastep(0.92, sin(world_pos.y * 3.0 + mid * 8.0)) * 0.6);
+		col = mix(col, icol, icy);
+		r *= 1.0 - sn;
+	}
 
 	// вытоптанная площадка лагеря
 	float cd = length(world_pos.xz - camp_pos.xz) + (mid - 0.5) * 2.5;

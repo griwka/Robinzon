@@ -19,7 +19,7 @@ const CARD := Color("f6e3b8")        # светлая карточка пред�
 const CARD_EDGE := Color("b88552")
 const ROW := Color("c99a5e")         # строка в окне — тёплое светлое дерево
 const ROW_EDGE := Color("8a5a30")
-const HOTBAR_ORDER := ["machete", "stone_axe", "pickaxe", "shovel", "fishing_rod", "watering_can", "net", "wood", "stone", "fiber", "leaf", "rope", "plank", "bamboo"]
+const HOTBAR_ORDER := ["machete", "stone_axe", "pickaxe", "shovel", "fishing_rod", "watering_can", "net", "ice_pick", "ice_drill", "wood", "stone", "fiber", "leaf", "rope", "plank", "bamboo"]
 
 var station_check: Callable
 
@@ -435,6 +435,46 @@ func _item_slot(id: String, n: int, big := false) -> Control:
 
 
 var stamina_bar: ProgressBar
+var warm_box: PanelContainer
+var warm_bar: ProgressBar
+var warm_state: Label
+var _warm_fill: StyleBoxFlat
+
+
+## Шкала тепла (Ледяной остров до оттепели): под часами слева вверху. state — «у огня», «чай греет», «замёрз!».
+func set_warmth(v: float, shown: bool, state: String) -> void:
+	if warm_box == null:
+		warm_box = PanelContainer.new()
+		warm_box.position = Vector2(16, 70)
+		root.add_child(warm_box)
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		warm_box.add_child(h)
+		h.add_child(_label("Тепло", 18, Color("ffe0b8")))
+		warm_bar = ProgressBar.new()
+		warm_bar.show_percentage = false
+		warm_bar.max_value = 100.0
+		warm_bar.custom_minimum_size = Vector2(220, 20)
+		warm_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var bg := _box(WOOD_DARK, WOOD_DARK, 9, 2, 0)
+		_warm_fill = _box(Color("ff9a3a"), Color("c8641a"), 9, 2, 0)
+		bg.shadow_size = 0
+		_warm_fill.shadow_size = 0
+		warm_bar.add_theme_stylebox_override("background", bg)
+		warm_bar.add_theme_stylebox_override("fill", _warm_fill)
+		h.add_child(warm_bar)
+		warm_state = _label("", 16, Color("bfe3ff"))
+		h.add_child(warm_state)
+	warm_box.visible = shown
+	if not shown:
+		return
+	warm_bar.value = v
+	# от тёплого оранжевого к морозно-голубому
+	var k := clampf(v / 100.0, 0.0, 1.0)
+	_warm_fill.bg_color = Color("8fd0f5").lerp(Color("ff9a3a"), smoothstep(0.15, 0.7, k))
+	_warm_fill.border_color = _warm_fill.bg_color.darkened(0.3)
+	warm_state.text = state
+	warm_state.modulate = Color(1, 1, 1, 0.7 + 0.3 * sin(Time.get_ticks_msec() / 160.0)) if v <= 0.0 else Color.WHITE
 
 
 ## Полоска сил — видна, только когда силы не полные (как в PEAK).
@@ -634,7 +674,7 @@ func open_craft(_station := "") -> void:
 
 func _fill_craft() -> void:
 	var body := _clear(craft_panel)
-	var names := {"": "в руках", "workbench": "у верстака", "campfire": "у костра"}
+	var names := {"": "в руках", "workbench": "у верстака", "campfire": "у костра", "kiln": "у печи для обжига", "stove": "на печке"}
 	var note := _label("Рецепты «у верстака» и «у костра» работают, только если стоять рядом.", 15, INK, false)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size = Vector2(580, 0)
@@ -954,7 +994,9 @@ F5 — сохранить,  F9 — загрузить,  Esc — пауза и н
 Животные: покорми — через время будут яйца или молоко.
 Их можно гладить!
 Гроза (Грозовой остров): переждать под навесом, не стоять на вершинах.
-Ливень сам поливает грядки, а громоотвод заряжает аккумуляторы.""", 17, INK, false))
+Ливень сам поливает грядки, а громоотвод заряжает аккумуляторы.
+Холод (Ледяной остров): шкала тепла тает вдали от огня. Греют костёр, печка, палатка,
+теплица; куртка держит тепло дольше свитера. Q на морозе — выпить чай с мёдом.""", 17, INK, false))
 
 
 func show_help() -> void:

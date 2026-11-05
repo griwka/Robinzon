@@ -49,12 +49,25 @@ const KINDS := {
 		"verb": "Накопать песка", "radius": 0.7, "height": 0.2},
 	"rockfall": {"hp": 5, "tool": "pickaxe", "drops": {"stone": 5}, "respawn": 0.0,
 		"verb": "Разобрать обвал", "radius": 0.9, "height": 1.8, "long": 1.7},
+	# --- Ледяной остров
+	"moss": {"hp": 1, "tool": "", "drops": {"fiber": 1}, "respawn": 0.0,
+		"verb": "Сорвать мох", "radius": 0.6, "height": 0.6},
+	"lingonberry": {"hp": 1, "tool": "", "drops": {"lingonberry": 2, "fiber": 1}, "respawn": 60.0,
+		"verb": "Собрать бруснику", "radius": 0.55, "height": 0.6},
+	"pine": {"hp": 3, "tool": "stone_axe", "drops": {"wood": 3, "resin": 1}, "respawn": 150.0,
+		"verb": "Срубить сосну (дрова и смола)", "radius": 0.5, "height": 5.0},
+	"ice_block": {"hp": 2, "tool": "ice_pick", "drops": {"ice": 2}, "respawn": 90.0,
+		"verb": "Наколоть льда", "radius": 0.7, "height": 1.1},
+	"ice_wall": {"hp": 4, "tool": "ice_pick", "drops": {"ice": 2}, "respawn": 0.0,
+		"verb": "Разбить ледяную стену", "radius": 0.9, "height": 2.4, "long": 1.75},
 }
 const MODEL_NAMES := {"tall_grass": ["tall_grass"], "fern": ["fern_a", "fern_b"], "thicket": ["thicket"],
 	"bamboo": ["bamboo_clump"], "jungle_tree": ["jungle_tree_a", "jungle_tree_b"], "fallen_log": ["fallen_log"],
 	"cliff": ["cliff_a", "cliff_b"], "liana_curtain": ["liana_curtain"], "clay": ["clay_pit"],
 	"heather": ["heather_a", "heather_b"], "blueberry": ["blueberry_bush"], "crooked_tree": ["crooked_tree_a", "crooked_tree_b"],
-	"scrap_pile": ["scrap_pile"], "sand": ["sand_pit"], "rockfall": ["rockfall"]}
+	"scrap_pile": ["scrap_pile"], "sand": ["sand_pit"], "rockfall": ["rockfall"],
+	"moss": ["moss_a", "moss_b"], "lingonberry": ["lingonberry_bush"], "pine": ["pine_a", "pine_b"],
+	"ice_block": ["ice_block"], "ice_wall": ["ice_wall_a", "ice_wall_b"]}
 const BUSH_SEEDS := ["seed_carrot", "seed_carrot", "seed_potato", "seed_corn", "seed_cabbage"]
 
 @export var kind := "bush"
@@ -80,7 +93,8 @@ func _ready() -> void:
 	hp = cfg["hp"]
 	match kind:
 		"tall_grass", "fern", "thicket", "bamboo", "jungle_tree", "fallen_log", "cliff", "liana_curtain", "clay", \
-				"heather", "blueberry", "crooked_tree", "scrap_pile", "sand", "rockfall":
+				"heather", "blueberry", "crooked_tree", "scrap_pile", "sand", "rockfall", \
+				"moss", "lingonberry", "pine", "ice_block", "ice_wall":
 			var names: Array = MODEL_NAMES[kind]
 			visual = Models.glb(names[rng.randi() % names.size()])
 			if visual == null:
@@ -110,19 +124,19 @@ func _ready() -> void:
 		cs.shape = shape
 	cs.position.y = cfg["height"] * 0.5
 	add_child(cs)
-	if kind in ["pebble", "shell", "driftwood", "clay", "sand", "blueberry"]:
+	if kind in ["pebble", "shell", "driftwood", "clay", "sand", "blueberry", "lingonberry"]:
 		collision_layer = 8  # мелочь не мешает ходить
 
 
 func _setup_visibility() -> void:
 	# дальние мелкие объекты не рисуем и не даём им тени — так тысяча растений не тормозит
-	var far := 90.0 if kind in ["jungle_tree", "palm", "cliff", "bamboo", "crooked_tree", "rockfall"] else 55.0
+	var far := 90.0 if kind in ["jungle_tree", "palm", "cliff", "bamboo", "crooked_tree", "rockfall", "pine", "ice_wall"] else 55.0
 	for mi in visual.find_children("*", "GeometryInstance3D", true, false):
 		var gi := mi as GeometryInstance3D
 		gi.visibility_range_end = far
 		gi.visibility_range_end_margin = 6.0
 		gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-		if kind in ["tall_grass", "fern", "pebble", "shell", "driftwood", "heather", "sand"]:
+		if kind in ["tall_grass", "fern", "pebble", "shell", "driftwood", "heather", "sand", "moss"]:
 			gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
@@ -160,6 +174,9 @@ func interact(player: Node) -> void:
 		return
 	if cfg["tool"] != "" and not Game.has_tool(cfg["tool"]):
 		Game.notified.emit("Нужен инструмент: %s" % Game.item_name(cfg["tool"]), Color("ff9d7a"))
+		return
+	if cfg["tool"] != "" and Game.frozen():
+		Game.notified.emit("Руки замёрзли и не держат %s. Сначала согрейся у огня" % Game.item_name(cfg["tool"]).to_lower(), Color("bfe3ff"))
 		return
 	hp -= 1
 	_hit_fx(player)
@@ -204,7 +221,8 @@ func _shake_palm() -> void:
 
 const HIT_SOUND := {"palm": "chop", "driftwood": "chop", "rock": "rock", "pebble": "rock", "bush": "rustle", "shell": "pickup",
 	"jungle_tree": "chop", "fallen_log": "chop", "bamboo": "chop", "cliff": "rock", "thicket": "rustle", "fern": "rustle", "tall_grass": "rustle", "liana_curtain": "rustle", "clay": "plant",
-	"heather": "rustle", "blueberry": "rustle", "crooked_tree": "chop", "scrap_pile": "metal", "sand": "plant", "rockfall": "rock"}
+	"heather": "rustle", "blueberry": "rustle", "crooked_tree": "chop", "scrap_pile": "metal", "sand": "plant", "rockfall": "rock",
+	"moss": "rustle", "lingonberry": "rustle", "pine": "chop", "ice_block": "ice", "ice_wall": "ice"}
 
 
 const COLORS := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color("a0a4a8"), "cliff": Color("a0a4a8"),
@@ -212,10 +230,11 @@ const COLORS := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color
 	"thicket": Color("3c7a40"), "fern": Color("4f9a4a"), "tall_grass": Color("8fa850"), "liana_curtain": Color("5a9a3a"),
 	"driftwood": Color("d8c3a0"), "shell": Color("f7d6c4"), "clay": Color("b8623a"),
 	"heather": Color("b07ab8"), "blueberry": Color("4a5ab8"), "crooked_tree": Color("8a6a4a"), "scrap_pile": Color("9a7a5a"),
-	"sand": Color("ecd29a"), "rockfall": Color("8a8a90")}
-const STONE := ["rock", "cliff", "pebble", "rockfall", "scrap_pile"]
-const WOOD := ["palm", "jungle_tree", "fallen_log", "bamboo", "driftwood", "crooked_tree"]
-const HEAVY := ["rock", "cliff", "jungle_tree", "palm", "fallen_log", "bamboo", "crooked_tree", "rockfall"]
+	"sand": Color("ecd29a"), "rockfall": Color("8a8a90"),
+	"moss": Color("8fa060"), "lingonberry": Color("d8343a"), "pine": Color("8a6a4a"), "ice_block": Color("cfeefa"), "ice_wall": Color("cfeefa")}
+const STONE := ["rock", "cliff", "pebble", "rockfall", "scrap_pile", "ice_block", "ice_wall"]
+const WOOD := ["palm", "jungle_tree", "fallen_log", "bamboo", "driftwood", "crooked_tree", "pine"]
+const HEAVY := ["rock", "cliff", "jungle_tree", "palm", "fallen_log", "bamboo", "crooked_tree", "rockfall", "pine", "ice_wall"]
 var _hit_tw: Tween
 var _hitter: Node
 
@@ -247,8 +266,8 @@ func _hit_fx(player: Node) -> void:
 		FX.burst(self, at, col, 8)
 	elif kind in WOOD:
 		FX.burst(self, at, col, 10)
-		if kind in ["palm", "jungle_tree", "crooked_tree"]:
-			FX.leaves(self, Vector3(0, float(cfg["height"]) * 0.8, 0), Color("4f9a4a"), 5)
+		if kind in ["palm", "jungle_tree", "crooked_tree", "pine"]:
+			FX.leaves(self, Vector3(0, float(cfg["height"]) * 0.8, 0), Color("4f7a4a") if kind == "pine" else Color("4f9a4a"), 5)
 	else:
 		FX.leaves(self, at, col, 7)
 		FX.puff(self, at, col.lerp(Color("f4ead2"), 0.6), 3, 0.35, 0.9, 0.5)
@@ -269,7 +288,7 @@ func _deplete() -> void:
 	var col: Color = COLORS.get(kind, Color("e9d8b0"))
 	var big := kind in HEAVY or kind in ["thicket", "liana_curtain"]
 	var tw := create_tween()
-	if kind in ["palm", "jungle_tree", "crooked_tree"]:
+	if kind in ["palm", "jungle_tree", "crooked_tree", "pine"]:
 		# дерево валится от игрока, бьётся о землю: пыль кольцом, глухой удар, тряска
 		var away := Vector3.FORWARD
 		if _hitter is Node3D:

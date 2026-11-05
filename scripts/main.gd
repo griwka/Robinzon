@@ -10,6 +10,7 @@ var critters: Critters
 var parrot: NPCParrot
 var world_env: WorldEnv
 var weather: Weather
+var warmth: Warmth
 var clouds: Array[Node3D] = []
 var _autosave_t := 0.0
 var menu: GameMenu
@@ -51,6 +52,11 @@ func _ready() -> void:
 	weather.player = player
 	weather.island = island
 	add_child(weather)
+	if Game.location == "ice":
+		warmth = Warmth.new()
+		warmth.main = self
+		warmth.player = player
+		add_child(warmth)
 
 	if Game.location == "home":
 		_spawn_story_objects()
@@ -150,7 +156,7 @@ func _resume() -> void:
 ## Причал на новом острове: плот, на котором мы приплыли (на нём можно уплыть обратно), и Румба на мачте.
 func _spawn_arrival_dock() -> void:
 	var dock := Building.new()
-	var vessel: String = {"fort": "canoe", "storm": "boat"}.get(Game.location, "raft")
+	var vessel: String = {"fort": "canoe", "storm": "boat", "ice": "boat"}.get(Game.location, "raft")
 	dock.setup(vessel)
 	var w := island.wreck_point
 	w.y = maxf(w.y, 0.0)
@@ -256,7 +262,10 @@ func _radio_call() -> void:
 		"banyan": "ПРИЁМ! Привет Марте! Скажи, что я помню её пирог. И что я ВСЁ ЕЩЁ голоден.",
 		"fort": "ПРИЁМ! Стёпа рядом? Передай: «Тимур говорит — не кури трубку в трюме». Он поймёт.",
 		"storm": "ПРИЁМ! Я тебя ВИЖУ. Помаши. ...Нет, другой рукой. Ладно, конец связи.",
+		"ice": "ПРИЁМ! Как там Ингрид? Передай, что я НЕ кричу. Это у меня голос такой. И надень шапку!",
 	}
+	if Game.location == "ice" and Game.flags.get("ice_thawed", false):
+		lines["ice"] = "ПРИЁМ! Ингрид мне ответила! САМА! Я чуть рацию не уронил. Конец связи. То есть нет. То есть да."
 	var night := "" if Game.is_day() else " Ночью слушаю эфир. Пока тишина. Только шорох... как будто туман шуршит."
 	var text: String = lines.get(Game.location, "ПРИЁМ! Слышу тебя хорошо!")
 	Game.dialogue_requested.emit([["timur", text + night]], Callable())
@@ -409,9 +418,9 @@ func _choose_destination() -> void:
 	if Game.flags.get("storm_route", false) and not Game.flags.get("restored_stepa_boat", false):
 		options.append({"text": "Грозовой остров — на каноэ не доплыть, нужен бот Стёпы", "icon": "sym_star",
 			"callback": func(): Game.notified.emit("Почини бот Стёпы на берегу форта", Color("ffe08a"))})
-	if Game.flags.get("ice_route", false):
-		options.append({"text": "Ледяной остров — глава 5 (в разработке)", "icon": "sym_star",
-			"callback": func(): Game.notified.emit("Ледяной остров появится в следующей версии игры", Color("ffe08a"))})
+	if Game.flags.get("volcano_route", false):
+		options.append({"text": "Остров Вулкана — глава 6 (в разработке)", "icon": "sym_star",
+			"callback": func(): Game.notified.emit("Остров Вулкана появится в следующей версии игры", Color("ffe08a"))})
 	if options.is_empty():
 		Game.notified.emit("Плыть пока некуда. Куда указывает свет?..", Color("ffe08a"))
 		return

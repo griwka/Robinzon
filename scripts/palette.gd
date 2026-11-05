@@ -57,6 +57,15 @@ const RAIN := {
 }
 
 
+## Мороз (Ледяной остров до оттепели): чистое бледно-голубое небо, холодное солнце, голубые тени.
+const FROST := {
+	"top": Color("6aa8e8"), "hor": Color("dcecf8"), "sun": Color("fff6ea"), "sun_e": 0.68,
+	"amb_top": Color("a8b8e0"), "amb_hor": Color("b8c4e0"), "amb_ground": Color("c8d0dc"), "amb_e": 1.0,
+	"fog": 0.4, "water": 0.92, "band": 0.0,
+	"cloud_lit": Color("ffffff"), "cloud_shade": Color("c8d4ee"), "light": Color(0.96, 0.98, 1.0),
+}
+
+
 static func mix(a: Dictionary, b: Dictionary, k: float) -> Dictionary:
 	var out := {}
 	for key in a:

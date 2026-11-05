@@ -8,10 +8,12 @@ class_name QuestValidator
 const KNOWN_KINDS := ["talk", "collected", "crafted", "built", "planted", "harvested", "watered", "fed", "product",
 	"caught", "sailed", "cleared", "found", "lit", "reached", "collection", "delivered", "sold", "bought", "restored",
 	"fished", "solved"]
-const NPCS := ["parrot", "marta", "kesha", "stepa", "timur"]
-const PUZZLES := ["cellar"]
+const NPCS := ["parrot", "marta", "kesha", "stepa", "timur", "ingrid", "walrus", "penguins"]
+const PUZZLES := ["cellar", "stars"]
 const DECKS := ["deck1", "deck2", "deck3",
-	"bunker1", "bunker2", "bunker3", "bunker4", "bunker5", "bunker6", "bunker7"]
+	"bunker1", "bunker2", "bunker3", "bunker4", "bunker5", "bunker6", "bunker7", "glacier_top"]
+## Ледяные ларцы: задание «found ice_chest ×3» — это три места ice_chest_1..3.
+const ICE_CHESTS := ["ice_chest_1", "ice_chest_2", "ice_chest_3"]
 
 var unlocked := {}
 var given := {}        # предметы из наград и находок (разовые)
@@ -49,6 +51,10 @@ func run(chapters: Array = Data.CHAPTERS) -> Array[String]:
 				if t["kind"] == "found" and t["target"] == "crate":
 					for id in SupplyCrate.LOOT:
 						given[id] = true
+				if t["kind"] == "found" and t["target"] == "ice_chest":
+					for c in ICE_CHESTS:
+						for id in StoryPlace.PLACES[c]["loot"]:
+							given[id] = true
 			var rw: Dictionary = q.get("reward", {})
 			for id in rw.get("unlock", []):
 				if not _unlock_exists(id):
@@ -72,12 +78,16 @@ func _check_pages(chapters: Array) -> void:
 			for t in q["tasks"]:
 				if t["kind"] == "found" and t["target"] == "crate":
 					got["journal"] = got.get("journal", 0) + 1
-				elif t["kind"] in ["found", "restored"] and StoryPlace.PLACES.has(t["target"]):
-					var cfg: Dictionary = StoryPlace.PLACES[t["target"]]
-					got["journal"] = got.get("journal", 0) + int(cfg.get("pages", 0))
-					if cfg.has("journal"):
-						got[cfg["journal"]] = got.get(cfg["journal"], 0) + int(cfg.get("journal_pages", 0))
+				elif t["kind"] in ["found", "restored"] and (StoryPlace.PLACES.has(t["target"]) or t["target"] == "ice_chest"):
+					for pid in (ICE_CHESTS if t["target"] == "ice_chest" else [t["target"]]):
+						var cfg: Dictionary = StoryPlace.PLACES[pid]
+						got["journal"] = got.get("journal", 0) + int(cfg.get("pages", 0))
+						if cfg.has("journal"):
+							got[cfg["journal"]] = got.get(cfg["journal"], 0) + int(cfg.get("journal_pages", 0))
 			got["journal"] = got.get("journal", 0) + int(q.get("reward", {}).get("pages", 0))
+			var col: Dictionary = q.get("reward", {}).get("collect", {})
+			for cid in col:
+				got[cid] = got.get(cid, 0) + int(col[cid])
 	for cid in Data.COLLECTIONS:
 		var col: Dictionary = Data.COLLECTIONS[cid]
 		if col.get("ordered", false):
@@ -251,6 +261,8 @@ func _check_task(t: Dictionary) -> void:
 		"fished":
 			if not can_get("fishing_rod"):
 				_err("нечем ловить рыбу — нет удочки")
+			if tgt == "ice_fish" and not can_get("ice_drill"):
+				_err("подо льдом не порыбачить — нет ледового бура")
 		"solved":
 			if not tgt in PUZZLES:
 				_err("нет головоломки «%s»" % tgt)
@@ -268,6 +280,17 @@ func _check_task(t: Dictionary) -> void:
 				_err("нечем расчистить «%s»" % tgt)
 		"found", "lit", "restored":
 			if tgt in ["crate", "wreck"]:
+				return
+			if tgt == "ice_chest":
+				for c in ICE_CHESTS:
+					if not StoryPlace.PLACES.has(c):
+						_err("нет ларца «%s»" % c)
+						continue
+					for i in StoryPlace.PLACES[c].get("brazier", {}):
+						if not can_get(i):
+							_err("ларец «%s» не растопить: не достать «%s»" % [c, i])
+					if StoryPlace.PLACES[c].get("climb", false) and not (can_get("ice_pick") and can_get("climbing_gloves")):
+						_err("к ларцу «%s» не залезть: нужны ледоруб и перчатки" % c)
 				return
 			if not StoryPlace.PLACES.has(tgt):
 				_err("нет места «%s»" % tgt)
@@ -287,6 +310,9 @@ func _check_task(t: Dictionary) -> void:
 		"reached":
 			if not tgt in DECKS:
 				_err("нет яруса «%s»" % tgt)
+			elif tgt == "glacier_top":
+				if not (can_get("ice_pick") and can_get("climbing_gloves")):
+					_err("на ледник не залезть: нужны ледоруб и перчатки")
 			elif tgt.begins_with("bunker"):
 				# бункер: ярусы 2–3 видны при свете генератора (или фонаря), ниже — только с фонарём
 				var k := int(tgt.substr(6))

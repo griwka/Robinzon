@@ -7,6 +7,9 @@ extends Node
 ##   --autotest      пройти главу через игровую логику и вывести результат
 ##                   (--chapter=N — какую; --from=K — начать с K-го задания главы, с нуля; --upto=K — остановиться после K заданий)
 ##   --bunker=N      поставить героя на ярус N бункера (Грозовой остров)
+##   --near=glacier_top|ingrid|walrus|penguins|ice_tower|ice_chest_1..3 — герой у места на Ледяном острове
+##   --thaw=1        Ледяной остров уже оттаял (для скриншотов «весны»)
+##   --wear=sweater|jacket — герой в тёплой одежде (с jacket — ещё валенки и рукавицы)
 
 var main: Node
 var args := {}
@@ -27,6 +30,16 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_frames += 1
 	var p: Player = main.player
+	if _frames == 1 and args.get("thaw", "") == "1":
+		Game.flags["ice_thawed"] = true
+		main.island.thaw(false)
+	if _frames == 2 and args.has("wear"):
+		if args["wear"] == "sweater":
+			Game.inventory["sweater"] = 1
+		else:
+			for id in ["down_jacket", "felt_boots", "mittens"]:
+				Game.inventory[id] = 1
+		p.update_clothes()
 	if _frames == 2:
 		if args.has("dbgdraw"):   # отладка рендера: 1 — без света, 2 — только свет, 5 — нормали, 12 — SSAO
 			get_viewport().debug_draw = int(args["dbgdraw"]) as Viewport.DebugDraw
@@ -416,6 +429,129 @@ func _test_storm() -> void:
 	main.weather._storm_forced = -1
 
 
+# ------------------------------------------------------------------ Ледяной остров
+func _glacier() -> IceGlacier:
+	for n in get_tree().get_nodes_in_group("glacier"):
+		return n
+	return null
+
+
+func _test_ice() -> void:
+	var gl := _glacier()
+	_check(gl != null, "на Ледяном острове стоит ледник с обсерваторией")
+	if gl == null:
+		return
+	var p: Player = main.player
+	var w: Warmth = main.warmth
+	_check(w != null and Game.cold_active(), "на Ледяном острове холодно, шкала тепла работает")
+	_check(gl.climb.ice and gl.climb.locked_hint != "", "к ледяной стене не подойти, пока на тропе спит морж")
+	# высота обрыва: снизу не запрыгнуть
+	_check(gl.top - gl.climb.bottom.y > 4.5, "обрыв ледника высокий (%.1f м)" % (gl.top - gl.climb.bottom.y))
+	# холод: без одежды — втрое быстрее, чем в куртке
+	var far := gl.foot_point() + Vector3(0, 0, 0)
+	p.global_position = far
+	Game.inventory = {}
+	Game.warmth = 100.0
+	w.tick(10.0)
+	var bare := 100.0 - Game.warmth
+	Game.inventory = {"down_jacket": 1}
+	Game.warmth = 100.0
+	w.tick(10.0)
+	var jacket := 100.0 - Game.warmth
+	_check(bare > 0.0 and absf(bare / maxf(jacket, 0.01) - 3.0) < 0.05, "без тёплой одежды остываешь втрое быстрее, чем в куртке (%.1f / %.1f)" % [bare, jacket])
+	Game.inventory = {"down_jacket": 1, "felt_boots": 1, "mittens": 1}
+	Game.warmth = 100.0
+	w.tick(10.0)
+	_check(100.0 - Game.warmth < jacket * 0.65, "валенки и рукавицы греют ещё лучше")
+	# у костра теплеет
+	var fire: Building = main.build.spawn_building("campfire", far + Vector3(2.0, 0, 0), 0.0)
+	Game.warmth = 20.0
+	w.tick(1.0)
+	_check(Game.warmth > 40.0 and w.near_fire, "у костра шкала тепла растёт")
+	# чай
+	Game.inventory["honey_tea"] = 1
+	Game.warmth = 40.0
+	p.global_position = far + Vector3(0, 0, 30.0)
+	_check(Warmth.drink_tea() and Game.warmth == 100.0, "кружка чая с мёдом согревает сразу")
+	w.tick(10.0)
+	_check(Game.warmth == 100.0, "пока греет чай, холод не страшен")
+	Game.warm_tea = 0.0
+	# замёрз: инструменты не держатся, лезть нельзя
+	Game.warmth = 0.0
+	Game.inventory["ice_pick"] = 1
+	var wall: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode and n.kind == "ice_wall" and n.active:
+			wall = n
+	if wall:
+		var hp0: int = wall.hp
+		wall.interact(p)
+		_check(wall.hp == hp0, "замёрзшими руками ледоруб не держится")
+	_check(Game.frozen(), "без тепла герой замерзает")
+	# через полминуты без тепла Румба утаскивает к огню
+	for i in 31:
+		w.tick(1.0)
+	await get_tree().create_timer(1.6).timeout
+	_check(Game.warmth >= 60.0 and p.global_position.distance_to(fire.global_position) < 4.5, "замёрзшего героя Румба утаскивает к огню")
+	_flush()
+	fire.queue_free()
+	# лунки: без бура не просверлить
+	var holes := 0
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is FishingSpot and n.ice:
+			holes += 1
+			if holes == 1:
+				n.interact(p)
+				_check(not n.drilled(), "без ледового бура лунку не просверлить")
+	_check(holes >= 3, "на бухте у пингвинов есть лунки (%d)" % holes)
+	var feeder := false
+	var walrus := false
+	var ingrid := false
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is NPCPerson:
+			feeder = feeder or n.npc_id == "penguins"
+			walrus = walrus or n.npc_id == "walrus"
+			ingrid = ingrid or n.npc_id == "ingrid"
+	_check(feeder and walrus and ingrid, "пингвины, морж и Ингрид на месте")
+	var penguins := 0
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is Animal and n.kind == "penguin":
+			penguins += 1
+	_check(penguins >= 5, "у бухты живут пингвины (%d)" % penguins)
+	# теплица: внутри растёт всё, снаружи в мороз — только морошка
+	Game.unlocked["garden_bed"] = true
+	var bed := _bed()
+	_check(not bed.can_grow("carrot") and bed.can_grow("cloudberry"), "в мороз на улице растёт только морошка")
+	var gh := main.build.spawn_building("greenhouse", far + Vector3(-6.0, 0, 4.0), 0.0) as Greenhouse
+	_check(gh != null and gh.beds.size() == 4 and gh.beds[0].can_grow("carrot"), "в теплице четыре грядки, растёт и морковь")
+	Game.inventory["seed_carrot"] = 1
+	gh.beds[0].plant("carrot")
+	var st := gh.get_state()
+	_check(st["beds"][0]["crop"] == "carrot", "грядки теплицы сохраняются вместе с ней")
+	gh.queue_free()
+	# звёздный круг: днём не решить, неверные кольца — не решено
+	_check(not gl.dial.solved(), "звёздный круг не решён с самого начала")
+	gl.dial.pos = [1, 2, 5]
+	_check(not gl.dial.check(), "неверное положение колец не засчитывается")
+	gl.dial.pos = IceGlacier.STARS_START.duplicate()
+	# ресурсы
+	var counts := {}
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode:
+			counts[n.kind] = counts.get(n.kind, 0) + 1
+	_check(counts.get("ice_wall", 0) >= 14, "ледяных стен хватает на задания (%d, нужно 7)" % counts.get("ice_wall", 0))
+	_check(counts.get("pine", 0) >= 8, "сосен для смолы хватает (%d)" % counts.get("pine", 0))
+	_check(counts.get("ice_block", 0) >= 4, "есть ледяные глыбы для мороженого (%d)" % counts.get("ice_block", 0))
+	var chests := 0
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is StoryPlace and n.id.begins_with("ice_chest"):
+			chests += 1
+	_check(chests == 3, "на острове три ледяных ларца")
+	Game.inventory = {}
+	Game.warmth = 100.0
+	p.global_position = main.island.spawn_point
+
+
 # ------------------------------------------------------------------ Форт
 func _fort() -> FortRuin:
 	for n in get_tree().get_nodes_in_group("obstacle"):
@@ -510,9 +646,12 @@ func _reachable(poi_id: String) -> bool:
 			if Vector2(p.x - c.x, p.z - c.z).length() < R + 3.0:
 				blockers.append([Vector2(p.x, p.z), cfg["radius"], cfg.get("long", 0.0), n.visual.rotation.y])
 	var size := int(R * 2 / cell)
+	var gl := _glacier()
 	var blocked := func(x: float, z: float) -> bool:
 		if isl.height_at(x, z) < -0.9:
 			return true
+		if gl and Vector2(x - gl.global_position.x, z - gl.global_position.z).length() < IceGlacier.WALL_R + 0.45:
+			return true   # ледяной обрыв: снизу на ледник не зайти
 		var q := Vector2(x, z)
 		for b in blockers:
 			var d: Vector2 = q - b[0]
@@ -691,7 +830,7 @@ func _do_task(t: Dictionary) -> void:
 				guard += 1
 		"cleared":
 			var tools := {"thicket": "machete", "bamboo": "machete", "jungle_tree": "stone_axe", "fallen_log": "stone_axe", "cliff": "pickaxe", "rock": "pickaxe", "liana_curtain": "machete",
-				"crooked_tree": "stone_axe", "rockfall": "pickaxe"}
+				"crooked_tree": "stone_axe", "rockfall": "pickaxe", "ice_wall": "ice_pick", "pine": "stone_axe", "ice_block": "ice_pick"}
 			if tools.has(target) and not Game.has_tool(tools[target]):
 				_give({tools[target]: 1})
 			var done := 0
@@ -703,6 +842,15 @@ func _do_task(t: Dictionary) -> void:
 						c.interact(main.player)
 					done += 1
 		"found", "lit":
+			if target == "ice_chest":
+				for c in get_tree().get_nodes_in_group("interactable"):
+					if c is StoryPlace and c.id.begins_with("ice_chest") and Game.task_progress(t) < t["count"]:
+						_give(c.PLACES[c.id]["brazier"])
+						c.interact(main.player)          # поставить жаровню
+						Game.world_time += float(c.PLACES[c.id]["melt"]) + 1.0
+						c.interact(main.player)          # лёд растаял — открыть
+						_flush()
+				return
 			if target == "crate":
 				for c in get_tree().get_nodes_in_group("interactable"):
 					if c is SupplyCrate:
@@ -724,11 +872,26 @@ func _do_task(t: Dictionary) -> void:
 			for c in get_tree().get_nodes_in_group("interactable"):
 				if c is FishingSpot:
 					spot = c
+			if target == "ice_fish":
+				for c in get_tree().get_nodes_in_group("interactable"):
+					if c is FishingSpot and c.ice:
+						spot = c
+				if not spot.drilled():
+					spot.interact(main.player)  # просверлить лунку
 			for i in need:
 				spot.interact(main.player)     # закинуть
 				spot.state = FishingSpot.BITE  # поклёвка
 				spot.interact(main.player)     # подсечь
 		"solved":
+			if target == "stars":
+				var gl := _glacier()
+				Game.time_of_day = 0.85      # ночь: звёзды видно
+				_check(not Game.is_day(), "у телескопа ночь")
+				for i in 3:
+					while int(gl.dial.pos[i]) != int(IceGlacier.STARS_TARGET[i]):
+						gl.dial.pos[i] = (int(gl.dial.pos[i]) + 1) % 6
+				gl.dial.check()
+				return
 			var fort := _fort()
 			for sym in ["moon", "star", "sun"]:
 				for lv in fort.levers:
@@ -780,6 +943,11 @@ func _do_task(t: Dictionary) -> void:
 			Game.bump("sailed", "raft")
 			Game.bump("sailed", target)
 		"reached":
+			if target == "glacier_top":
+				var gl := _glacier()
+				main.player.global_position = gl.top_point()
+				gl._process(0.0)
+				return
 			if target.begins_with("bunker"):
 				var stn := _station()
 				main.player.global_position = stn.deck_point(target)
@@ -833,6 +1001,8 @@ func _autotest() -> void:
 	if ch == 3 and Game.location == "storm":
 		_test_storm()
 		Game.storm_force = true   # молнии нужны для громоотвода и Башни громов
+	if ch == 4 and Game.location == "ice":
+		await _test_ice()
 	if ch > 0:
 		# всё, что открыли предыдущие задания (рецепты, лавки, флаги), — как у игрока, дошедшего сюда
 		var from_q := int(args.get("from", "0"))
@@ -876,6 +1046,9 @@ func _autotest() -> void:
 				print("      %s: %d/%d" % [t["text"], Game.task_progress(t), t["count"]])
 			break
 	var done_ch: bool = Game.chapter > ch or (Game.quest_index >= qs.size())
+	if ch == 4 and Game.location == "ice" and done_ch:
+		_check(Game.flags.get("ice_thawed", false) and not Game.cold_active(), "Холодное сердце зажжено — на острове оттепель, холода больше нет")
+		_check(Game.collection_complete("star_maps"), "все шесть листов звёздных карт собраны")
 	if upto < 999:
 		var target_i := int(args.get("from", "0")) + upto
 		_check(Game.quest_index >= target_i or Game.chapter > ch, "пройдено %d заданий главы %d" % [upto, ch + 1])

@@ -7,6 +7,7 @@ var player: Node3D
 var crabs: Array[Node3D] = []
 var crab_data: Array = []
 var fireflies: CPUParticles3D
+var cold := false
 
 
 func setup(isl: Island, p: Node3D) -> void:
@@ -14,11 +15,12 @@ func setup(isl: Island, p: Node3D) -> void:
 	player = p
 	var g := RandomNumberGenerator.new()
 	g.seed = 99
+	cold = Game.cold_active()
 	# бабочки
 	var colors: Array = []
 	for it in Data.COLLECTIONS["butterflies"]["items"]:
 		colors.append(it["color"])
-	for i in 16:
+	for i in (0 if cold else 16):   # в мороз бабочек и крабов нет
 		var b := Butterfly.new()
 		b.island = island
 		b.palette = colors
@@ -27,7 +29,7 @@ func setup(isl: Island, p: Node3D) -> void:
 	# крабы
 	var n := 0
 	var tries := 0
-	while n < 9 and tries < 3000:
+	while n < (0 if cold else 9) and tries < 3000:
 		tries += 1
 		var x := g.randf_range(-70, 70)
 		var z := g.randf_range(-70, 70)
@@ -83,7 +85,7 @@ func _process(_delta: float) -> void:
 		c.position.y = island.height_at(c.position.x, c.position.z)
 		c.rotation.z = sin(t * 12.0 + i) * 0.08
 	var night := not Game.is_day()
-	fireflies.emitting = night
+	fireflies.emitting = night and not Game.cold_active()
 	if player:
 		fireflies.global_position = player.global_position + Vector3(0, 1.2, 0)
 

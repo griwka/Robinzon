@@ -5,6 +5,7 @@ extends Building
 var crop := ""
 var progress := 0.0
 var watered := false
+var in_greenhouse := false   # грядка внутри теплицы: растёт и в мороз, на четверть быстрее
 var _stage := -1
 var crop_node: Node3D
 
@@ -36,8 +37,9 @@ func stage() -> int:
 func _process(delta: float) -> void:
 	super(delta)
 	var dt := world_dt()
-	if crop != "" and progress < 1.0:
-		progress = minf(1.0, progress + dt * (2.0 if watered else 1.0) / Data.CROPS[crop]["time"])
+	if crop != "" and progress < 1.0 and can_grow(crop):
+		var speed := (2.0 if watered else 1.0) * (1.25 if in_greenhouse else 1.0)
+		progress = minf(1.0, progress + dt * speed / Data.CROPS[crop]["time"])
 	if stage() != _stage:
 		_refresh()
 
@@ -59,6 +61,16 @@ func _refresh() -> void:
 	FX.set_marker(marker, _stage == 3, crop)
 
 
+## Растёт ли культура здесь: в теплице — всё; морошка на улице — только на Ледяном острове;
+## остальное на улице — где не мороз.
+func can_grow(c: String) -> bool:
+	if in_greenhouse:
+		return true
+	if Data.CROPS[c].get("cold", false):
+		return Game.location == "ice"
+	return not Game.cold_active()
+
+
 func tool_hint() -> String:
 	return "watering_can" if crop != "" and not watered and progress < 1.0 else ""
 
@@ -67,6 +79,8 @@ func get_hint() -> String:
 	match stage():
 		0: return "Грядка — посадить семена"
 		3: return "Собрать урожай: %s" % Data.CROPS[crop]["name"]
+	if not can_grow(crop):
+		return "%s не растёт: %s" % [Data.CROPS[crop]["name"], "здесь слишком тепло для северной ягоды" if Data.CROPS[crop].get("cold", false) else "мороз"]
 	var t := "%s растёт: %d%%" % [Data.CROPS[crop]["name"], int(progress * 100)]
 	if not watered:
 		t += " · полить лейкой" if Game.has_tool("watering_can") else " · (лейка ускорит рост)"
@@ -77,12 +91,17 @@ func interact(_player: Node) -> void:
 	match stage():
 		0:
 			var options := []
+			var blocked := false
 			for c in Data.CROPS:
 				var seed_id := _seed_for(c)
-				if Game.count(seed_id) > 0:
+				if Game.count(seed_id) > 0 and not can_grow(c):
+					blocked = true
+				elif Game.count(seed_id) > 0:
 					options.append({"text": "%s  (семян: %d, ~%d c)" % [Data.CROPS[c]["name"], Game.count(seed_id), int(Data.CROPS[c]["time"])],
 						"icon": seed_id, "callback": plant.bind(c)})
-			if options.is_empty():
+			if options.is_empty() and blocked:
+				Game.notified.emit("Здесь это не вырастет. В мороз на улице растёт только морошка, остальное — в теплице. Морошке же нужен холод или теплица", Color("ff9d7a"))
+			elif options.is_empty():
 				Game.notified.emit("Нет семян. Поищи в кустах или спроси Румбу!", Color("ff9d7a"))
 			else:
 				choice_requested.emit("Что посадить?", options)
@@ -107,7 +126,7 @@ func _seed_for(c: String) -> String:
 
 
 func _time_left() -> float:
-	return (1.0 - progress) * Data.CROPS[crop]["time"] / (2.0 if watered else 1.0)
+	return (1.0 - progress) * Data.CROPS[crop]["time"] / ((2.0 if watered else 1.0) * (1.25 if in_greenhouse else 1.0))
 
 
 func plant(c: String) -> void:

@@ -39,6 +39,40 @@ var settings: Dictionary = DEFAULT_SETTINGS.duplicate()
 var skip_menu := false                 # true — после перезагрузки сразу в игру, без главного меню
 var storm := 0.0                       # сила грозы 0..1 (задаёт погода на Грозовом острове, не сохраняется)
 var storm_force := false               # для автотеста: гроза «идёт» всегда
+var warmth := 100.0                    # тепло героя 0..100 (Ледяной остров до оттепели; не сохраняется)
+var warm_tea := 0.0                    # сколько секунд ещё греет выпитый чай
+
+
+## Холодно ли там, где сейчас герой: Ледяной остров, пока не зажжено Холодное сердце.
+func cold_active() -> bool:
+	return location == "ice" and not flags.get("ice_thawed", false)
+
+
+## Во сколько раз быстрее остываешь — зависит от одежды (её носят, если она есть в сумке).
+func cold_mult() -> float:
+	var m := 3.0
+	if has_tool("down_jacket"):
+		m = 1.0
+	elif has_tool("sweater"):
+		m = 2.0
+	if has_tool("felt_boots") and has_tool("mittens"):
+		m *= 0.6
+	return m
+
+
+## Замёрз: тепло кончилось — идёшь медленно, не лазаешь, инструменты не держатся в руках.
+func frozen() -> bool:
+	return cold_active() and warmth <= 0.0
+
+
+## Подождать до темноты (у телескопа): время идёт, растения растут.
+func wait_until_night() -> void:
+	var target := 0.82
+	var delta_days := target - time_of_day
+	if delta_days <= 0.0:
+		return
+	world_time += delta_days * DAY_LENGTH
+	time_of_day = target
 
 
 ## Идёт ли сейчас гроза (молнии бьют, громоотводы заряжаются, лазать нельзя).
@@ -368,7 +402,7 @@ func task_progress(task: Dictionary) -> int:
 	var base: int = quest_baseline.get(key, 0)
 	var p := clampi(stat(task["kind"], tgt) - base, 0, task["count"])
 	# инструмент уже есть (сделан раньше или подарен) — «смастери» засчитывается
-	if task["kind"] in ["crafted", "collected", "bought"] and item(task["target"]).get("cat", "") == "tool" and has_tool(task["target"]):
+	if task["kind"] in ["crafted", "collected", "bought"] and item(task["target"]).get("cat", "") in ["tool", "clothes"] and has_tool(task["target"]):
 		p = task["count"]
 	# «собери N» засчитывается и тем, что уже лежит в сумке (ресурс мог кончиться на острове раньше задания)
 	if task["kind"] == "collected" and not task.has("where"):
@@ -436,6 +470,10 @@ func _grant(reward: Dictionary) -> void:
 		flags[f] = true
 	for i in int(reward.get("pages", 0)):
 		add_collectible("journal")
+	var col: Dictionary = reward.get("collect", {})
+	for cid in col:
+		for i in int(col[cid]):
+			add_collectible(cid)
 	var items: Dictionary = reward.get("items", {})
 	for id in items:
 		add_item(id, items[id], false)

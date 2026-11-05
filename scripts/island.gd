@@ -14,7 +14,7 @@ var radius := 52.0
 var peak_h := 10.0
 var loc := "home"
 var mix := "home"
-var flat := []      # [центр Vector2, радиус, высота] — плато под постройки (форт)
+var flat := []      # [центр Vector2, радиус, высота, (ширина края)] — плато под постройки (форт, ледник)
 var shape_noise := FastNoiseLite.new()
 var hill_noise := FastNoiseLite.new()
 var detail_noise := FastNoiseLite.new()
@@ -25,6 +25,7 @@ var camp_center := Vector3.ZERO     # поляна для лагеря рядо�
 var wreck_point := Vector3.ZERO
 var noise_tex: NoiseTexture2D
 var water_mat: ShaderMaterial
+var terrain_mat: ShaderMaterial
 
 
 ## Настроить остров по описанию из Data.LOCATIONS (вызывать до add_child / build).
@@ -85,7 +86,8 @@ func height_at(x: float, z: float) -> float:
 	# плато (под форт)
 	if not flat.is_empty():
 		var fd := p.distance_to(flat[0])
-		h = lerpf(h, flat[2], smoothstep(flat[1] + 7.0, flat[1], fd))
+		var edge: float = flat[3] if flat.size() > 3 else 7.0
+		h = lerpf(h, flat[2], smoothstep(flat[1] + edge, flat[1], fd))
 	# пологая поляна под лагерь
 	if camp_center != Vector3.ZERO:
 		var cd := Vector2(x - camp_center.x, z - camp_center.z).length()
@@ -138,6 +140,16 @@ func _build_terrain() -> void:
 			["grass_light", Palette.GRASS_LIGHT], ["grass_dark", Palette.GRASS_DARK], ["grass_warm", Palette.GRASS_WARM],
 			["rock", Palette.ROCK], ["rock_dark", Palette.ROCK_DARK], ["dirt", Palette.DIRT], ["dirt_dark", Palette.DIRT_DARK]]:
 		m.set_shader_parameter(pair[0], pair[1])
+	if mix == "ice":
+		# Ледяной остров: галечный берег, тундра с рыжими пятнами, выше — снег и голубой лёд
+		for pair in [["sand", Color("e9e0c9")], ["sand_dark", Color("d6caae")], ["sand_light", Color("f5efe0")],
+				["wet_sand", Color("b6aa92")], ["seabed", Color("72b9c9")]]:
+			m.set_shader_parameter(pair[0], pair[1])
+		var thawed: bool = Game.flags.get("ice_thawed", false)
+		_set_grass_colors(m, 1.0 if thawed else 0.0)
+		m.set_shader_parameter("snow_on", 1.0)
+		m.set_shader_parameter("snow_amount", 0.0 if thawed else 1.0)
+	terrain_mat = m
 	mi.material_override = m
 	add_child(mi)
 
@@ -170,6 +182,11 @@ func _build_water() -> void:
 	water_mat.set_shader_parameter("map_size", SIZE)
 	water_mat.set_shader_parameter("height_min", H_MIN)
 	water_mat.set_shader_parameter("height_max", H_MAX)
+	if mix == "ice":
+		# северное море: холоднее и темнее, у берега — бледная ледяная бирюза
+		water_mat.set_shader_parameter("shallow_color", Color("9ad8e2"))
+		water_mat.set_shader_parameter("mid_color", Color("4aa2cc"))
+		water_mat.set_shader_parameter("deep_color", Color("1f5a98"))
 	var water := MeshInstance3D.new()
 	water.name = "Water"
 	water.mesh = plane
@@ -179,7 +196,20 @@ func _build_water() -> void:
 
 
 # ------------------------------------------------------------------ Трава и цветы
+const SNOW_LINE := 2.1   # Ледяной остров до оттепели: выше этой высоты — снег
+
+
+## Ледяной остров ещё скован холодом.
+var cold := false
+
+
 func _build_grass() -> void:
+	cold = mix == "ice" and not Game.flags.get("ice_thawed", false)
+	for old in ["Grass", "Flowers"]:
+		var n := get_node_or_null(old)
+		if n:
+			remove_child(n)
+			n.queue_free()
 	# пучок из 5 широких травинок
 	var tuft := SurfaceTool.new()
 	tuft.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -210,14 +240,20 @@ func _build_grass() -> void:
 			continue
 		if Vector2(x - camp_center.x, z - camp_center.z).length() < 6.5:
 			continue
+		if cold and h > SNOW_LINE + detail_noise.get_noise_2d(x * 0.3, z * 0.3) * 0.8 - 0.2:
+			continue   # под снегом трава не растёт
 		var s := g.randf_range(0.8, 1.6)
 		tr.append(Transform3D(Basis(Vector3.UP, g.randf() * TAU).scaled(Vector3(s, s * g.randf_range(0.8, 1.3), s)), Vector3(x, h - 0.03, z)))
 		cols.append(Color.WHITE.lerp(Color("e8ffb0"), g.randf() * 0.4))
 	_add_multimesh("Grass", tuft_mesh, tr, cols, _grass_mat())
+	if cold:
+		return   # цветы распустятся в оттепель
 
 	var ft: Array[Transform3D] = []
 	var fc: Array[Color] = []
 	var palette := [Color("ff6fa5"), Color("ffd84a"), Color("ffffff"), Color("b28cff"), Color("ff8a3d"), Color("6fc3ff")]
+	if mix == "ice":
+		palette = [Color("ffffff"), Color("fff4c0"), Color("ffd84a"), Color("ffffff")]   # северные цветы: белые и жёлтые
 	attempts = 0
 	while ft.size() < 900 and attempts < 30000:
 		attempts += 1
@@ -245,9 +281,43 @@ func _build_grass() -> void:
 func _grass_mat() -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = preload("res://shaders/grass.gdshader")
-	m.set_shader_parameter("base_color", Palette.TUFT_BASE)
-	m.set_shader_parameter("tip_color", Palette.TUFT_TIP)
+	m.set_shader_parameter("base_color", TUNDRA_TUFT_BASE if cold else Palette.TUFT_BASE)
+	m.set_shader_parameter("tip_color", TUNDRA_TUFT_TIP if cold else Palette.TUFT_TIP)
 	return m
+
+
+# ------------------------------------------------------------------ Ледяной остров: тундра и оттепель
+const TUNDRA := [Color("8a9858"), Color("a6ac6c"), Color("6a7a46"), Color("c48a52")]   # трава, светлая, тёмная, рыжие пятна
+const TUNDRA_TUFT_BASE := Color("7c8a4c")
+const TUNDRA_TUFT_TIP := Color("cdbc7c")
+
+
+## Цвета травы на земле: k = 0 — тундра, 1 — летняя трава (после оттепели).
+func _set_grass_colors(m: ShaderMaterial, k: float) -> void:
+	var summer := [Palette.GRASS, Palette.GRASS_LIGHT, Palette.GRASS_DARK, Palette.GRASS_WARM]
+	var names := ["grass", "grass_light", "grass_dark", "grass_warm"]
+	for i in 4:
+		var c: Color = (TUNDRA[i] as Color).lerp(summer[i] as Color, k * 0.75)
+		m.set_shader_parameter(names[i], c)
+
+
+## Оттепель (зажжено Холодное сердце): снег сходит, трава зеленеет, распускаются цветы.
+func thaw(animate: bool) -> void:
+	if mix != "ice" or terrain_mat == null:
+		return
+	if animate:
+		var tw := create_tween()
+		tw.tween_method(func(v: float):
+			terrain_mat.set_shader_parameter("snow_amount", 1.0 - v)
+			_set_grass_colors(terrain_mat, v), 0.0, 1.0, 7.0).set_trans(Tween.TRANS_SINE)
+		tw.tween_callback(_build_grass)
+		for i in 6:
+			get_tree().create_timer(0.8 + i * 1.1, false).timeout.connect(func(): Audio.play("drip", -4.0, 0.2))
+	else:
+		terrain_mat.set_shader_parameter("snow_amount", 0.0)
+		_set_grass_colors(terrain_mat, 1.0)
+		_build_grass()
+	get_tree().call_group("player", "update_clothes")
 
 
 func _add_multimesh(name_: String, mesh: Mesh, tr: Array[Transform3D], cols: Array[Color], material: Material, instance_colors_as_vertex := false) -> void:
@@ -297,6 +367,26 @@ func _place_pois() -> void:
 		gv.y = height_at(gv.x, gv.z)
 		poi["graves"] = gv
 		for k in ["storm_tower", "seaplane", "graves"]:
+			poi_extra[k] = poi[k]
+		return
+	if mix == "ice":
+		# ледник с обсерваторией — на столовой горе; тропа к нему (с моржом) — со стороны лагеря;
+		# маяк — на восточном мысу, пингвины — у бухты на западе, ларцы — на уступе, под водопадом и в бору
+		var gl := Vector3(flat[0].x, flat[2], flat[0].y)
+		poi["glacier"] = gl
+		var to_camp := Vector3(camp_center.x - gl.x, 0, camp_center.z - gl.z).normalized()
+		var foot := gl + to_camp * (IceGlacier.WALL_R + 2.0)
+		foot.y = height_at(foot.x, foot.z)
+		poi["glacier_foot"] = foot
+		poi["ice_tower"] = _shore_point(-0.3, 7.5)
+		poi["penguins"] = _shore_point(PI * 1.02, 3.0)
+		var ledge := Vector3(radius * 0.46, 0, radius * 0.1)
+		ledge.y = height_at(ledge.x, ledge.z)
+		poi["ice_ledge"] = ledge
+		var grove := Vector3(-radius * 0.44, 0, -radius * 0.12)
+		grove.y = height_at(grove.x, grove.z)
+		poi["ice_chest_3"] = grove
+		for k in ["ice_tower", "penguins", "ice_ledge", "ice_chest_3", "glacier_foot"]:
 			poi_extra[k] = poi[k]
 		return
 	# старый лагерь Лёвы — на западе, в глубине джунглей
@@ -351,6 +441,28 @@ func _spawn_resources() -> void:
 			fort.position = poi[id]
 			holder.add_child(fort)
 			continue
+		if id == "glacier":
+			var gl := IceGlacier.new()
+			gl.island = self
+			gl.site = poi[id]
+			gl.foot = poi["glacier_foot"]
+			gl.position = Vector3(poi[id].x, 0, poi[id].z)
+			holder.add_child(gl)
+			continue
+		if id == "glacier_foot":
+			continue
+		if id == "penguins":
+			var pc := PenguinColony.new()
+			pc.island = self
+			pc.position = poi[id]
+			holder.add_child(pc)
+			continue
+		if id == "ice_ledge":
+			var il := IceLedge.new()
+			il.position = poi[id]
+			il.rotation.y = atan2(camp_center.x - poi[id].x, camp_center.z - poi[id].z)
+			holder.add_child(il)
+			continue
 		if id == "station":
 			var stn := StormStation.new()
 			stn.site = poi[id]
@@ -364,7 +476,7 @@ func _spawn_resources() -> void:
 		sp.rotation.y = rng.randf() * TAU
 		if id == "seaplane":
 			sp.rotation.y = atan2(poi[id].x, poi[id].z) + PI * 0.5
-		elif id == "storm_tower":
+		elif id in ["storm_tower", "ice_tower"]:
 			sp.rotation.y = 0.0
 		holder.add_child(sp)
 
@@ -387,15 +499,19 @@ func _spawn_resources() -> void:
 			var p2 := Vector2(x, z)
 			var dc := p2.distance_to(camp2)
 			var dw := p2.distance_to(wreck2)
-			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5, "storm": 10.5}.get(mix, 5.0)):
+			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5, "storm": 10.5, "ice": 11.0}.get(mix, 5.0)):
 				continue
 			var kind := ""
-			if mix == "storm" and dc >= 9.5 and dw >= 7.0:
+			if mix == "ice" and dc >= 9.5 and dw >= 7.0:
+				kind = _ice_kind(h, dc, roll, seed_v, p2)
+			elif mix == "storm" and dc >= 9.5 and dw >= 7.0:
 				kind = _storm_kind(h, dc, roll, seed_v)
 			elif dc < 9.5 or dw < 7.0:
 				# стартовая полянка: только мелочь на песке
 				if h < 1.05 and roll < 0.12:
 					kind = ["pebble", "shell", "driftwood"][seed_v % 3]
+				elif mix == "ice" and h > 1.05 and h < SNOW_LINE and roll < 0.1:
+					kind = "moss"
 			elif h < 1.05:
 				# пляж: пальмы, дюнная трава, дары моря
 				if roll < 0.13: kind = "palm"
@@ -455,6 +571,74 @@ func _spawn_resources() -> void:
 	if mix == "storm":
 		_spawn_scrap(holder)
 		_spawn_pits(holder, "sand", 6, "storm:sand_%d")
+	if mix == "ice":
+		_spawn_floes(decor)
+
+
+## Ледяной остров: на берегу — галька и льдины, в тундре — мох, брусника и сосны (у западного бора — гуще),
+## выше — снег, ледяные глыбы (лёд для мороженого), валуны и ледяные стены.
+func _ice_kind(h: float, dc: float, roll: float, seed_v: int, p2: Vector2) -> String:
+	var grove: Vector3 = poi.get("ice_chest_3", Vector3(9999, 0, 0))
+	var in_grove := p2.distance_to(Vector2(grove.x, grove.z)) < 16.0
+	if h < 1.05:
+		if roll < 0.08: return ["pebble", "shell", "driftwood"][seed_v % 3]
+		if roll < 0.13: return "ice_block"
+		if roll < 0.18: return "moss"
+		if roll < 0.2: return "rock"
+		return ""
+	var tundra := h < SNOW_LINE + 0.4   # выше — снег: там ни мха, ни брусники
+	if in_grove and h < 6.0:
+		if roll < 0.4: return "pine"
+		if roll < 0.55 and tundra: return "moss"
+		if roll < 0.62: return "lingonberry"
+		return ""
+	if h > 6.5:
+		if roll < 0.12: return "ice_block"
+		if roll < 0.24: return "rock"
+		if roll < 0.32: return "ice_wall"
+		return ""
+	if dc < 17.0:
+		if roll < 0.3: return "moss" if tundra else ""
+		if roll < 0.42: return "lingonberry"
+		if roll < 0.5: return "pine"
+		if roll < 0.55: return "rock"
+		return ""
+	if roll < 0.13: return "pine"
+	if roll < 0.3: return "moss" if tundra else ""
+	if roll < 0.38: return "lingonberry" if tundra else ""
+	if roll < 0.44: return "rock"
+	if roll < 0.5: return "ice_block"
+	if roll < 0.55 and h > 3.0: return "ice_wall"
+	if roll < 0.58: return "fallen_log"
+	return ""
+
+
+## Льдины в море вокруг Ледяного острова (только для вида).
+func _spawn_floes(decor: Node3D) -> void:
+	var g := RandomNumberGenerator.new()
+	g.seed = seed_value + 31
+	var n := 0
+	for k in 300:
+		if n >= 22:
+			break
+		var a := g.randf() * TAU
+		var r := g.randf_range(radius * 1.05, radius * 1.6)
+		var x := cos(a) * r
+		var z := sin(a) * r
+		var h := height_at(x, z)
+		if h > -1.4 or h < -5.5:
+			continue
+		if Vector2(x - wreck_point.x, z - wreck_point.z).length() < 9.0:
+			continue
+		var m := Models.glb(["ice_floe_a", "ice_floe_b"][n % 2])
+		if m == null:
+			return
+		var s := g.randf_range(0.7, 1.5)
+		m.scale = Vector3(s, s, s)
+		m.position = Vector3(x, -0.08, z)
+		m.rotation.y = g.randf() * TAU
+		decor.add_child(m)
+		n += 1
 
 
 ## Грозовой остров: вереск и черника на холмах, кривые деревья, валуны; у вершины — камни.
@@ -551,7 +735,7 @@ func _spawn_clay(holder: Node3D) -> void:
 
 ## Места для рыбалки — бурлящая вода у берега недалеко от лагеря.
 func _spawn_fishing_spots(holder: Node3D) -> void:
-	var want: int = {"fort": 4, "home": 2, "banyan": 2, "storm": 3}.get(mix, 2)
+	var want: int = {"fort": 4, "home": 2, "banyan": 2, "storm": 3, "ice": 2}.get(mix, 2)
 	var c := Vector2(camp_center.x, camp_center.z)
 	var placed: Array[Vector2] = []
 	var a0 := atan2(wreck_point.z, wreck_point.x)
@@ -634,7 +818,10 @@ const RINGS := {"old_camp": [["thicket", 5.4, 18], ["jungle_tree", 7.6, 17]],
 	"lifeboat": [["cliff", 6.0, 10]],
 	"lighthouse": [["cliff", 6.2, 11]],
 	"station": [["cliff", 9.4, 17]],
-	"storm_tower": [["rockfall", 5.2, 12]]}
+	"storm_tower": [["rockfall", 5.2, 12]],
+	# Ледяной: у подножия ледника — полукольцо ледяных стен (вторую половину закрывает обрыв), маяк — во льду
+	"glacier_foot": [["ice_wall", 4.6, 14]],
+	"ice_tower": [["ice_wall", 5.4, 14]]}
 
 
 func _barrier_rings(holder: Node3D) -> void:
@@ -653,8 +840,10 @@ func _barrier_rings(holder: Node3D) -> void:
 				k += 1
 				var a := TAU * i / cnt + (0.15 if kind == "jungle_tree" else 0.0)
 				var pos := c + Vector3(cos(a) * rad, 0, sin(a) * rad)
+				if poi.has("glacier") and Vector2(pos.x - poi["glacier"].x, pos.z - poi["glacier"].z).length() < IceGlacier.WALL_R + 1.1:
+					continue   # эту часть кольца закрывает ледяной обрыв
 				pos.y = height_at(pos.x, pos.z) - 0.05
-				var yaw := -a + PI / 2 if kind in ["cliff", "liana_curtain", "rockfall"] else -100.0
+				var yaw := -a + PI / 2 if kind in ["cliff", "liana_curtain", "rockfall", "ice_wall"] else -100.0
 				_spawn(holder, kind, pos, k * 7919 + i, "%s:r_%s_%d" % [loc, id, k], yaw)
 
 

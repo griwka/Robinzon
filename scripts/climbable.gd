@@ -8,12 +8,25 @@ var top := Vector3(0, 5, 0)
 var exit := Vector3.ZERO
 var ladder := false
 var ladder_yaw := 0.0   # железная лестница (бункер): перчатки не нужны, сил тратится меньше
+var ice := false        # ледяная стена (Ледяной остров): нужны ледоруб и перчатки; ladder_yaw — куда смотрит стена
+var rest_step := 0.0    # на ледяной стене через каждые rest_step м — зарубка, где можно повисеть и отдышаться
+var locked_hint := ""   # не пускает (например, поперёк тропы спит морж) — вот почему
 
 
 func _ready() -> void:
 	add_to_group("climb")
 	var len := top.y - bottom.y
 	var segs := int(ceil(len))
+	if ice:
+		for i in segs:
+			var im := Models.glb("ice_steps")
+			if im == null:
+				break
+			im.position = bottom + Vector3(0, i * len / segs, 0)
+			im.scale = Vector3(1.0, len / segs, 1.0)
+			im.rotation.y = ladder_yaw
+			add_child(im)
+		return
 	if ladder:
 		for i in segs:
 			var lm := Models.glb("ladder")
@@ -32,6 +45,14 @@ func _ready() -> void:
 		m.scale = Vector3(1.4, len / segs, 1.4)
 		m.rotation.y = i * 1.7
 		add_child(m)
+
+
+## Висит ли герой у зарубки (высота над низом y_rel): там силы не тратятся, а копятся.
+func at_rest(y_rel: float) -> bool:
+	if rest_step <= 0.0 or y_rel < rest_step * 0.5:
+		return false
+	var k := fmod(y_rel, rest_step)
+	return k < 0.35 or k > rest_step - 0.35
 
 
 func world_bottom() -> Vector3:
