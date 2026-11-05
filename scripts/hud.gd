@@ -15,6 +15,10 @@ const PAPER := Color("f8ebc8")
 const INK := Color("4a2c14")
 const GREEN := Color("6dbb3a")
 const GREEN_DARK := Color("3f7d1f")
+const CARD := Color("f6e3b8")        # светлая карточка предмета (пергамент)
+const CARD_EDGE := Color("b88552")
+const ROW := Color("c99a5e")         # строка в окне — тёплое светлое дерево
+const ROW_EDGE := Color("8a5a30")
 const HOTBAR_ORDER := ["stone_axe", "pickaxe", "watering_can", "net", "wood", "stone", "fiber", "leaf", "rope", "plank"]
 
 var station_check: Callable
@@ -39,6 +43,7 @@ var dlg_name: Label
 var dlg_text: Label
 var dlg_portrait: PanelContainer
 var dlg_letter: Label
+var dlg_face: TextureRect
 var fade_rect: ColorRect
 var _dlg_queue: Array = []   # [[lines, on_done], ...]
 var _dlg_lines: Array = []
@@ -98,6 +103,13 @@ func _box(bg: Color, border: Color, radius := 14, bw := 4, pad := 14) -> StyleBo
 
 func _make_theme() -> Theme:
 	var t := Theme.new()
+	var base: FontFile = load("res://assets/fonts/Nunito.ttf")
+	if base:
+		var fv := FontVariation.new()
+		fv.base_font = base
+		var ts := TextServerManager.get_primary_interface()
+		fv.variation_opentype = {ts.name_to_tag("weight"): 780}
+		t.default_font = fv
 	t.default_font_size = 18
 	t.set_color("font_color", "Label", Color.WHITE)
 	t.set_color("font_outline_color", "Label", Color(0.15, 0.08, 0.03))
@@ -188,6 +200,7 @@ func _fit(p: PanelContainer, max_h := 560.0) -> void:
 
 
 func _open(p: PanelContainer) -> void:
+	Audio.play("open", -4.0, 0.05)
 	for w in windows:
 		w.visible = false
 	p.visible = true
@@ -197,11 +210,41 @@ func _open(p: PanelContainer) -> void:
 
 func _row() -> Array:
 	var row := PanelContainer.new()
-	row.add_theme_stylebox_override("panel", _box(WOOD, WOOD_DARK, 10, 3, 10))
+	row.add_theme_stylebox_override("panel", _box(ROW, ROW_EDGE, 12, 3, 10))
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 12)
 	row.add_child(h)
 	return [row, h]
+
+
+## Иконка на светлой карточке (для строк в окнах).
+func _card_icon(id: String, size := 60, dark := false) -> Control:
+	var card := PanelContainer.new()
+	var sb := _box(CARD, CARD_EDGE, 12, 3, 3)
+	sb.shadow_size = 2
+	card.add_theme_stylebox_override("panel", sb)
+	card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	card.add_child(_item_icon(id, size, dark))
+	return card
+
+
+## Нарисованная иконка предмета (или коллекции). Если картинки нет — цветной кружок.
+func _item_icon(id: String, size := 40, dark := false) -> Control:
+	var tex := FX.icon_texture(id)
+	if tex == null:
+		return _icon(Game.item(id).get("color", Color.WHITE), size)
+	var r := TextureRect.new()
+	r.texture = tex
+	r.custom_minimum_size = Vector2(size, size)
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	r.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if dark:
+		r.modulate = Color(0.15, 0.1, 0.06, 0.55)  # силуэт ещё не найденного предмета
+	return r
 
 
 func _icon(color: Color, size := 36) -> PanelContainer:
@@ -310,24 +353,46 @@ func _on_inventory_changed() -> void:
 			_refill(p)
 
 
-func _item_slot(id: String, n: int) -> Control:
-	var col: Color = Game.item(id).get("color", Color.WHITE)
+## Ячейка предмета: светлая карточка, крупная иконка, количество — бейджем в углу.
+## big = true — для окна инвентаря (с подписью под иконкой).
+func _item_slot(id: String, n: int, big := false) -> Control:
+	var size := 96 if big else 80
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+	box.tooltip_text = Game.item_name(id)
 	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(80, 76)
-	slot.add_theme_stylebox_override("panel", _box(WOOD_LIGHT, WOOD_DARK, 10, 3, 4))
+	slot.custom_minimum_size = Vector2(size, size)
+	var sb := _box(CARD, CARD_EDGE, 12, 3, 3)
+	sb.shadow_size = 3
+	slot.add_theme_stylebox_override("panel", sb)
+	slot.mouse_filter = Control.MOUSE_FILTER_PASS
 	slot.tooltip_text = Game.item_name(id)
-	var v := VBoxContainer.new()
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.add_theme_constant_override("separation", 0)
-	slot.add_child(v)
-	v.add_child(_icon(col))
-	var short := _label(Game.item_short(id), 12)
-	short.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(short)
-	var cnt := _label("×%d" % n, 16)
-	cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(cnt)
-	return slot
+	box.add_child(slot)
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(size - 6, size - 6)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slot.add_child(holder)
+	var icon := _item_icon(id, size - 8)
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.add_child(icon)
+	if n > 1 or Game.item(id).get("cat", "") != "tool":
+		var badge := PanelContainer.new()
+		var bs := _box(WOOD, WOOD_DARK, 9, 2, 0)
+		bs.content_margin_left = 6
+		bs.content_margin_right = 6
+		bs.shadow_size = 0
+		badge.add_theme_stylebox_override("panel", bs)
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var cnt := _label(str(n), 15)
+		badge.add_child(cnt)
+		holder.add_child(badge)
+		badge.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE)
+	if big:
+		var nm := _label(Game.item_short(id), 14, INK, false)
+		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		nm.custom_minimum_size = Vector2(size, 0)
+		box.add_child(nm)
+	return box
 
 
 func set_hint(text: String) -> void:
@@ -374,6 +439,12 @@ func _build_dialogue() -> void:
 	dialogue_panel.add_child(h)
 	dlg_portrait = _icon(Color.RED, 96)
 	h.add_child(dlg_portrait)
+	dlg_face = TextureRect.new()
+	dlg_face.custom_minimum_size = Vector2(110, 110)
+	dlg_face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	dlg_face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	h.add_child(dlg_face)
+	h.move_child(dlg_face, 0)
 	dlg_letter = _label("Р", 44)
 	dlg_letter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	dlg_letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -424,13 +495,17 @@ func _show_line() -> void:
 	var sp: Dictionary = Data.SPEAKERS.get(line[0], Data.SPEAKERS["narrator"])
 	var nm: String = sp["name"]
 	dlg_name.text = nm
-	dlg_portrait.visible = nm != ""
+	var face := FX.icon_texture("portrait_" + str(line[0]))
+	dlg_face.texture = face
+	dlg_face.visible = face != null
+	dlg_portrait.visible = nm != "" and face == null
 	dlg_letter.text = nm.left(1) if line[0] != "parrot" else "Р"
 	var c: Color = sp["color"]
 	var sb := _box(c, c.darkened(0.5), 48, 4, 0)
 	sb.shadow_size = 0
 	dlg_portrait.add_theme_stylebox_override("panel", sb)
 	dlg_text.text = line[1]
+	Audio.play("blip", -6.0, 0.1)
 	dlg_text.add_theme_color_override("font_color", INK if nm != "" else Color("6b4524"))
 
 
@@ -483,7 +558,7 @@ func _fill_craft() -> void:
 		var rh := _row()
 		var h: HBoxContainer = rh[1]
 		var out_id: String = r["out"].keys()[0]
-		h.add_child(_icon(Game.item(out_id)["color"], 44))
+		h.add_child(_card_icon(out_id, 60))
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(info)
@@ -594,12 +669,12 @@ func _fill_inventory() -> void:
 	var any := false
 	for cat in cats:
 		var grid := GridContainer.new()
-		grid.columns = 7
+		grid.columns = 6
 		grid.add_theme_constant_override("h_separation", 6)
 		grid.add_theme_constant_override("v_separation", 6)
 		for id in Data.ITEMS:
 			if Data.ITEMS[id]["cat"] == cat and Game.count(id) > 0:
-				grid.add_child(_item_slot(id, Game.count(id)))
+				grid.add_child(_item_slot(id, Game.count(id), true))
 		if grid.get_child_count() > 0:
 			any = true
 			body.add_child(_label(cats[cat], 18, INK, false))
@@ -633,13 +708,20 @@ func _fill_collections() -> void:
 		info.add_child(slots)
 		for it in col["items"]:
 			var v := VBoxContainer.new()
-			v.custom_minimum_size = Vector2(100, 0)
+			v.custom_minimum_size = Vector2(86 if col.get("ordered", false) else 100, 0)
 			var found: bool = have.has(it["id"])
-			v.add_child(_icon(it["color"] if found else Color("5a4a3a"), 44))
+			v.add_child(_card_icon(it["id"], 64, not found))
 			var nm := _label(it["name"] if found else "???", 13)
 			nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			v.add_child(nm)
-			if found:
+			if found and it.has("text"):
+				var rd := Button.new()
+				rd.text = "Читать"
+				rd.add_theme_font_size_override("font_size", 14)
+				var txt: String = it["text"]
+				rd.pressed.connect(func(): show_dialogue([["journal", txt]], Callable()))
+				v.add_child(rd)
+			elif found:
 				var c := _label("×%d" % have[it["id"]], 13, Color("f3e2bd"))
 				c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 				v.add_child(c)
@@ -675,7 +757,7 @@ func show_choices(title: String, options: Array) -> void:
 	for o in options:
 		var rh := _row()
 		var h: HBoxContainer = rh[1]
-		h.add_child(_icon(o.get("color", Color.WHITE), 36))
+		h.add_child(_card_icon(o["icon"], 48) if o.has("icon") else _icon(o.get("color", Color.WHITE), 36))
 		var b := Button.new()
 		b.text = o["text"]
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -696,16 +778,11 @@ func _build_help() -> void:
 C — крафт,  B — строительство,  Tab — инвентарь
 J — журнал заданий,  K — коллекции
 В строительстве: ЛКМ — поставить, R — повернуть, ПКМ — отмена
-F5 — сохранить,  F9 — загрузить,  Esc — освободить мышь
+F5 — сохранить,  F9 — загрузить,  Esc — пауза и настройки
 
 Грядки: посади семена, полей лейкой — растут вдвое быстрее.
 Животные: покорми — через время будут яйца или молоко.
 Их можно гладить!""", 17, INK, false))
-	var ng := Button.new()
-	ng.text = "Начать заново"
-	ng.add_theme_stylebox_override("normal", _box(Color("d9573b"), Color("8a2a17"), 10, 3, 8))
-	ng.pressed.connect(func(): new_game_requested.emit())
-	body.add_child(ng)
 
 
 func show_help() -> void:

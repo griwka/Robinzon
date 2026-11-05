@@ -12,6 +12,7 @@ var _frames := 0
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	for a in OS.get_cmdline_user_args():
 		var kv: PackedStringArray = a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
@@ -32,6 +33,29 @@ func _process(_delta: float) -> void:
 		Game.time_of_day = float(args["time"])
 	if args.has("demo") and _frames > 2 and _frames < 6:
 		_flush()
+	if _frames == 8:
+		var hud: HUD = main.hud
+		match args.get("open", ""):
+			"inventory": hud.open_inventory()
+			"collections":
+				Game.collections = {"shells": {"scallop": 3, "seahorse": 1, "starfish": 1}, "butterflies": {"lemon_wing": 2, "blue_wing": 1, "morpho": 1},
+					"journal": {"page_1": 1, "page_2": 1, "page_3": 1}}
+				hud.open_collections()
+			"craft":
+				Game.unlocked.merge({"stone_axe": true, "plank": true, "watering_can": true, "net": true}, true)
+				hud.open_craft()
+			"build":
+				Game.unlocked.merge({"tent": true, "campfire": true, "workbench": true, "hut": true, "raft": true}, true)
+				hud.open_build()
+			"page":
+				Game.dialogue_requested.emit([["journal", Data.COLLECTIONS["journal"]["items"][3]["text"]]], Callable())
+			"dialog":
+				Game.dialogue_requested.emit([["parrot", "Карр! Живой! Живой! Я уж думал, ты рыба! Я — Румба, местный житель."]], Callable())
+			"pause":
+				main._pause()
+			"settings":
+				main._pause()
+				main.menu.open_settings(main.menu.show_pause)
 	if args.has("shot") and _frames == int(args.get("frames", "90")):
 		get_viewport().get_texture().get_image().save_png(args["shot"])
 		print("screenshot saved: ", args["shot"])
@@ -76,7 +100,8 @@ func _demo() -> void:
 	place.call("scarecrow", Vector3(6.0, 0, 3.8))
 	for k in 4:
 		place.call("fence", Vector3(2.4 + k * 1.3, 0, 4.6))
-	for id in ["wood", "stone", "fiber", "rope", "plank", "leaf", "stone_axe", "watering_can", "net", "seed_carrot"]:
+	for id in ["wood", "stone", "fiber", "rope", "plank", "leaf", "stone_axe", "watering_can", "net", "seed_carrot",
+			"seed_corn", "carrot", "tomato", "banana", "coconut", "egg", "milk", "sapling_lemon", "fried_egg", "cheese"]:
 		Game.inventory[id] = 6 if not Data.ITEMS[id]["cat"] == "tool" else 1
 	Game.inventory_changed.emit()
 	main.player.global_position = c + to_sea * 2.5 + right * 1.0 + Vector3(0, 0.5, 0)
@@ -219,6 +244,11 @@ func _do_task(t: Dictionary) -> void:
 					pen.interact(main.player)
 				_advance([pen], Data.PENS[pen_id]["time"] + 1.0)
 				pen.interact(main.player)
+				guard += 1
+		"collection":
+			var guard := 0
+			while Game.task_progress(t) < t["count"] and guard < 10:
+				Game.add_collectible(target)
 				guard += 1
 		"caught":
 			if not Game.has_tool("net"):

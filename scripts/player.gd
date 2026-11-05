@@ -151,8 +151,9 @@ func _build_camera() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		camera_yaw -= event.relative.x * 0.003
-		camera_pitch = clampf(camera_pitch - event.relative.y * 0.003, -1.3, 0.5)
+		var sens: float = 0.003 * float(Game.settings.get("mouse", 1.0))
+		camera_yaw -= event.relative.x * sens
+		camera_pitch = clampf(camera_pitch - event.relative.y * sens, -1.3, 0.5)
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			camera_distance = maxf(2.5, camera_distance - 0.5)
@@ -192,6 +193,7 @@ func _physics_process(delta: float) -> void:
 
 	if is_on_floor() and not _was_on_floor:
 		_squash = 0.75  # приземление — сплющиваемся
+		Audio.play("step_sand", -4.0, 0.1)
 	_was_on_floor = is_on_floor()
 
 	# поворот модели в сторону движения
@@ -227,7 +229,13 @@ func _update_camera(delta: float) -> void:
 # ------------------------------------------------------------------ Анимация
 func _animate(delta: float, speed: float) -> void:
 	var moving := clampf(speed / WALK_SPEED, 0.0, 1.6)
+	var prev_phase := _walk_phase
 	_walk_phase += delta * (4.0 + speed * 1.6)
+	# шаги: звук, когда нога касается земли
+	if is_on_floor() and moving > 0.3 and int(prev_phase / PI) != int(_walk_phase / PI):
+		var isl := get_tree().get_first_node_in_group("island")
+		var on_sand: bool = isl != null and isl.height_at(global_position.x, global_position.z) < 1.1
+		Audio.play("step_sand" if on_sand else "step_grass", -10.0 + moving * 2.0, 0.15)
 	var swing := sin(_walk_phase) * 0.75 * moving
 	if not is_on_floor():
 		leg_l.rotation.x = lerpf(leg_l.rotation.x, -0.6, 10 * delta)

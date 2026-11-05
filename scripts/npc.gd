@@ -16,6 +16,7 @@ var head: Node3D
 var body: Node3D
 var marker: Node3D
 var _t := 0.0
+var _squawk_t := 8.0
 
 
 func _ready() -> void:
@@ -47,7 +48,7 @@ func _talk_pending() -> bool:
 
 
 func _update_marker() -> void:
-	FX.set_marker(marker, _talk_pending(), Color("ffd23f"))
+	FX.set_marker(marker, _talk_pending(), "exclaim")
 
 
 func _process(delta: float) -> void:
@@ -62,8 +63,12 @@ func _process(delta: float) -> void:
 	wr.rotation.z = -wl.rotation.z
 	if marker.visible:
 		marker.position.y = 1.0 + sin(_t * 3.0) * 0.08
-	# смотрит на игрока
+	# смотрит на игрока и иногда кричит
 	var p := get_tree().get_first_node_in_group("player") as Node3D
+	_squawk_t -= delta
+	if _squawk_t <= 0.0:
+		_squawk_t = randf_range(12.0, 30.0)
+		Audio.play("squawk", -8.0, 0.15, global_position)
 	if p:
 		var to := p.global_position - global_position
 		model.rotation.y = lerp_angle(model.rotation.y, atan2(-to.x, -to.z), 2.0 * delta)
@@ -82,6 +87,7 @@ func get_hint() -> String:
 
 
 func interact(_player: Node) -> void:
+	Audio.play("squawk", -2.0, 0.1)
 	if _talk_pending():
 		Game.bump("talk", "parrot")
 		return

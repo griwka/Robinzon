@@ -80,7 +80,7 @@ func _refresh() -> void:
 	var f := tree_node.get_node_or_null("Fruit")
 	if f:
 		f.visible = grown and fruit >= 1.0
-	FX.set_marker(marker, grown and fruit >= 1.0 and not wild, Data.ITEMS[Data.TREES[tree_type]["fruit"]]["color"])
+	FX.set_marker(marker, grown and fruit >= 1.0 and not wild, Data.TREES[tree_type]["fruit"])
 	if marker:
 		marker.position.y = marker_height()
 
@@ -110,6 +110,7 @@ func interact(_player: Node) -> void:
 		tw.tween_property(crown, "rotation:z", -0.12, 0.12)
 		tw.tween_property(crown, "rotation:z", 0.0, 0.2)
 	fruit = 0.0
+	Audio.play("shake", -3.0, 0.1, global_position)
 	Game.add_item(cfg["fruit"], randi_range(cfg["yield"][0], cfg["yield"][1]))
 	if wild and randf() < 0.2:
 		Game.add_item("sapling_" + tree_type, 1)

@@ -151,6 +151,7 @@ class Butterfly extends Node3D:
 		if not active:
 			return
 		FX.burst(get_parent(), position, Color("fff6dc"), 8)
+		Audio.play("rustle", -6.0, 0.2)
 		Game.add_collectible("butterflies")
 		Game.bump("caught", "butterfly")
 		_hidden_until = Game.world_time + 40.0

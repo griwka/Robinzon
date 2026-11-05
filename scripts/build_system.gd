@@ -154,6 +154,7 @@ func _try_place() -> void:
 	var v := active_variant
 	var b := spawn_building(id, ghost.global_position, ghost_rot, v)
 	Game.notified.emit("Построено: %s" % cfg["name"], Color("8affa0"))
+	Audio.play("build", -2.0, 0.05)
 	cancel(false)
 	placed.emit(b)
 	Game.bump("built", id)

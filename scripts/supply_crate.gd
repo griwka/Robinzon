@@ -44,6 +44,8 @@ func interact(_player: Node) -> void:
 	tw.tween_property(lid, "position", Vector3(0, 0.45, 0.55), 0.3)
 	tw.parallel().tween_property(lid, "rotation:x", 1.3, 0.3)
 	FX.burst(self, Vector3(0, 0.8, 0), Color("ffe08a"), 16)
+	Audio.play("rare", -2.0)
 	for id in LOOT:
 		Game.add_item(id, LOOT[id], false)
+	Game.add_collectible("journal")
 	Game.bump("collected", "crate")

@@ -48,41 +48,49 @@ static func hearts(parent: Node3D, pos: Vector3) -> void:
 	parent.get_tree().create_timer(2.0).timeout.connect(p.queue_free)
 
 
-## Парящий значок над объектом (созрело / голодны). Возвращает узел, чтобы им управлять.
+## Парящий значок над объектом (созрело / голодны / есть разговор): облачко с иконкой.
 static func marker(parent: Node3D, height: float) -> Node3D:
-	# Цветной шарик в белой и коричневой обводке — читается с любого ракурса.
 	var root := Node3D.new()
 	root.name = "Marker"
 	root.position.y = height
-	for layer in [[0.3, Color("6b4524")], [0.25, Color("fff6dc")]]:
-		var shell := MeshInstance3D.new()
-		var sm := SphereMesh.new()
-		sm.radius = layer[0]
-		sm.height = layer[0] * 2.0
-		shell.mesh = sm
-		var m := StandardMaterial3D.new()
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.cull_mode = BaseMaterial3D.CULL_FRONT
-		m.albedo_color = layer[1]
-		shell.material_override = m
-		shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		root.add_child(shell)
-	var dot := MeshInstance3D.new()
-	dot.name = "Icon"
-	var d := SphereMesh.new()
-	d.radius = 0.19
-	d.height = 0.38
-	dot.mesh = d
-	dot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(dot)
+	var bubble := Sprite3D.new()
+	bubble.name = "Bubble"
+	bubble.texture = icon_texture("bubble")
+	bubble.pixel_size = 0.0055
+	bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	bubble.shaded = false
+	bubble.render_priority = 1
+	bubble.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(bubble)
+	var icon := Sprite3D.new()
+	icon.name = "Icon"
+	icon.pixel_size = 0.0036
+	icon.offset = Vector2(0, 8)
+	icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	icon.shaded = false
+	icon.render_priority = 2
+	icon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(icon)
 	parent.add_child(root)
 	root.visible = false
 	return root
 
 
-static func set_marker(m: Node3D, visible: bool, color := Color.WHITE) -> void:
+static var _tex_cache: Dictionary = {}
+
+
+static func icon_texture(id: String) -> Texture2D:
+	if _tex_cache.has(id):
+		return _tex_cache[id]
+	var path := "res://assets/icons/%s.png" % id
+	var t: Texture2D = load(path) if ResourceLoader.exists(path) else null
+	_tex_cache[id] = t
+	return t
+
+
+static func set_marker(m: Node3D, visible: bool, icon := "") -> void:
 	if m == null:
 		return
 	m.visible = visible
 	if visible:
-		(m.get_node("Icon") as MeshInstance3D).material_override = Models.unshaded(color)
+		(m.get_node("Icon") as Sprite3D).texture = icon_texture(icon)

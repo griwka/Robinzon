@@ -104,6 +104,10 @@ func interact(player: Node) -> void:
 			"shell":
 				if randf() < 0.45:
 					Game.add_collectible("shells")
+		# страницы журнала Лёвы иногда находятся в кустах, у плавника, среди камней и ракушек
+		if kind in ["bush", "driftwood", "shell", "rock"] and Game.flags.get("crate_opened", false) \
+				and Game.journal_incomplete() and randf() < 0.09:
+			Game.add_collectible("journal")
 		_deplete()
 
 
@@ -111,6 +115,7 @@ func _shake_palm() -> void:
 	if not coconut_ready:
 		return
 	coconut_ready = false
+	Audio.play("shake", -2.0, 0.1, global_position)
 	var crown := visual.get_node_or_null("Crown")
 	if crown:
 		var tw := create_tween()
@@ -129,7 +134,11 @@ func _shake_palm() -> void:
 			crown.get_node("Coconuts").visible = true)
 
 
+const HIT_SOUND := {"palm": "chop", "driftwood": "chop", "rock": "rock", "pebble": "rock", "bush": "rustle", "shell": "pickup"}
+
+
 func _hit_fx(_player: Node) -> void:
+	Audio.play(HIT_SOUND.get(kind, "pickup"), -2.0, 0.12, global_position)
 	var tw := create_tween()
 	var dir := 1.0 if randf() < 0.5 else -1.0
 	tw.tween_property(visual, "rotation:z", 0.12 * dir, 0.05)
