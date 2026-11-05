@@ -8,7 +8,7 @@ signal sleep_requested
 signal craft_requested(station: String)
 signal choice_requested(title: String, options: Array)
 
-const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe", "boat", "shelter", "stove"]
+const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe", "boat", "shelter", "stove", "forge"]
 
 var id := "campfire"
 var variant := ""
@@ -44,6 +44,17 @@ func _ready() -> void:
 func _make_visual() -> void:
 	visual = Models.building(id)
 	add_child(visual)
+	if id == "stone_bridge":
+		_claim_spot.call_deferred()
+
+
+## Каменный мосток занимает место с колышками над лавой — и лава в этом месте больше не мешает пройти.
+func _claim_spot() -> void:
+	for s in get_tree().get_nodes_in_group("bridge_spot"):
+		var sp := s as Node3D
+		if sp.global_position.distance_to(global_position) < 1.2:
+			sp.call("set_bridged", true)
+			return
 
 
 func _make_collision() -> void:
@@ -74,6 +85,11 @@ func _make_collision() -> void:
 			_add_cyl(0.25, 4.0)
 		"stove":
 			_add_box(Vector3(1.1, 1.6, 0.9), Vector3(0, 0.8, 0), 0.0)
+		"forge":
+			_add_box(Vector3(1.8, 1.4, 1.4), Vector3(0, 0.7, 0), 0.0)
+		"stone_bridge", "tortoise_pen":
+			_add_cyl(r * 0.6, 0.4)
+			collision_layer = 8   # по мостку ходят, в загон заходят
 		"goat_pen", "sheep_pen", "pig_sty", "garden_bed", "torch", "flowerbed", "shell_path":
 			_add_cyl(r * 0.6, 0.6)
 			collision_layer = 8  # не мешают ходить
@@ -157,6 +173,7 @@ func get_hint() -> String:
 		"boat": return "Бот Стёпы — плыть"
 		"shelter": return "Навес — переждать грозу здесь" if Game.storm_active() else "Навес — под ним гроза не страшна"
 		"stove": return "Печка — заварить чай" + (", погреться" if Game.cold_active() else "")
+		"forge": return "Кузница — плавить и ковать"
 		"bench": return "Скамейка — присесть отдохнуть"
 	return Data.BUILDINGS[id]["name"]
 
@@ -165,6 +182,7 @@ func interact(_player: Node) -> void:
 	match id:
 		"campfire": craft_requested.emit("campfire")
 		"stove": craft_requested.emit("stove")
+		"forge": craft_requested.emit("forge")
 		"workbench": craft_requested.emit("workbench")
 		"tent", "hut", "hammock": sleep_requested.emit()
 		"raft", "canoe", "boat": sail_requested.emit()

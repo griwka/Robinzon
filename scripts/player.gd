@@ -182,6 +182,8 @@ func update_clothes() -> void:
 			wear.append("wear_boots")
 		if Game.has_tool("mittens"):
 			wear.append("wear_mittens")
+	elif Game.location == "volcano" and Game.has_tool("fire_gloves"):
+		wear.append("wear_fire_gloves")
 	var key := ",".join(wear)
 	if key == _clothes_key:
 		return
@@ -262,7 +264,7 @@ func _physics_process(delta: float) -> void:
 		target = null   # объект расчищен и удалён
 	if controls_enabled and Input.is_action_just_pressed("eat"):
 		# на морозе Q — сначала кружка чая (если тепло на исходе), иначе еда
-		if not (Game.warmth < 85.0 and Warmth.drink_tea()):
+		if not (Game.warmth < 85.0 and Warmth.drink_tea()) and not (Game.heat > 25.0 and Heat.use_salve()):
 			var v := Game.eat_best_food()
 			stamina = minf(STAMINA_MAX, stamina + v * 2.0)
 	if climbing:
@@ -551,6 +553,8 @@ func _find_target() -> void:
 			reach = 3.2
 		if n is NPCPerson and n.npc_id == "walrus":
 			reach = 3.4
+		if n is ResourceNode and n.kind in ["charred_tree", "basalt", "obsidian_rock", "ore_vein"]:
+			reach = 3.4
 		if n is ResourceNode and n.kind in ["rock", "jungle_tree", "cliff", "fallen_log", "thicket", "bamboo", "crooked_tree", "rockfall", "ice_wall", "pine"]:
 			reach = 3.4
 		if n is StoryPlace:
@@ -590,6 +594,9 @@ func get_hint() -> String:
 		if near_climb.ice:
 			return "[Пробел]  Лезть по ледяной стене" if Game.has_tool("ice_pick") and Game.has_tool("climbing_gloves") \
 				else "Ледяная стена (нужны ледоруб и перчатки лазальщика)"
+		if near_climb.rock:
+			return "[Пробел]  Лезть по выступам базальта (на стене жарко!)" if Game.has_tool("climbing_gloves") \
+				else "Стена кратера (нужны перчатки лазальщика)"
 		if near_climb.ladder:
 			return "[Пробел]  Лезть по лестнице"
 		return "[Пробел]  Лезть по лиане" if Game.has_tool("climbing_gloves") else "Лиана (нужны перчатки лазальщика)"

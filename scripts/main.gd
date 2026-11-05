@@ -11,6 +11,7 @@ var parrot: NPCParrot
 var world_env: WorldEnv
 var weather: Weather
 var warmth: Warmth
+var heat: Heat
 var clouds: Array[Node3D] = []
 var _autosave_t := 0.0
 var menu: GameMenu
@@ -57,6 +58,11 @@ func _ready() -> void:
 		warmth.main = self
 		warmth.player = player
 		add_child(warmth)
+	if Game.location == "volcano":
+		heat = Heat.new()
+		heat.main = self
+		heat.player = player
+		add_child(heat)
 
 	if Game.location == "home":
 		_spawn_story_objects()
@@ -156,7 +162,7 @@ func _resume() -> void:
 ## Причал на новом острове: плот, на котором мы приплыли (на нём можно уплыть обратно), и Румба на мачте.
 func _spawn_arrival_dock() -> void:
 	var dock := Building.new()
-	var vessel: String = {"fort": "canoe", "storm": "boat", "ice": "boat"}.get(Game.location, "raft")
+	var vessel: String = {"fort": "canoe", "storm": "boat", "ice": "boat", "volcano": "boat"}.get(Game.location, "raft")
 	dock.setup(vessel)
 	var w := island.wreck_point
 	w.y = maxf(w.y, 0.0)
@@ -263,6 +269,7 @@ func _radio_call() -> void:
 		"fort": "ПРИЁМ! Стёпа рядом? Передай: «Тимур говорит — не кури трубку в трюме». Он поймёт.",
 		"storm": "ПРИЁМ! Я тебя ВИЖУ. Помаши. ...Нет, другой рукой. Ладно, конец связи.",
 		"ice": "ПРИЁМ! Как там Ингрид? Передай, что я НЕ кричу. Это у меня голос такой. И надень шапку!",
+		"volcano": "ПРИЁМ! Вера рядом? Спроси про кофе. Нет, не спрашивай. Спроси! ...Ладно, просто понюхай его за меня.",
 	}
 	if Game.location == "ice" and Game.flags.get("ice_thawed", false):
 		lines["ice"] = "ПРИЁМ! Ингрид мне ответила! САМА! Я чуть рацию не уронил. Конец связи. То есть нет. То есть да."
@@ -418,9 +425,9 @@ func _choose_destination() -> void:
 	if Game.flags.get("storm_route", false) and not Game.flags.get("restored_stepa_boat", false):
 		options.append({"text": "Грозовой остров — на каноэ не доплыть, нужен бот Стёпы", "icon": "sym_star",
 			"callback": func(): Game.notified.emit("Почини бот Стёпы на берегу форта", Color("ffe08a"))})
-	if Game.flags.get("volcano_route", false):
-		options.append({"text": "Остров Вулкана — глава 6 (в разработке)", "icon": "sym_star",
-			"callback": func(): Game.notified.emit("Остров Вулкана появится в следующей версии игры", Color("ffe08a"))})
+	if Game.flags.get("fog_route", false):
+		options.append({"text": "Туманный остров — глава 7 (в разработке)", "icon": "sym_moon",
+			"callback": func(): Game.notified.emit("Туманный остров появится в следующей версии игры", Color("ffe08a"))})
 	if options.is_empty():
 		Game.notified.emit("Плыть пока некуда. Куда указывает свет?..", Color("ffe08a"))
 		return

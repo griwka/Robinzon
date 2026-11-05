@@ -8,10 +8,10 @@ class_name QuestValidator
 const KNOWN_KINDS := ["talk", "collected", "crafted", "built", "planted", "harvested", "watered", "fed", "product",
 	"caught", "sailed", "cleared", "found", "lit", "reached", "collection", "delivered", "sold", "bought", "restored",
 	"fished", "solved"]
-const NPCS := ["parrot", "marta", "kesha", "stepa", "timur", "ingrid", "walrus", "penguins"]
-const PUZZLES := ["cellar", "stars"]
+const NPCS := ["parrot", "marta", "kesha", "stepa", "timur", "ingrid", "walrus", "penguins", "vera"]
+const PUZZLES := ["cellar", "stars", "monolith"]
 const DECKS := ["deck1", "deck2", "deck3",
-	"bunker1", "bunker2", "bunker3", "bunker4", "bunker5", "bunker6", "bunker7", "glacier_top"]
+	"bunker1", "bunker2", "bunker3", "bunker4", "bunker5", "bunker6", "bunker7", "glacier_top", "temple_gate", "crater_top"]
 ## Ледяные ларцы: задание «found ice_chest ×3» — это три места ice_chest_1..3.
 const ICE_CHESTS := ["ice_chest_1", "ice_chest_2", "ice_chest_3"]
 
@@ -302,6 +302,8 @@ func _check_task(t: Dictionary) -> void:
 						_err("для «%s» не достать «%s»" % [tgt, i])
 			if cfg.has("needs") and not can_get(cfg["needs"]):
 				_err("«%s» заперт, а ключа не достать" % tgt)
+			if cfg.has("needs_flag") and cfg["needs_flag"] == "monolith_solved" and not solved_seen.has("monolith"):
+				_err("«%s» за каменной дверью, а головоломку монолита ещё не решали" % tgt)
 			if cfg.has("needs_flag") and cfg["needs_flag"] == "cellar_drained" and not solved_seen.has("cellar"):
 				_err("«%s» за водой, а головоломку подвала ещё не решали" % tgt)
 			if cfg.has("needs_flag") and str(cfg["needs_flag"]).begins_with("restored_") \
@@ -313,6 +315,14 @@ func _check_task(t: Dictionary) -> void:
 			elif tgt == "glacier_top":
 				if not (can_get("ice_pick") and can_get("climbing_gloves")):
 					_err("на ледник не залезть: нужны ледоруб и перчатки")
+			elif tgt == "temple_gate":
+				if not can_get("iron_pickaxe"):
+					_err("к храму не пройти: базальт ломает только железная кирка")
+				if not _building_ok("stone_bridge"):
+					_err("через лаву не перейти: каменные мостки не открыты")
+			elif tgt == "crater_top":
+				if not can_get("climbing_gloves"):
+					_err("на стену кратера не залезть без перчаток")
 			elif tgt.begins_with("bunker"):
 				# бункер: ярусы 2–3 видны при свете генератора (или фонаря), ниже — только с фонарём
 				var k := int(tgt.substr(6))

@@ -43,6 +43,18 @@ const ITEMS := {
 	# глава 5 — Ледяной остров
 	"ice": {"name": "Лёд", "short": "Лёд", "color": Color("bfe6f5"), "cat": "material"},
 	"resin": {"name": "Сосновая смола", "short": "Смола", "color": Color("e8a83a"), "cat": "material"},
+	# глава 6 — Остров Вулкана
+	"aloe": {"name": "Алоэ", "short": "Алоэ", "color": Color("6fbf7a"), "cat": "material"},
+	"charcoal": {"name": "Уголь", "short": "Уголь", "color": Color("3a3634"), "cat": "material"},
+	"ore": {"name": "Железная руда", "short": "Руда", "color": Color("a0624a"), "cat": "material"},
+	"iron_ingot": {"name": "Железный слиток", "short": "Слиток", "color": Color("8a929a"), "cat": "material"},
+	"iron_nails": {"name": "Железные гвозди", "short": "Ж. гвозди", "color": Color("8a929a"), "cat": "material"},
+	"obsidian": {"name": "Обсидиан", "short": "Обсидиан", "color": Color("2a2438"), "cat": "material"},
+	"crucible": {"name": "Тигель Лёвы", "short": "Тигель", "color": Color("b8784a"), "cat": "quest"},
+	"obsidian_lens": {"name": "Обсидиановая линза", "short": "Линза", "color": Color("4a3a6a"), "cat": "quest"},
+	"herbal_tea": {"name": "Травяной сбор", "short": "Сбор", "color": Color("8fae5a"), "cat": "medicine"},
+	"burn_salve": {"name": "Мазь от ожогов", "short": "Мазь", "color": Color("bfe8b0"), "cat": "medicine", "cool": 60.0},
+	"fertilizer": {"name": "Удобрение", "short": "Удобр.", "color": Color("7a5a3a"), "cat": "product"},
 	# семена
 	"seed_carrot": {"name": "Семена моркови", "short": "Сем. морк.", "color": Color("f08a2c"), "cat": "seed", "crop": "carrot"},
 	"seed_potato": {"name": "Семенной картофель", "short": "Сем. карт.", "color": Color("c9a26b"), "cat": "seed", "crop": "potato"},
@@ -51,6 +63,7 @@ const ITEMS := {
 	"seed_cabbage": {"name": "Семена капусты", "short": "Сем. капус.", "color": Color("a6dc6a"), "cat": "seed", "crop": "cabbage"},
 	"seed_watermelon": {"name": "Семечки арбуза", "short": "Сем. арбуз", "color": Color("2f8f3a"), "cat": "seed", "crop": "watermelon"},
 	"seed_pumpkin": {"name": "Семена тыквы", "short": "Сем. тыкв.", "color": Color("f0c070"), "cat": "seed", "crop": "pumpkin"},
+	"seed_pepper": {"name": "Семена перца", "short": "Сем. перца", "color": Color("e8443a"), "cat": "seed", "crop": "pepper"},
 	"seed_cloudberry": {"name": "Рассада морошки", "short": "Рас. морош.", "color": Color("f0a040"), "cat": "seed", "crop": "cloudberry"},
 	# урожай
 	"carrot": {"name": "Морковь", "short": "Морковь", "color": Color("f58a1f"), "cat": "crop", "food": 8},
@@ -61,12 +74,14 @@ const ITEMS := {
 	"watermelon": {"name": "Арбуз", "short": "Арбуз", "color": Color("3aa64a"), "cat": "crop", "food": 25},
 	"pumpkin": {"name": "Тыква", "short": "Тыква", "color": Color("f08a24"), "cat": "crop", "food": 20},
 	"cloudberry": {"name": "Морошка", "short": "Морошка", "color": Color("f5a030"), "cat": "crop", "food": 8},
+	"pepper": {"name": "Острый перец", "short": "Перец", "color": Color("e8342a"), "cat": "crop", "food": 4},
 	# фрукты
 	"coconut": {"name": "Кокос", "short": "Кокос", "color": Color("7b5230"), "cat": "fruit", "food": 10},
 	"banana": {"name": "Банан", "short": "Банан", "color": Color("ffe14d"), "cat": "fruit", "food": 15},
 	"mango": {"name": "Манго", "short": "Манго", "color": Color("ff9f2e"), "cat": "fruit", "food": 18},
 	"lemon": {"name": "Лимон", "short": "Лимон", "color": Color("f4ee52"), "cat": "fruit", "food": 6},
 	"blueberry": {"name": "Черника", "short": "Черника", "color": Color("4a5ab8"), "cat": "fruit", "food": 5},
+	"coffee": {"name": "Кофейные ягоды", "short": "Кофе", "color": Color("c8302a"), "cat": "fruit", "food": 4},
 	"lingonberry": {"name": "Брусника", "short": "Брусника", "color": Color("d8343a"), "cat": "fruit", "food": 5},
 	# саженцы
 	"sapling_banana": {"name": "Саженец банана", "short": "Саж. банан", "color": Color("8bd65a"), "cat": "sapling", "tree": "banana"},
@@ -90,11 +105,14 @@ const ITEMS := {
 	"ice_cream": {"name": "Мороженое", "short": "Морож.", "color": Color("fff0e0"), "cat": "food", "food": 20},
 	"honey_tea": {"name": "Чай с мёдом", "short": "Чай", "color": Color("d9883a"), "cat": "food", "food": 15, "warm": 120.0},
 	"cloudberry_jam": {"name": "Варенье из морошки", "short": "Варенье", "color": Color("f08a1a"), "cat": "food", "food": 40},
+	"roasted_coffee": {"name": "Жареный кофе", "short": "Ж. кофе", "color": Color("5a3422"), "cat": "food", "food": 12},
+	"spicy_soup": {"name": "Острая похлёбка", "short": "Похлёбка", "color": Color("e8643a"), "cat": "food", "food": 50},
 	# одежда (греет на Ледяном острове: чем теплее одет, тем медленнее остываешь)
 	"sweater": {"name": "Шерстяной свитер", "short": "Свитер", "color": Color("c8503a"), "cat": "clothes"},
 	"down_jacket": {"name": "Пуховая куртка", "short": "Куртка", "color": Color("4a7ab8"), "cat": "clothes"},
 	"felt_boots": {"name": "Валенки", "short": "Валенки", "color": Color("8a8f98"), "cat": "clothes"},
 	"mittens": {"name": "Тёплые рукавицы", "short": "Рукавицы", "color": Color("d84a5a"), "cat": "clothes"},
+	"fire_gloves": {"name": "Огнеупорные рукавицы", "short": "Огн. рукав.", "color": Color("c8783a"), "cat": "clothes"},
 	# инструменты
 	"machete": {"name": "Мачете", "short": "Мачете", "color": Color("c9cfd6"), "cat": "tool"},
 	"fishing_rod": {"name": "Удочка", "short": "Удочка", "color": Color("b8c450"), "cat": "tool"},
@@ -107,6 +125,7 @@ const ITEMS := {
 	"lantern": {"name": "Фонарь", "short": "Фонарь", "color": Color("ffd27a"), "cat": "tool"},
 	"ice_pick": {"name": "Ледоруб", "short": "Ледоруб", "color": Color("6fa8d8"), "cat": "tool"},
 	"ice_drill": {"name": "Ледовый бур", "short": "Бур", "color": Color("c9a050"), "cat": "tool"},
+	"iron_pickaxe": {"name": "Железная кирка", "short": "Ж. кирка", "color": Color("6a7a8a"), "cat": "tool"},
 }
 
 # ======================================================================= РЕЦЕПТЫ
@@ -142,6 +161,15 @@ const RECIPES := [
 	{"id": "ice_cream", "out": {"ice_cream": 2}, "in": {"milk": 1, "honey": 1, "ice": 1}, "station": "workbench", "unlock": true},
 	{"id": "honey_tea", "out": {"honey_tea": 1}, "in": {"leaf": 2, "honey": 1}, "station": "stove", "unlock": true},
 	{"id": "cloudberry_jam", "out": {"cloudberry_jam": 1}, "in": {"cloudberry": 3, "honey": 1}, "station": "campfire", "unlock": true},
+	# глава 6
+	{"id": "burn_salve", "out": {"burn_salve": 1}, "in": {"aloe": 2, "honey": 1}, "station": "workbench", "unlock": true},
+	{"id": "roasted_coffee", "out": {"roasted_coffee": 1}, "in": {"coffee": 2}, "station": "campfire"},
+	{"id": "spicy_soup", "out": {"spicy_soup": 1}, "in": {"fish": 2, "pepper": 1, "potato": 1}, "station": "campfire"},
+	{"id": "iron_ingot", "out": {"iron_ingot": 1}, "in": {"ore": 2, "charcoal": 1}, "station": "forge", "unlock": true},
+	{"id": "iron_pickaxe", "out": {"iron_pickaxe": 1}, "in": {"iron_ingot": 3, "plank": 2}, "station": "forge", "unlock": true},
+	{"id": "iron_nails", "out": {"iron_nails": 10}, "in": {"iron_ingot": 1}, "station": "forge", "unlock": true},
+	# тигель не тратится: он и в рецепте, и в результате
+	{"id": "obsidian_lens", "out": {"obsidian_lens": 1, "crucible": 1}, "in": {"obsidian": 6, "charcoal": 3, "crucible": 1}, "station": "forge", "unlock": true},
 ]
 
 # ======================================================================= ПОСТРОЙКИ
@@ -201,6 +229,14 @@ const BUILDINGS := {
 		"desc": "Кирпичная печь. Греет в мороз, на ней заваривают чай."},
 	"greenhouse": {"name": "Теплица", "cost": {"glass": 6, "plank": 6}, "radius": 2.3, "unlock": true, "tab": "ферма",
 		"desc": "Четыре грядки под стеклом: растут и в мороз, и на четверть быстрее."},
+	# глава 6
+	"tortoise_pen": {"name": "Загон черепах", "cost": {"plank": 8, "stone": 6, "fiber": 4}, "radius": 2.0, "unlock": true, "tab": "ферма",
+		"desc": "Три черепахи Веры. Корми тыквой — дают удобрение."},
+	"forge": {"name": "Кузница", "cost": {"stone": 10, "brick": 8, "scrap": 4, "clay": 2}, "radius": 1.2, "unlock": true, "tab": "дом",
+		"desc": "Горн и наковальня: железо из руды, железные инструменты, плавка."},
+	# мосток кладут только на отмеченных местах над лавой (spot: true)
+	"stone_bridge": {"name": "Каменный мосток", "cost": {"stone": 6}, "radius": 0.6, "unlock": true, "tab": "дом", "spot": true,
+		"desc": "Только на отмеченном месте у лавы: колышки с верёвкой."},
 	# бот Стёпы у причала — не строится, только для плавания
 	"boat": {"name": "Бот боцмана", "cost": {}, "radius": 1.8, "unlock": true, "tab": "", "hidden": true,
 		"desc": "Крепкий бот с кирпичами в трюме."},
@@ -218,6 +254,7 @@ const CROPS := {
 	"pumpkin": {"name": "Тыква", "time": 150.0, "yield": [1, 2], "seed_back": 0.8},
 	# морошка — северная ягода: растёт на холоде (в тундре Ледяного острова), а в тропиках — только в теплице
 	"cloudberry": {"name": "Морошка", "time": 90.0, "yield": [2, 3], "seed_back": 0.8, "cold": true},
+	"pepper": {"name": "Перец", "time": 80.0, "yield": [2, 3], "seed_back": 0.8},
 }
 
 # ======================================================================= ФРУКТОВЫЕ ДЕРЕВЬЯ
@@ -244,6 +281,8 @@ const PENS := {
 	# громоотвод: «корм» — пустой аккумулятор, заряжается только в грозу (storm: true)
 	"lightning_rod": {"animal": "", "count": 0, "feed": {"battery": 1}, "time": 40.0, "product": "battery_charged", "amount": 1,
 		"animal_name": "Громоотвод", "storm": true},
+	"tortoise_pen": {"animal": "tortoise", "count": 3, "feed": {"pumpkin": 1}, "time": 80.0, "product": "fertilizer", "amount": 1,
+		"animal_name": "Черепахи"},
 }
 
 # ======================================================================= ЭКОНОМИКА
@@ -257,6 +296,8 @@ const SELL_PRICES := {
 	"fried_egg": 6, "baked_potato": 6, "cheese": 14, "fruit_salad": 12, "fish_soup": 9,
 	"battery_charged": 8, "pumpkin": 5, "pumpkin_porridge": 14, "feather": 3, "blueberry": 1,
 	"cloudberry": 6, "cloudberry_jam": 18, "ice_cream": 14, "sweater": 20, "lingonberry": 1, "honey_tea": 6, "resin": 2,
+	"coffee": 3, "roasted_coffee": 11, "pepper": 5, "spicy_soup": 20, "iron_ingot": 12, "obsidian": 8, "fertilizer": 4,
+	"aloe": 1, "charcoal": 2, "ore": 3,
 }
 
 # Лавки. unlock — товар появляется, когда сюжет открыл этот id.
@@ -287,6 +328,11 @@ const SHOPS := {
 	"ingrid": {"name": "Штурманская Ингрид", "who": "ingrid", "buy": [
 		{"item": "ice_drill", "price": 40}, {"item": "felt_boots", "price": 50}, {"item": "mittens", "price": 35},
 		{"item": "seed_cloudberry", "price": 4, "unlock": "buy_seed_cloudberry"}, {"item": "seed_carrot", "price": 3},
+	]},
+	"vera": {"name": "Лечебница «Источники»", "who": "vera", "buy": [
+		{"item": "fire_gloves", "price": 45}, {"item": "herbal_tea", "price": 15}, {"item": "seed_pumpkin", "price": 3},
+		{"item": "honey", "price": 10}, {"item": "seed_pepper", "price": 3, "unlock": "buy_seed_pepper"},
+		{"item": "crucible", "price": 60, "unlock": "buy_crucible"},
 	]},
 }
 
@@ -387,6 +433,22 @@ const COLLECTIONS := {
 			{"id": "map_6", "name": "Лист 6", "color": Color("dfe8f2"), "text": "Лист 6. Ингрид дважды проверила мой расчёт. Сказала: «Ты сумасшедший, но точный». Маяк в Оке не светит наружу: у него треснула линза. Ухожу на Вулкан — там, в храме, древние отливали линзы. — Л."},
 		],
 		"reward": {"items": {"coins": 20}}},
+	"volcano_stones": {"name": "Камни вулкана", "source": "Попадаются, когда разбиваешь базальт, обсидиан и рудные жилы",
+		"items": [
+			{"id": "pumice", "name": "Пемза", "color": Color("d8d0c0")},
+			{"id": "sulfur", "name": "Сера", "color": Color("f2d23a")},
+			{"id": "basalt_stone", "name": "Базальт-шестигранник", "color": Color("5a5658")},
+			{"id": "obsidian_shard", "name": "Обсидиановый скол", "color": Color("3a2a5a")},
+			{"id": "fire_eye", "name": "Огненный глаз", "color": Color("ff7a2a")},
+		],
+		"reward": {"items": {"coins": 30}}},
+	"journal_volcano": {"name": "Записи с Вулкана", "source": "Страницы Лёвы в Огненном храме", "ordered": true,
+		"items": [
+			{"id": "page_v1", "name": "Страница 16", "color": Color("f2e2b8"), "text": "Хранители не были одним народом. Каждый Хранитель пришёл извне, из-за шторма. Шторм пропускает тех, кто может держать огонь. Дед попал сюда не случайно."},
+			{"id": "page_v2", "name": "Страница 17", "color": Color("f2e2b8"), "text": "Линзу для Великого огня отливают здесь, в кузне. Обсидиан, тигель и ровный жар. У меня дважды треснуло. Руки болят."},
+			{"id": "page_v3", "name": "Страница 18", "color": Color("f2e2b8"), "text": "Ухожу с той линзой, что есть, — с трещиной. Лучше такая, чем никакая. Вера ругается. Вера права. Малой, если ты здесь — отлей настоящую. — Л."},
+		],
+		"reward": {"items": {"coins": 20}}},
 }
 
 # ======================================================================= ОСТРОВА
@@ -405,6 +467,10 @@ const LOCATIONS := {
 	# flat: [центр, радиус, высота, ширина края] — у ледника край почти отвесный.
 	"ice": {"name": "Ледяной остров", "seed": 5055, "radius": 50.0, "peak": Vector2(4, -15), "peak_h": 4.0, "mix": "ice",
 		"unlock_flag": "ice_route", "flat": [Vector2(4, -15), 8.0, 12.0, 1.6]},
+	# Вулкан: чёрный песок, зелёные склоны; кратер — столовая гора с отвесной базальтовой стеной,
+	# в ней на востоке вырезан Огненный храм, наверху — озеро лавы и маяк Огонь кратера.
+	"volcano": {"name": "Остров Вулкана", "seed": 6066, "radius": 52.0, "peak": Vector2(-2, -13), "peak_h": 4.0, "mix": "volcano",
+		"unlock_flag": "volcano_route", "flat": [Vector2(-2, -13), 8.0, 12.0, 1.6]},
 }
 
 # ======================================================================= ЗАДАНИЯ — ГЛАВА 1
@@ -423,6 +489,7 @@ const SPEAKERS := {
 	"ingrid": {"name": "Штурман Ингрид", "color": Color("3a5a7a")},
 	"walrus": {"name": "Морж", "color": Color("8a6a52")},
 	"penguins": {"name": "Пингвины", "color": Color("2a3a4a")},
+	"vera": {"name": "Доктор Вера", "color": Color("7a4a6a")},
 }
 
 # Сюжет: три года назад у неизвестного архипелага пропала шхуна «Альбатрос» и её капитан — твой брат Лёва.
@@ -1066,5 +1133,131 @@ const CHAPTERS := [
 			["timur", "(в рации) ...ИНГРИД?! ПРИЁМ! Я НЕ КРИЧУ! ...Я тоже рад тебя слышать."],
 			["narrator", "Шторм на востоке расходится. Там гора, над которой стоит дым. Конец пятой главы."]],
 		"reward": {"items": {"coins": 30}, "flags": ["volcano_route"]}},
+	]},
+	{"title": "Глава 6. Остров Вулкана", "quests": [
+	{"id": "volcano_landing", "title": "Чёрный песок",
+		"intro": [["narrator", "«Он ушёл с линзой, в которой была трещина. Он знал». Это ты услышишь на Вулкане."],
+			["parrot", "Восток! Гора с дымом! Там тепло! Плывём, плывём!"]],
+		"tasks": [{"kind": "sailed", "target": "volcano", "count": 1, "text": "Доплыви до Острова Вулкана"},
+			{"kind": "built", "target": "shelter", "count": 1, "text": "Поставь навес — здесь сыплется пепел", "where": "volcano"},
+			{"kind": "found", "target": "hot_spring", "count": 1, "text": "Найди горячие источники"}],
+		"outro": [["narrator", "Песок здесь чёрный и тёплый, даже ночью. Из-за камней поднимается пар, пахнет серой и мятой."],
+			["parrot", "Тепло! Румба оттаял! Румба остаётся здесь жить!"],
+			["narrator", "У источников стоит домик, увешанный пучками трав. На крыльце кто-то гремит чайником."]],
+		"reward": {}},
+	{"id": "vera", "title": "Дым над источниками",
+		"intro": [["parrot", "Там бабушка! С чайником! Румба любит бабушек с чайниками."]],
+		"tasks": [{"kind": "talk", "target": "vera", "count": 1, "text": "Поговори с хозяйкой домика у источников"}],
+		"outro": [["vera", "Ещё один Ветров. Садитесь. Покажите руки. Так и знала: тоже ободранные."],
+			["vera", "Я Вера, судовой врач «Альбатроса». Была. Теперь — врач для трёх черепах и одного попугая. Здравствуй, Румба."],
+			["vera", "Ваш брат пришёл ко мне три месяца назад с ожогами до локтей. Полез к лаве голыми руками. Учёный."],
+			["player", "Он жив?"],
+			["vera", "Когда уходил — был. Худой как жердь, глаза красные, но живой. А теперь помогите старухе, раз пришли."],
+			["vera", "Мазь от ожогов кончилась. Алоэ растёт по склонам — колючие зелёные розетки. Два листа и ложка мёда, на верстаке."]],
+		"reward": {"unlock": ["burn_salve"]}},
+	{"id": "salve", "title": "Мазь для доктора",
+		"intro": [["vera", "Мне две баночки. Одну на полку, одну на всякий случай. «Всякий случай» здесь бывает каждый день."]],
+		"tasks": [{"kind": "collected", "target": "aloe", "count": 4, "text": "Нарви алоэ на склонах"},
+			{"kind": "crafted", "target": "burn_salve", "count": 2, "text": "Сделай мазь от ожогов на верстаке"},
+			{"kind": "delivered", "target": "burn_salve", "count": 2, "to": "vera", "text": "Отдай мазь Вере", "fresh": true}],
+		"outro": [["vera", "Хорошая мазь. Липкая. Значит, правильная."],
+			["vera", "Теперь про жар. У лавы горячо: над головой появится шкала. Чувствуете, что жжёт, — уходите. Это не храбрость, это глупость."],
+			["vera", "Мазь держит жар целую минуту — нажмите Q. Огнеупорные рукавицы продаю — с ними у лавы можно стоять вдвое дольше."],
+			["vera", "Источники остужают. Окунуться — и снова как новенький. Ну, как подержанный."]],
+		"reward": {"unlock": ["shop_vera", "tortoise_pen"], "items": {"burn_salve": 1}}},
+	{"id": "tortoises", "title": "Черепахи Веры",
+		"intro": [["vera", "Черепахи ушли. Очень медленно, но далеко: я три недели за ними шла. Поставьте им загон — они придут сами. Когда-нибудь."],
+			["vera", "Едят тыкву. Только тыкву. Семена у меня есть. Генерал обидится, если ему дадут меньше, чем Тортиле."]],
+		"tasks": [{"kind": "built", "target": "tortoise_pen", "count": 1, "text": "Построй загон черепах"},
+			{"kind": "fed", "target": "tortoise_pen", "count": 3, "text": "Покорми черепах тыквой (три раза)"},
+			{"kind": "product", "target": "fertilizer", "count": 3, "text": "Собери удобрение"}],
+		"outro": [["vera", "Пришли! Генерал, Тортила и Малыш. Малышу сто сорок лет."],
+			["vera", "Он видел, как здесь кто-то зажигал маяк. Жаль, не расскажет."],
+			["parrot", "Удобрение пахнет. Но грядки любят. Положи на грядку — растёт вдвое быстрее."]],
+		"reward": {"unlock": ["buy_seed_pepper"]}},
+	{"id": "coffee", "title": "Кофе на склонах",
+		"intro": [["vera", "По склонам растёт дикий кофе. Красные ягоды. Нажарите на костре — будет чем гостей поить."],
+			["vera", "А перец я посадить не успела. Семена продам. Острая похлёбка из перца и рыбы лечит всё, кроме упрямства."]],
+		"tasks": [{"kind": "collected", "target": "coffee", "count": 6, "text": "Собери дикий кофе на склонах"},
+			{"kind": "bought", "target": "seed_pepper", "count": 6, "text": "Купи у Веры семена перца", "fresh": true},
+			{"kind": "planted", "target": "pepper", "count": 3, "text": "Посади перец"},
+			{"kind": "harvested", "target": "pepper", "count": 3, "text": "Собери перец"}],
+		"outro": [["timur", "(в рации) КОФЕ?! ВЕРА, ЭТО ПРАВДА? Я ЛЕЧУ! То есть не лечу, у меня нет крыльев..."],
+			["vera", "Тимур. Всё ещё кричит. Значит, здоров."],
+			["vera", "Ваш брат ковал тут линзу. Кузницу разобрал, когда уходил, — сказал, вам нужнее будет новая, своя. Руду ищите в рыжих жилах на склонах, уголь — в горелых деревьях."]],
+		"reward": {}},
+	{"id": "ore", "title": "Руда и уголь",
+		"intro": [["parrot", "Горелые деревья — топором. Рыжие камни — киркой. Румба нашёл одно горелое. Румба больше не будет его клевать."]],
+		"tasks": [{"kind": "collected", "target": "charcoal", "count": 4, "text": "Наруби угля из горелых деревьев"},
+			{"kind": "collected", "target": "ore", "count": 8, "text": "Добудь железную руду из рыжих жил"}],
+		"outro": [["vera", "Кузня: камень, кирпичи, железо, немного глины. Кирпичи у вас с форта, железо — с Грозового. Я всё помню, у меня записано."]],
+		"reward": {"unlock": ["forge", "iron_ingot", "iron_nails"]}},
+	{"id": "forge", "title": "Кузница",
+		"intro": [["vera", "Две руды и уголь — слиток. Жарко будет, но это хороший жар, домашний."]],
+		"tasks": [{"kind": "built", "target": "forge", "count": 1, "text": "Построй кузницу"},
+			{"kind": "crafted", "target": "iron_ingot", "count": 4, "text": "Выплавь железные слитки"}],
+		"outro": [["vera", "Лёва ковал здесь по ночам. Стучал так, что черепахи прятали головы."],
+			["vera", "К храму тропу перегородили базальтовые столбы. Каменной киркой их не взять. Нужна железная."]],
+		"reward": {"unlock": ["iron_pickaxe"]}},
+	{"id": "iron_pick", "title": "Железная кирка",
+		"intro": [["parrot", "Три слитка и две доски. Тяжёлая кирка! Румба не будет её держать. Румба будет смотреть."]],
+		"tasks": [{"kind": "crafted", "target": "iron_pickaxe", "count": 1, "text": "Скуй железную кирку"},
+			{"kind": "cleared", "target": "basalt", "count": 3, "text": "Разбей базальтовые столбы у храма", "where": "volcano"}],
+		"outro": [["narrator", "За столбами — лавовое поле. Застывшая корка, и в ней — огненные ручьи. За ними в стене кратера чернеет вход."],
+			["vera", "Лёва клал мостки из камня. На лаве остались колышки с верёвкой — там и кладите. Шесть камней на мосток."]],
+		"reward": {"unlock": ["stone_bridge"]}},
+	{"id": "lava_field", "title": "Через лаву",
+		"intro": [["vera", "У лавы не стойте. Перешли — и дальше. Мазь с собой взяли? Взяли. Я видела."]],
+		"tasks": [{"kind": "built", "target": "stone_bridge", "count": 3, "text": "Сложи каменные мостки над лавой (на отмеченных местах)"},
+			{"kind": "reached", "target": "temple_gate", "count": 1, "text": "Дойди до входа в храм"}],
+		"outro": [["narrator", "Дверь храма закрыта каменной плитой. Перед ней — чаша, четыре каменных жёлоба на поворотных камнях и рычаг."],
+			["narrator", "Из трещины в скале сочится лава. На плите над дверью вырезано солнце, а его лучи стекают прямо в чашу."],
+			["parrot", "Лёва рисовал это! Солнце в чаше. Лучи — как жёлоба. Каждый смотрит на следующий."]],
+		"reward": {}},
+	{"id": "monolith", "title": "Огненный монолит",
+		"intro": [["parrot", "Поверни жёлоба. Лава течёт из трещины, по жёлобам — в чашу. Мимо холодных камней! Потом — рычаг."]],
+		"tasks": [{"kind": "solved", "target": "monolith", "count": 1, "text": "Направь лаву по жёлобам в чашу"}],
+		"outro": [["narrator", "Лава бежит по жёлобам и наполняет чашу. Камень гудит, и плита над дверью медленно уходит вниз."]],
+		"reward": {}},
+	{"id": "temple", "title": "Храм Хранителей",
+		"intro": [["parrot", "Внутри темно и жарко. Румба посидит снаружи. Румба покараулит."]],
+		"tasks": [{"kind": "found", "target": "temple", "count": 1, "text": "Осмотри Огненный храм"}],
+		"outro": [["narrator", "На стенах — рисунки. Люди приплывают из шторма на лодках. Один уходит в центр, к большому огню. Остальные живут на островах и зажигают маяки."],
+			["narrator", "Дальше: тот, кто в центре, стареет, и огонь тускнеет. Шторм открывается, и приходит новая лодка."],
+			["player", "Шторм никого не зовёт. Это просто погода. Это просто... погода."],
+			["vera", "(подходит сзади) Я тоже так говорила. Первые полгода."],
+			["vera", "Он остался мне должен шестьдесят монет за лечение. Не смотрите так, я врач, а не святая."],
+			["vera", "Отдайте долг брата — и тигель ваш. Он его тут оставил. Сказал: «Отдай моему, когда придёт»."]],
+		"reward": {"unlock": ["buy_crucible", "obsidian_lens"], "items": {"coins": 10}}},
+	{"id": "lens", "title": "Обсидиановая линза",
+		"intro": [["vera", "Обсидиан — чёрное стекло у подножия кратера. Только железная кирка его берёт."],
+			["vera", "Шесть кусков, три угля и тигель — на вашей кузнице. Ровный жар. Не торопитесь. Он торопился."]],
+		"tasks": [{"kind": "collected", "target": "obsidian", "count": 6, "text": "Добудь обсидиан у кратера"},
+			{"kind": "bought", "target": "crucible", "count": 1, "text": "Отдай Вере долг брата — тигель (60 монет)"},
+			{"kind": "crafted", "target": "obsidian_lens", "count": 1, "text": "Отлей обсидиановую линзу на кузнице"}],
+		"outro": [["narrator", "Линза получается тёмная, тяжёлая и совершенно ровная. Без единой трещины."],
+			["vera", "Ровная. У него так ни разу не вышло."],
+			["vera", "Огонь кратера погас давно. Маяк — на краю, наверху. Лезть по стене, на жаре. Мазь — в карман."]],
+		"reward": {}},
+	{"id": "volcano_tower", "title": "Огонь кратера",
+		"intro": [["vera", "Маяк стоит на краю кратера. Жёлоб, по которому к нему текла лава, прогорел. Четыре слитка на новый, камень на кладку."],
+			["parrot", "Наверх по камням. Жарко! Не стой — лезь!"]],
+		"tasks": [{"kind": "reached", "target": "crater_top", "count": 1, "text": "Залезь по стене кратера наверх"},
+			{"kind": "restored", "target": "volcano_tower", "count": 1, "text": "Почини лавовый жёлоб маяка"},
+			{"kind": "lit", "target": "volcano_tower", "count": 1, "text": "Открой заслонку — пусти лаву в чашу маяка"}],
+		"outro": [["narrator", "Лава течёт по новому жёлобу, и чаша маяка вспыхивает красным огнём. Далеко на западе ему отвечают огни — Ледяной, Грозовой, форт, Баньян, твоя гора."],
+			["narrator", "А на юго-востоке, где днём только море, в темноте проступает пятно тумана."]],
+		"reward": {}},
+	{"id": "vera_truth", "title": "Тот, кто держит огонь",
+		"intro": [["vera", "Спускайтесь. Чайник горячий. Есть разговор."]],
+		"tasks": [{"kind": "talk", "target": "vera", "count": 1, "text": "Поговори с Верой у источников", "fresh": true}],
+		"outro": [["vera", "Я скажу вам как врач. Ваш брат держит огонь один, и это его съедает. Не знаю как. Но я видела его руки и его глаза. Он не протянет долго."],
+			["vera", "По ночам я смотрю на Око. Огонь там мигает. Как сердце с перебоями."],
+			["vera", "И ещё одно. С края кратера ночью видно остров на юге, в тумане. Днём его нет. Я думала, старею."],
+			["timur", "(в рации) ВЕРА! Сигнал «живы, туман» — он сильнее всего ночью! Как раз когда твой остров видно!"],
+			["ingrid", "(в рации) Я посчитала. Пеленг Тимура и твой остров сходятся. Юго-восток. Это они."],
+			["vera", "Возьмите травяной сбор. Для Лёвы. Заварите ему, когда найдёте. Скажете — от Веры. Он поймёт и поморщится."],
+			["narrator", "Конец шестой главы. Впереди — Туманный остров. Он появляется только ночью."]],
+		"reward": {"items": {"coins": 35, "herbal_tea": 2}, "flags": ["fog_route"]}},
 	]},
 ]

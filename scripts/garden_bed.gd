@@ -6,6 +6,7 @@ var crop := ""
 var progress := 0.0
 var watered := false
 var in_greenhouse := false   # грядка внутри теплицы: растёт и в мороз, на четверть быстрее
+var fertilized := false      # удобрение от черепах: эта посадка растёт вдвое быстрее
 var _stage := -1
 var crop_node: Node3D
 
@@ -38,7 +39,7 @@ func _process(delta: float) -> void:
 	super(delta)
 	var dt := world_dt()
 	if crop != "" and progress < 1.0 and can_grow(crop):
-		var speed := (2.0 if watered else 1.0) * (1.25 if in_greenhouse else 1.0)
+		var speed := (2.0 if watered else 1.0) * (1.25 if in_greenhouse else 1.0) * (2.0 if fertilized else 1.0)
 		progress = minf(1.0, progress + dt * speed / Data.CROPS[crop]["time"])
 	if stage() != _stage:
 		_refresh()
@@ -84,6 +85,8 @@ func get_hint() -> String:
 	var t := "%s растёт: %d%%" % [Data.CROPS[crop]["name"], int(progress * 100)]
 	if not watered:
 		t += " · полить лейкой" if Game.has_tool("watering_can") else " · (лейка ускорит рост)"
+	elif not fertilized and Game.count("fertilizer") > 0:
+		t += " · удобрить"
 	return t
 
 
@@ -108,7 +111,13 @@ func interact(_player: Node) -> void:
 		3:
 			_harvest()
 		_:
-			if not watered and Game.has_tool("watering_can"):
+			if watered and not fertilized and Game.count("fertilizer") > 0:
+				Game.pay({"fertilizer": 1})
+				fertilized = true
+				Audio.play("plant", -2.0, 0.1, global_position)
+				FX.burst(self, Vector3(0, 0.5, 0), Color("7a5a3a"), 12)
+				Game.notified.emit("Удобрено: теперь растёт вдвое быстрее", Color("c9f59b"))
+			elif not watered and Game.has_tool("watering_can"):
 				watered = true
 				Game.bump("watered", "bed")
 				Audio.play("water", -3.0, 0.1, global_position)
@@ -126,7 +135,7 @@ func _seed_for(c: String) -> String:
 
 
 func _time_left() -> float:
-	return (1.0 - progress) * Data.CROPS[crop]["time"] / ((2.0 if watered else 1.0) * (1.25 if in_greenhouse else 1.0))
+	return (1.0 - progress) * Data.CROPS[crop]["time"] / ((2.0 if watered else 1.0) * (1.25 if in_greenhouse else 1.0) * (2.0 if fertilized else 1.0))
 
 
 func plant(c: String) -> void:
@@ -135,6 +144,7 @@ func plant(c: String) -> void:
 	crop = c
 	progress = 0.0
 	watered = false
+	fertilized = false
 	Game.bump("planted", c)
 	Audio.play("plant", -2.0, 0.1, global_position)
 	FX.burst(self, Vector3(0, 0.3, 0), Color("8f5a34"), 10)
@@ -153,16 +163,18 @@ func _harvest() -> void:
 	crop = ""
 	progress = 0.0
 	watered = false
+	fertilized = false
 	_refresh()
 
 
 func get_state() -> Dictionary:
-	return {"crop": crop, "progress": progress, "watered": watered}
+	return {"crop": crop, "progress": progress, "watered": watered, "fert": fertilized}
 
 
 func apply_state(d: Dictionary) -> void:
 	crop = d.get("crop", "")
 	progress = float(d.get("progress", 0.0))
 	watered = bool(d.get("watered", false))
+	fertilized = bool(d.get("fert", false))
 	if is_inside_tree():
 		_refresh()

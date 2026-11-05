@@ -739,6 +739,66 @@ def sfx_step_snow():
     return normalize(crunch + bandpass(grain, 2000, 8000) * 0.5 + squeak, 0.35)
 
 
+# ============================================================ глава 6 — Остров Вулкана
+def sfx_lava():
+    """Бульканье лавы: густые медленные пузыри с глухим «плюх»."""
+    r = np.random.default_rng(111)
+    d = 1.6
+    x = np.zeros(int(d * SR))
+    for k in range(5):
+        at = r.uniform(0.0, 1.3)
+        dd = r.uniform(0.12, 0.25)
+        tt = t_axis(dd)
+        f = r.uniform(70, 130) * (1 + 1.5 * tt / dd)
+        s = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * tt / dd) ** 2
+        place(x, s * r.uniform(0.5, 1.0), at)
+    x += lowpass(r.standard_normal(len(x)), 300) * 0.3
+    return normalize(x, 0.6)
+
+
+def sfx_steam():
+    """Шипение пара: резкий белый шум, быстро нарастает и медленно гаснет."""
+    r = np.random.default_rng(113)
+    d = 1.1
+    t = t_axis(d)
+    env = np.minimum(1, t / 0.04) * np.exp(-t / 0.35)
+    return normalize(bandpass(r.standard_normal(len(t)), 2500, 9000) * env, 0.55)
+
+
+def sfx_hammer():
+    """Удар молота по наковальне: звонкий металлический «дзынь» и короткий стук."""
+    r = np.random.default_rng(117)
+    d = 0.9
+    t = t_axis(d)
+    x = np.zeros(len(t))
+    for f, a, dec in ((870, 0.5, 0.25), (2130, 0.35, 0.15), (3420, 0.22, 0.09), (5100, 0.12, 0.05)):
+        x += np.sin(2 * np.pi * f * t + r.uniform(0, 6)) * a * np.exp(-t / dec)
+    x += highpass(r.standard_normal(len(t)), 1500) * np.exp(-t / 0.01) * 0.8
+    return normalize(x, 0.7)
+
+
+def sfx_tortoise():
+    """Черепаха: смешной глубокий вздох-пыхтение, как у старого дивана."""
+    r = np.random.default_rng(119)
+    d = 1.4
+    t = t_axis(d)
+    env = np.sin(np.pi * np.clip(t / 1.2, 0, 1)) ** 1.5
+    breath = bandpass(r.standard_normal(len(t)), 200, 900) * env
+    hum = np.sin(2 * np.pi * (95 - 20 * t) * t) * 0.25 * env
+    return normalize(breath + hum, 0.5)
+
+
+def sfx_rumble():
+    """Гул вулкана: очень низкий рокот издалека."""
+    r = np.random.default_rng(121)
+    d = 3.0
+    t = t_axis(d)
+    env = np.sin(np.pi * t / d) ** 1.2
+    x = lowpass(r.standard_normal(len(t)), 90, 3) * 4.0 * env
+    x += np.sin(2 * np.pi * 38 * t) * 0.3 * env
+    return normalize(x, 0.7)
+
+
 def main():
     import sys
     os.makedirs(OUT, exist_ok=True)
@@ -747,7 +807,8 @@ def main():
         table = {"thunder0": lambda: sfx_thunder(0), "thunder1": lambda: sfx_thunder(1), "thunder2": lambda: sfx_thunder(2),
                  "radio": sfx_radio, "honk": sfx_honk, "metal": sfx_metal,
                  "wind": sfx_wind, "ice": sfx_ice, "penguin": sfx_penguin, "snore": sfx_snore, "drip": sfx_drip,
-                 "step_snow": sfx_step_snow}
+                 "step_snow": sfx_step_snow, "lava": sfx_lava, "steam": sfx_steam, "hammer": sfx_hammer,
+                 "tortoise": sfx_tortoise, "rumble": sfx_rumble}
         for name in only:
             write_wav("sfx_" + name, table[name]())
         print("audio:", only)
@@ -762,7 +823,8 @@ def main():
         "thunder0": sfx_thunder(0), "thunder1": sfx_thunder(1), "thunder2": sfx_thunder(2),
         "radio": sfx_radio(), "honk": sfx_honk(), "metal": sfx_metal(),
         "wind": sfx_wind(), "ice": sfx_ice(), "penguin": sfx_penguin(), "snore": sfx_snore(), "drip": sfx_drip(),
-        "step_snow": sfx_step_snow(),
+        "step_snow": sfx_step_snow(), "lava": sfx_lava(), "steam": sfx_steam(), "hammer": sfx_hammer(),
+        "tortoise": sfx_tortoise(), "rumble": sfx_rumble(),
     }
     for i in range(4):
         sfx["bird%d" % i] = bird(100 + i)

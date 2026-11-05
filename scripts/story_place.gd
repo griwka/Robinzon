@@ -98,6 +98,19 @@ const PLACES := {
 		"restored_model": "ice_tower", "restored_name": "Холодное сердце",
 		"lines": [["player", "Маяк вмёрз в лёд целиком, как муха в янтарь. Если сколоть лёд у входа и сложить в чашу дрова со смолой и маслом, огонь, может быть, примется."],
 			["parrot", "Холодное сердце. Румба слышал это имя. Румба не помнит где."]]},
+	# ---------------------------------------------------------------- глава 6
+	"hot_spring": {"model": "", "name": "Горячие источники", "radius": 0.0,
+		"loot": {"aloe": 2}, "pages": 0,
+		"lines": [["narrator", "Три каменные чаши, вода в них голубая и горячая. Пар пахнет мятой. На краю сушатся пучки трав и стоит жестяная кружка."]]},
+	"temple": {"model": "", "name": "Огненный храм", "radius": 0.0, "needs_flag": "monolith_solved",
+		"locked_hint": "Дверь храма закрыта каменной плитой. Пусти лаву по жёлобам в чашу",
+		"loot": {"obsidian": 2}, "pages": 0, "journal": "journal_volcano", "journal_pages": 3,
+		"lines": [["narrator", "Внутри жарко и тихо. Стены покрыты рисунками, в глубине — древняя кузня с каменным горном. На наковальне — три листа, придавленные куском обсидиана."]]},
+	"volcano_tower": {"model": "volcano_tower_ruin", "name": "Огонь кратера", "radius": 2.0, "flag": "lit_volcano_tower",
+		"loot": {}, "pages": 0, "restore": {"iron_ingot": 4, "stone": 6}, "fuel": {},
+		"restored_model": "volcano_tower", "restored_name": "Огонь кратера",
+		"lines": [["player", "Башня из красного камня на самом краю. От озера лавы к её чаше шёл каменный жёлоб — он прогорел и обвалился. Заслонка заржавела."],
+			["parrot", "Тут Лёва обжёгся. Румба чует. Пахнет Лёвой и горелым."]]},
 }
 
 var id := "old_camp"
@@ -315,6 +328,10 @@ func light_fire(animate: bool) -> void:
 			l.light_color = Color("cfe4ff")
 		if animate:
 			get_tree().call_group("weather", "strike_at", global_position + Vector3(0, 13.0, 0))
+	if id == "volcano_tower":
+		var l := visual.get_node_or_null("Light") as OmniLight3D
+		if l:
+			l.light_color = Color("ff6a2a")
 	if id == "ice_tower":
 		Game.flags["ice_thawed"] = true
 		if animate:   # при загрузке остров и так строится уже оттаявшим

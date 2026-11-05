@@ -41,6 +41,8 @@ var storm := 0.0                       # сила грозы 0..1 (задаёт 
 var storm_force := false               # для автотеста: гроза «идёт» всегда
 var warmth := 100.0                    # тепло героя 0..100 (Ледяной остров до оттепели; не сохраняется)
 var warm_tea := 0.0                    # сколько секунд ещё греет выпитый чай
+var heat := 0.0                        # жар героя 0..100 у лавы (Остров Вулкана; не сохраняется)
+var salve_t := 0.0                     # сколько секунд ещё действует мазь от ожогов
 
 
 ## Холодно ли там, где сейчас герой: Ледяной остров, пока не зажжено Холодное сердце.
@@ -204,11 +206,13 @@ func recipe_unlocked(r: Dictionary) -> bool:
 func craft(recipe: Dictionary) -> bool:
 	if not recipe_unlocked(recipe) or not pay(recipe["in"]):
 		return false
-	Audio.play("craft", -3.0)
+	Audio.play("hammer" if recipe["station"] == "forge" else "craft", -3.0)
 	for id in recipe["out"]:
 		inventory[id] = count(id) + recipe["out"][id]
-		notified.emit("Создано: %s ×%d" % [item_name(id), recipe["out"][id]], Color("ffe08a"))
 		inventory_changed.emit()
+		if recipe["in"].has(id):
+			continue   # приспособление (тигель) вернулось в сумку — это не новая вещь
+		notified.emit("Создано: %s ×%d" % [item_name(id), recipe["out"][id]], Color("ffe08a"))
 		bump("crafted", id, recipe["out"][id])
 	return true
 

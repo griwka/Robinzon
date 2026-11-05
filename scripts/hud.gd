@@ -435,6 +435,45 @@ func _item_slot(id: String, n: int, big := false) -> Control:
 
 
 var stamina_bar: ProgressBar
+var heat_box: PanelContainer
+var heat_bar: ProgressBar
+var heat_state: Label
+var _heat_fill: StyleBoxFlat
+
+
+## Шкала жара (Остров Вулкана): под часами слева вверху, как шкала тепла на Ледяном.
+func set_heat(v: float, shown: bool, state: String) -> void:
+	if heat_box == null:
+		heat_box = PanelContainer.new()
+		heat_box.position = Vector2(16, 70)
+		root.add_child(heat_box)
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		heat_box.add_child(h)
+		h.add_child(_label("Жар", 18, Color("ffc0a0")))
+		heat_bar = ProgressBar.new()
+		heat_bar.show_percentage = false
+		heat_bar.max_value = 100.0
+		heat_bar.custom_minimum_size = Vector2(220, 20)
+		heat_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var bg := _box(WOOD_DARK, WOOD_DARK, 9, 2, 0)
+		_heat_fill = _box(Color("ffb23a"), Color("c8641a"), 9, 2, 0)
+		bg.shadow_size = 0
+		_heat_fill.shadow_size = 0
+		heat_bar.add_theme_stylebox_override("background", bg)
+		heat_bar.add_theme_stylebox_override("fill", _heat_fill)
+		h.add_child(heat_bar)
+		heat_state = _label("", 16, Color("ffd0a0"))
+		h.add_child(heat_state)
+	heat_box.visible = shown
+	if not shown:
+		return
+	heat_bar.value = v
+	var k := clampf(v / 100.0, 0.0, 1.0)
+	_heat_fill.bg_color = Color("ffd25a").lerp(Color("e8402a"), smoothstep(0.3, 0.95, k))
+	_heat_fill.border_color = _heat_fill.bg_color.darkened(0.3)
+	heat_state.text = state
+	heat_state.modulate = Color(1, 1, 1, 0.7 + 0.3 * sin(Time.get_ticks_msec() / 120.0)) if v >= 99.0 else Color.WHITE
 var warm_box: PanelContainer
 var warm_bar: ProgressBar
 var warm_state: Label
@@ -674,7 +713,8 @@ func open_craft(_station := "") -> void:
 
 func _fill_craft() -> void:
 	var body := _clear(craft_panel)
-	var names := {"": "в руках", "workbench": "у верстака", "campfire": "у костра", "kiln": "у печи для обжига", "stove": "на печке"}
+	var names := {"": "в руках", "workbench": "у верстака", "campfire": "у костра", "kiln": "у печи для обжига", "stove": "на печке",
+		"forge": "в кузнице"}
 	var note := _label("Рецепты «у верстака» и «у костра» работают, только если стоять рядом.", 15, INK, false)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size = Vector2(580, 0)
@@ -875,7 +915,7 @@ func open_inventory() -> void:
 func _fill_inventory() -> void:
 	var body := _clear(inv_panel)
 	var cats := {"tool": "Инструменты", "quest": "Особые предметы", "livestock": "Живность", "material": "Материалы", "seed": "Семена", "sapling": "Саженцы",
-		"crop": "Урожай", "fruit": "Фрукты", "product": "С фермы", "food": "Блюда", "clothes": "Одежда"}
+		"crop": "Урожай", "fruit": "Фрукты", "product": "С фермы", "food": "Блюда", "clothes": "Одежда", "medicine": "Лекарства"}
 	var any := false
 	for cat in cats:
 		var grid := GridContainer.new()
@@ -996,7 +1036,9 @@ F5 — сохранить,  F9 — загрузить,  Esc — пауза и н
 Гроза (Грозовой остров): переждать под навесом, не стоять на вершинах.
 Ливень сам поливает грядки, а громоотвод заряжает аккумуляторы.
 Холод (Ледяной остров): шкала тепла тает вдали от огня. Греют костёр, печка, палатка,
-теплица; куртка держит тепло дольше свитера. Q на морозе — выпить чай с мёдом.""", 17, INK, false))
+теплица; куртка держит тепло дольше свитера. Q на морозе — выпить чай с мёдом.
+Жар (Остров Вулкана): у лавы растёт шкала жара; полная — отбросит назад. Остужают источники,
+огнеупорные рукавицы и мазь от ожогов (Q). Мосток через лаву — только на месте с колышками.""", 17, INK, false))
 
 
 func show_help() -> void:

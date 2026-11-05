@@ -9,7 +9,10 @@ extends Node
 ##   --bunker=N      поставить героя на ярус N бункера (Грозовой остров)
 ##   --near=glacier_top|ingrid|walrus|penguins|ice_tower|ice_chest_1..3 — герой у места на Ледяном острове
 ##   --thaw=1        Ледяной остров уже оттаял (для скриншотов «весны»)
-##   --wear=sweater|jacket — герой в тёплой одежде (с jacket — ещё валенки и рукавицы)
+##   --wear=sweater|jacket — герой в тёплой одежде (с jacket — ещё валенки и рукавицы); fire — огнеупорные рукавицы
+##   --near=vera|springs|temple_gate|crater_top|volcano_tower|crater_foot — герой у места на Острове Вулкана
+##   --solved=1      на Вулкане: монолит решён, мостки построены (для скриншотов)
+##   --view=temple   на Вулкане: герой перед входом в храм, камера смотрит на дверь
 
 var main: Node
 var args := {}
@@ -36,10 +39,29 @@ func _process(_delta: float) -> void:
 	if _frames == 2 and args.has("wear"):
 		if args["wear"] == "sweater":
 			Game.inventory["sweater"] = 1
+		elif args["wear"] == "fire":
+			Game.inventory["fire_gloves"] = 1
 		else:
 			for id in ["down_jacket", "felt_boots", "mittens"]:
 				Game.inventory[id] = 1
 		p.update_clothes()
+	if _frames == 2 and args.get("solved", "") == "1":
+		var tp := _temple()
+		if tp:
+			for sp in tp.spots:
+				main.build.spawn_building("stone_bridge", sp.global_position, sp.rotation.y)
+			Game.flags["monolith_solved"] = true
+			for c in tp.chutes:
+				c.dir = int(VolcanoTemple.TARGET[c.index])
+				c._face(false)
+			tp._open(false)
+	if _frames == 2 and args.get("view", "") == "temple":
+		var tv := _temple()
+		if tv:
+			p.global_position = tv.global_position + tv.out * 4.0 + Vector3(0, 0.5, 0)
+			p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+			p.camera_yaw = atan2(tv.out.x, tv.out.z)
+			_flush()
 	if _frames == 2:
 		if args.has("dbgdraw"):   # отладка рендера: 1 — без света, 2 — только свет, 5 — нормали, 12 — SSAO
 			get_viewport().debug_draw = int(args["dbgdraw"]) as Viewport.DebugDraw
@@ -552,6 +574,96 @@ func _test_ice() -> void:
 	p.global_position = main.island.spawn_point
 
 
+# ------------------------------------------------------------------ Остров Вулкана
+func _crater() -> VolcanoCrater:
+	for n in get_tree().get_nodes_in_group("crater"):
+		return n
+	return null
+
+
+func _temple() -> VolcanoTemple:
+	for n in get_tree().get_nodes_in_group("temple"):
+		return n
+	return null
+
+
+func _test_volcano() -> void:
+	var cr := _crater()
+	var tp := _temple()
+	var p: Player = main.player
+	var h: Heat = main.heat
+	_check(cr != null and tp != null and h != null, "на Острове Вулкана есть кратер, храм и жар")
+	if cr == null or tp == null or h == null:
+		return
+	_check(cr.top - cr.climb.bottom.y > 4.5 and cr.climb.rock and cr.climb.hot, "стена кратера высокая (%.1f м), лезть — по горячим выступам" % (cr.top - cr.climb.bottom.y))
+	_check(tp.spots.size() == 3 and tp.bridged_count() == 0, "на лаве три места под мостки, пока пустые")
+	var closed := 0
+	for sp in tp.spots:
+		if not sp.block.disabled:
+			closed += 1
+	_check(closed == 3, "без мостков лава не пускает к храму")
+	# сквозь лаву не пройти: от внешнего края поля к двери любой путь упирается в стенку над лавой
+	var space := tp.get_world_3d().direct_space_state
+	var blocked := 0
+	for k in 9:
+		var a := -1.0 + k * 0.25
+		var dir := (tp.out * cos(a) + tp.side * sin(a)).normalized()
+		var from := tp.global_position + dir * 9.6 + Vector3(0, 0.5, 0)
+		var to := tp.global_position + dir * 3.0 + Vector3(0, 0.5, 0)
+		from.y = main.island.height_at(from.x, from.z) + 0.5
+		to.y = main.island.height_at(to.x, to.z) + 0.5
+		var q := PhysicsRayQueryParameters3D.create(from, to, 2)
+		if not space.intersect_ray(q).is_empty():
+			blocked += 1
+	_check(blocked == 9, "лавовые ручьи перегораживают все пути к двери (%d/9)" % blocked)
+	# жар: у лавы растёт, в рукавицах — вдвое медленнее, полный — отбрасывает
+	var sp0: VolcanoTemple.BridgeSpot = tp.spots[0]
+	var near_lava := sp0.global_position + tp.side * 0.0 + Vector3(0, 0.3, 0)
+	p.global_position = near_lava
+	Game.inventory = {}
+	Game.heat = 0.0
+	h.tick(0.5)
+	var bare := Game.heat
+	Game.inventory = {"fire_gloves": 1}
+	Game.heat = 0.0
+	h.tick(0.5)
+	var gloved := Game.heat
+	_check(bare > 5.0 and absf(bare / maxf(gloved, 0.01) - 2.0) < 0.1, "у лавы жар растёт, в огнеупорных рукавицах — вдвое медленнее (%.1f / %.1f)" % [bare, gloved])
+	Game.inventory = {"burn_salve": 1}
+	Game.heat = 60.0
+	_check(Heat.use_salve() and Game.heat <= 20.0 and Game.salve_t > 0.0, "мазь от ожогов сбивает жар и действует минуту")
+	Game.salve_t = 0.0
+	Game.heat = 99.5
+	p.velocity = Vector3.ZERO
+	h._push_cd = 0.0
+	h.tick(0.5)
+	_check(Game.heat < 100.0 and p.velocity.length() > 3.0, "полный жар отбрасывает героя от лавы, без вреда")
+	# источники остужают
+	var springs: HotSprings = null
+	for n in get_tree().get_nodes_in_group("cool_spot"):
+		springs = n
+	_check(springs != null, "у лагеря есть горячие источники")
+	if springs:
+		p.global_position = springs.global_position + Vector3(0.5, 0.3, 0.5)
+		Game.heat = 90.0
+		h.tick(1.0)
+		_check(Game.heat < 20.0, "у источников жар спадает сразу")
+	# монолит: неверные жёлоба — дверь закрыта
+	tp.pull_lever()
+	_check(not tp.solved(), "с неверными жёлобами лава до чаши не доходит")
+	# ресурсы для глав
+	var counts := {}
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode:
+			counts[n.kind] = counts.get(n.kind, 0) + 1
+	for k in ["aloe", "coffee_bush", "charred_tree", "ore_vein", "obsidian_rock"]:
+		_check(counts.get(k, 0) >= 5, "на острове есть «%s» (%d)" % [k, counts.get(k, 0)])
+	_check(counts.get("basalt", 0) >= 10, "базальтовых столбов хватает (%d, нужно 3)" % counts.get("basalt", 0))
+	Game.inventory = {}
+	Game.heat = 0.0
+	p.global_position = main.island.spawn_point
+
+
 # ------------------------------------------------------------------ Форт
 func _fort() -> FortRuin:
 	for n in get_tree().get_nodes_in_group("obstacle"):
@@ -646,12 +758,14 @@ func _reachable(poi_id: String) -> bool:
 			if Vector2(p.x - c.x, p.z - c.z).length() < R + 3.0:
 				blockers.append([Vector2(p.x, p.z), cfg["radius"], cfg.get("long", 0.0), n.visual.rotation.y])
 	var size := int(R * 2 / cell)
-	var gl := _glacier()
+	var mesa: Node3D = _glacier()
+	if mesa == null:
+		mesa = _crater()
 	var blocked := func(x: float, z: float) -> bool:
 		if isl.height_at(x, z) < -0.9:
 			return true
-		if gl and Vector2(x - gl.global_position.x, z - gl.global_position.z).length() < IceGlacier.WALL_R + 0.45:
-			return true   # ледяной обрыв: снизу на ледник не зайти
+		if mesa and Vector2(x - mesa.global_position.x, z - mesa.global_position.z).length() < IceGlacier.WALL_R + 0.45:
+			return true   # обрыв (ледник, кратер): снизу наверх не зайти
 		var q := Vector2(x, z)
 		for b in blockers:
 			var d: Vector2 = q - b[0]
@@ -721,7 +835,14 @@ func _build(id: String, variant := "") -> Building:
 	_spot_i += 1
 	if id == "raft":
 		pos = main.island.wreck_point + Vector3(0, 0, 3)
-	var b := bs.spawn_building(id, pos, 0.0, variant)
+	var rot := 0.0
+	if id == "stone_bridge":
+		var sp := bs.free_spot(Vector3.ZERO, 9999.0)
+		pos = sp.global_position
+		rot = sp.rotation.y
+	var b := bs.spawn_building(id, pos, rot, variant)
+	if id == "stone_bridge":
+		b._claim_spot()
 	main._connect_building(b)
 	Game.bump("built", id)
 	return b
@@ -830,7 +951,8 @@ func _do_task(t: Dictionary) -> void:
 				guard += 1
 		"cleared":
 			var tools := {"thicket": "machete", "bamboo": "machete", "jungle_tree": "stone_axe", "fallen_log": "stone_axe", "cliff": "pickaxe", "rock": "pickaxe", "liana_curtain": "machete",
-				"crooked_tree": "stone_axe", "rockfall": "pickaxe", "ice_wall": "ice_pick", "pine": "stone_axe", "ice_block": "ice_pick"}
+				"crooked_tree": "stone_axe", "rockfall": "pickaxe", "ice_wall": "ice_pick", "pine": "stone_axe", "ice_block": "ice_pick",
+				"basalt": "iron_pickaxe"}
 			if tools.has(target) and not Game.has_tool(tools[target]):
 				_give({tools[target]: 1})
 			var done := 0
@@ -883,6 +1005,13 @@ func _do_task(t: Dictionary) -> void:
 				spot.state = FishingSpot.BITE  # поклёвка
 				spot.interact(main.player)     # подсечь
 		"solved":
+			if target == "monolith":
+				var tp := _temple()
+				for c in tp.chutes:
+					while c.dir != int(VolcanoTemple.TARGET[c.index]):
+						c.interact(main.player)
+				tp.pull_lever()
+				return
 			if target == "stars":
 				var gl := _glacier()
 				Game.time_of_day = 0.85      # ночь: звёзды видно
@@ -943,6 +1072,17 @@ func _do_task(t: Dictionary) -> void:
 			Game.bump("sailed", "raft")
 			Game.bump("sailed", target)
 		"reached":
+			if target == "temple_gate":
+				var tp := _temple()
+				_check(tp.bridged_count() == 3, "все три мостка лежат на местах")
+				main.player.global_position = tp.global_position + tp.out * 1.5 + Vector3(0, 0.5, 0)
+				tp._process(0.0)
+				return
+			if target == "crater_top":
+				var cr := _crater()
+				main.player.global_position = cr.top_point()
+				cr._process(0.0)
+				return
 			if target == "glacier_top":
 				var gl := _glacier()
 				main.player.global_position = gl.top_point()
@@ -1003,6 +1143,8 @@ func _autotest() -> void:
 		Game.storm_force = true   # молнии нужны для громоотвода и Башни громов
 	if ch == 4 and Game.location == "ice":
 		await _test_ice()
+	if ch == 5 and Game.location == "volcano":
+		_test_volcano()
 	if ch > 0:
 		# всё, что открыли предыдущие задания (рецепты, лавки, флаги), — как у игрока, дошедшего сюда
 		var from_q := int(args.get("from", "0"))
@@ -1046,6 +1188,10 @@ func _autotest() -> void:
 				print("      %s: %d/%d" % [t["text"], Game.task_progress(t), t["count"]])
 			break
 	var done_ch: bool = Game.chapter > ch or (Game.quest_index >= qs.size())
+	if ch == 5 and Game.location == "volcano" and done_ch:
+		_check(Game.flags.get("lit_volcano_tower", false) and Game.flags.get("fog_route", false), "Огонь кратера горит, открыт путь к Туманному острову")
+		_check(Game.collection_complete("journal_volcano"), "все три записи с Вулкана собраны")
+		_check(Game.count("crucible") >= 1 and Game.count("obsidian_lens") >= 1, "линза отлита, тигель остался в сумке")
 	if ch == 4 and Game.location == "ice" and done_ch:
 		_check(Game.flags.get("ice_thawed", false) and not Game.cold_active(), "Холодное сердце зажжено — на острове оттепель, холода больше нет")
 		_check(Game.collection_complete("star_maps"), "все шесть листов звёздных карт собраны")
