@@ -1,8 +1,8 @@
-// Контур "вывернутая оболочка": рисует увеличенную копию модели изнанкой наружу.
+// Контур "вывернутая оболочка": тёмно-коричневая обводка, как у рисованных персонажей.
 shader_type spatial;
-render_mode unshaded, cull_front, depth_draw_opaque;
+render_mode unshaded, cull_front, shadows_disabled;
 
-uniform vec4 color : source_color = vec4(0.16, 0.1, 0.07, 1.0);
+uniform vec4 color : source_color = vec4(0.20, 0.11, 0.06, 1.0);
 uniform float width = 0.025;
 
 void vertex() {

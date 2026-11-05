@@ -4,19 +4,20 @@ extends StaticBody3D
 ## Добывается ударами (ЛКМ / E), после добычи исчезает и со временем вырастает снова.
 
 const KINDS := {
-	"palm": {"hp": 4, "tool": "stone_axe", "drops": {"wood": 3, "leaf": 2}, "respawn": 150.0,
+	"palm": {"hp": 3, "tool": "stone_axe", "drops": {"wood": 3, "leaf": 2}, "respawn": 120.0,
 		"verb": "Срубить пальму", "radius": 0.35, "height": 5.0},
-	"bush": {"hp": 2, "tool": "", "drops": {"fiber": 2}, "respawn": 50.0,
+	"bush": {"hp": 1, "tool": "", "drops": {"fiber": 2}, "respawn": 45.0,
 		"verb": "Собрать волокно", "radius": 0.7, "height": 1.2},
-	"rock": {"hp": 5, "tool": "pickaxe", "drops": {"stone": 5}, "respawn": 200.0,
+	"rock": {"hp": 4, "tool": "pickaxe", "drops": {"stone": 5}, "respawn": 160.0,
 		"verb": "Разбить валун", "radius": 1.0, "height": 1.4},
-	"pebble": {"hp": 1, "tool": "", "drops": {"stone": 1}, "respawn": 60.0,
+	"pebble": {"hp": 1, "tool": "", "drops": {"stone": 1}, "respawn": 50.0,
 		"verb": "Подобрать камень", "radius": 0.25, "height": 0.3},
-	"driftwood": {"hp": 2, "tool": "", "drops": {"wood": 2}, "respawn": 90.0,
+	"driftwood": {"hp": 1, "tool": "", "drops": {"wood": 2}, "respawn": 70.0,
 		"verb": "Собрать плавник", "radius": 0.4, "height": 0.4},
-	"shell": {"hp": 1, "tool": "", "drops": {"shell": 1}, "respawn": 80.0,
+	"shell": {"hp": 1, "tool": "", "drops": {"shell": 1}, "respawn": 60.0,
 		"verb": "Подобрать ракушку", "radius": 0.2, "height": 0.2},
 }
+const BUSH_SEEDS := ["seed_carrot", "seed_carrot", "seed_potato", "seed_corn", "seed_cabbage"]
 
 @export var kind := "bush"
 var rng_seed := 0
@@ -29,6 +30,7 @@ var _base_scale := Vector3.ONE
 
 func _ready() -> void:
 	add_to_group("interactable")
+	add_to_group("obstacle")
 	collision_layer = 2
 	collision_mask = 0
 	var rng := RandomNumberGenerator.new()
@@ -52,21 +54,26 @@ func _ready() -> void:
 	cs.shape = shape
 	cs.position.y = cfg["height"] * 0.5
 	add_child(cs)
-	# маленькие предметы не мешают ходить
 	if kind in ["pebble", "shell", "driftwood"]:
-		collision_layer = 8
+		collision_layer = 8  # мелочь не мешает ходить
+
+
+func block_radius() -> float:
+	return KINDS[kind]["radius"] if active else 0.0
 
 
 func interact_point() -> Vector3:
 	return global_position + Vector3(0, 0.5, 0)
 
 
+func tool_hint() -> String:
+	return KINDS[kind]["tool"]
+
+
 func get_hint() -> String:
 	var cfg: Dictionary = KINDS[kind]
 	if kind == "palm" and not Game.has_tool("stone_axe"):
-		if coconut_ready:
-			return "Потрясти пальму (листья и кокосы)"
-		return "Кокосы ещё не выросли · нужен топор, чтобы рубить"
+		return "Потрясти пальму (листья и кокосы)" if coconut_ready else "Кокосы ещё не выросли. Нужен топор, чтобы рубить"
 	if cfg["tool"] != "" and not Game.has_tool(cfg["tool"]):
 		return "%s — нужен инструмент: %s" % [cfg["verb"], Game.item_name(cfg["tool"])]
 	return cfg["verb"]
@@ -82,22 +89,26 @@ func interact(player: Node) -> void:
 	if cfg["tool"] != "" and not Game.has_tool(cfg["tool"]):
 		Game.notified.emit("Нужен инструмент: %s" % Game.item_name(cfg["tool"]), Color("ff9d7a"))
 		return
-	if not Game.use_energy(1):
-		return
 	hp -= 1
 	_hit_fx(player)
 	if hp <= 0:
 		for id in cfg["drops"]:
 			Game.add_item(id, cfg["drops"][id])
-		if kind == "palm" and coconut_ready and randf() < 0.6:
-			Game.add_item("coconut", 1)
+		match kind:
+			"palm":
+				if coconut_ready and randf() < 0.6:
+					Game.add_item("coconut", 1)
+			"bush":
+				if randf() < 0.22:
+					Game.add_item(BUSH_SEEDS[randi() % BUSH_SEEDS.size()], 1)
+			"shell":
+				if randf() < 0.45:
+					Game.add_collectible("shells")
 		_deplete()
 
 
 func _shake_palm() -> void:
 	if not coconut_ready:
-		return
-	if not Game.use_energy(1):
 		return
 	coconut_ready = false
 	var crown := visual.get_node_or_null("Crown")
@@ -112,41 +123,20 @@ func _shake_palm() -> void:
 	Game.add_item("leaf", 1)
 	if randf() < 0.75:
 		Game.add_item("coconut", 1)
-	get_tree().create_timer(70.0).timeout.connect(func():
+	get_tree().create_timer(60.0).timeout.connect(func():
 		coconut_ready = true
 		if crown and crown.get_node_or_null("Coconuts"):
 			crown.get_node("Coconuts").visible = true)
 
 
-func _hit_fx(player: Node) -> void:
+func _hit_fx(_player: Node) -> void:
 	var tw := create_tween()
 	var dir := 1.0 if randf() < 0.5 else -1.0
 	tw.tween_property(visual, "rotation:z", 0.12 * dir, 0.05)
 	tw.tween_property(visual, "rotation:z", -0.06 * dir, 0.08)
 	tw.tween_property(visual, "rotation:z", 0.0, 0.1)
-	var p := CPUParticles3D.new()
-	p.one_shot = true
-	p.emitting = true
-	p.amount = 12
-	p.lifetime = 0.6
-	p.explosiveness = 1.0
-	p.direction = Vector3.UP
-	p.spread = 70.0
-	p.initial_velocity_min = 2.0
-	p.initial_velocity_max = 4.0
-	p.gravity = Vector3(0, -12, 0)
-	p.scale_amount_min = 0.6
-	p.scale_amount_max = 1.2
-	var m := BoxMesh.new()
-	m.size = Vector3(0.08, 0.08, 0.08)
-	p.mesh = m
-	var mat := StandardMaterial3D.new()
 	var colors := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color("a0a4a8")}
-	mat.albedo_color = colors.get(kind, Color("d9c7a0"))
-	m.material = mat
-	add_child(p)
-	p.position = Vector3(0, min(KINDS[kind]["height"] * 0.3, 1.2), 0)
-	get_tree().create_timer(1.5).timeout.connect(p.queue_free)
+	FX.burst(self, Vector3(0, minf(KINDS[kind]["height"] * 0.3, 1.2), 0), colors.get(kind, Color("e9d8b0")))
 
 
 func _deplete() -> void:
@@ -161,8 +151,7 @@ func _deplete() -> void:
 	else:
 		tw.tween_property(visual, "scale", Vector3(0.01, 0.01, 0.01), 0.25)
 	tw.tween_callback(func(): visual.visible = false)
-	get_tree().create_timer(KINDS[kind]["respawn"]).timeout.connect(func():
-		_respawn(saved_layer))
+	get_tree().create_timer(KINDS[kind]["respawn"]).timeout.connect(func(): _respawn(saved_layer))
 
 
 func _respawn(layer: int) -> void:

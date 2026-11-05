@@ -1,40 +1,49 @@
 class_name HUD
 extends CanvasLayer
-## Интерфейс: энергия, часы, задание, панель предметов, подсказки, окна крафта/строительства/помощи.
-## Стиль — "деревянные" панели и зелёные кнопки, как в классических мобильных фермах.
+## Интерфейс: часы, задание, панель предметов, подсказки, диалоги и окна
+## (крафт, строительство, инвентарь, коллекции, журнал, помощь, выбор).
+## Стиль — "деревянные" панели, бумага и зелёные кнопки, как в классических островных играх.
 
-signal build_selected(id: String)
+signal build_selected(id: String, variant: String)
 signal panels_changed(any_open: bool)
 signal new_game_requested
 
 const WOOD := Color("7a4e2a")
 const WOOD_DARK := Color("3f2614")
 const WOOD_LIGHT := Color("a8784a")
-const PAPER := Color("f6e7c1")
+const PAPER := Color("f8ebc8")
+const INK := Color("4a2c14")
 const GREEN := Color("6dbb3a")
 const GREEN_DARK := Color("3f7d1f")
+const HOTBAR_ORDER := ["stone_axe", "pickaxe", "watering_can", "net", "wood", "stone", "fiber", "leaf", "rope", "plank"]
 
-var station_check: Callable  # func(station_id) -> bool
+var station_check: Callable
 
 var root: Control
-var energy_bar: ProgressBar
-var energy_label: Label
 var clock_label: Label
-var quest_title: Label
-var quest_progress: Label
+var quest_box: VBoxContainer
 var hotbar: HBoxContainer
 var hint_label: Label
 var toasts: VBoxContainer
 var crosshair: Control
+var windows: Array[PanelContainer] = []
 var craft_panel: PanelContainer
-var craft_list: VBoxContainer
-var craft_station_label: Label
 var build_panel: PanelContainer
-var build_list: VBoxContainer
+var inv_panel: PanelContainer
+var col_panel: PanelContainer
+var journal_panel: PanelContainer
 var help_panel: PanelContainer
-var victory_panel: PanelContainer
+var choice_panel: PanelContainer
+var dialogue_panel: PanelContainer
+var dlg_name: Label
+var dlg_text: Label
+var dlg_portrait: PanelContainer
+var dlg_letter: Label
 var fade_rect: ColorRect
-var _craft_station := ""
+var _dlg_queue: Array = []   # [[lines, on_done], ...]
+var _dlg_lines: Array = []
+var _dlg_done: Callable
+var _build_tab := "дом"
 
 
 func _ready() -> void:
@@ -48,19 +57,15 @@ func _ready() -> void:
 	_build_quest()
 	_build_hotbar()
 	_build_toasts()
-	craft_panel = _make_window("Крафт", 620)
-	craft_station_label = Label.new()
-	craft_station_label.add_theme_color_override("font_color", WOOD_DARK)
-	craft_panel.get_child(0).add_child(craft_station_label)
-	craft_list = VBoxContainer.new()
-	craft_list.add_theme_constant_override("separation", 8)
-	craft_panel.get_child(0).add_child(craft_list)
-	build_panel = _make_window("Строительство", 620)
-	build_list = VBoxContainer.new()
-	build_list.add_theme_constant_override("separation", 8)
-	build_panel.get_child(0).add_child(build_list)
+	craft_panel = _make_window("Крафт", 640)
+	build_panel = _make_window("Строительство", 660)
+	inv_panel = _make_window("Инвентарь", 700)
+	col_panel = _make_window("Коллекции", 640)
+	journal_panel = _make_window("Журнал", 620)
+	help_panel = _make_window("Как играть", 600)
+	choice_panel = _make_window("Выбор", 460)
 	_build_help()
-	_build_victory()
+	_build_dialogue()
 	fade_rect = ColorRect.new()
 	fade_rect.color = Color(0.02, 0.03, 0.08, 0)
 	fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -68,12 +73,12 @@ func _ready() -> void:
 	root.add_child(fade_rect)
 
 	Game.inventory_changed.connect(_on_inventory_changed)
-	Game.energy_changed.connect(_on_energy)
 	Game.notified.connect(toast)
 	Game.quest_changed.connect(_update_quest)
+	Game.dialogue_requested.connect(show_dialogue)
+	Game.collection_changed.connect(func(_c, _i, _n): if col_panel.visible: _fill_collections())
 	Game.time_changed.connect(func(_t, _d): clock_label.text = Game.clock_text())
 	_on_inventory_changed()
-	_on_energy(Game.energy, Game.MAX_ENERGY)
 	_update_quest()
 
 
@@ -101,20 +106,24 @@ func _make_theme() -> Theme:
 	t.set_stylebox("normal", "Button", _box(GREEN, GREEN_DARK, 10, 3, 8))
 	t.set_stylebox("hover", "Button", _box(GREEN.lightened(0.15), GREEN_DARK, 10, 3, 8))
 	t.set_stylebox("pressed", "Button", _box(GREEN.darkened(0.15), GREEN_DARK, 10, 3, 8))
-	t.set_stylebox("disabled", "Button", _box(Color("9c8a74"), Color("6b5c4a"), 10, 3, 8))
+	t.set_stylebox("disabled", "Button", _box(Color("a8977f"), Color("7a6a55"), 10, 3, 8))
 	t.set_stylebox("focus", "Button", StyleBoxEmpty.new())
 	t.set_color("font_color", "Button", Color.WHITE)
-	t.set_color("font_disabled_color", "Button", Color(1, 1, 1, 0.6))
+	t.set_color("font_disabled_color", "Button", Color(1, 1, 1, 0.65))
 	t.set_color("font_outline_color", "Button", Color(0.1, 0.25, 0.05))
 	t.set_constant("outline_size", "Button", 4)
 	t.set_font_size("font_size", "Button", 18)
-	var bar_bg := _box(WOOD_DARK, WOOD_DARK, 8, 2, 0)
-	var bar_fg := _box(Color("ffcf3d"), Color("c98d10"), 8, 2, 0)
-	bar_bg.shadow_size = 0
-	bar_fg.shadow_size = 0
-	t.set_stylebox("background", "ProgressBar", bar_bg)
-	t.set_stylebox("fill", "ProgressBar", bar_fg)
 	return t
+
+
+func _label(text: String, size := 18, color := Color.WHITE, outline := true) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", color)
+	if not outline:
+		l.add_theme_constant_override("outline_size", 0)
+	return l
 
 
 func _make_window(title: String, width: int) -> PanelContainer:
@@ -123,58 +132,96 @@ func _make_window(title: String, width: int) -> PanelContainer:
 	p.set_anchors_preset(Control.PRESET_CENTER)
 	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	p.grow_vertical = Control.GROW_DIRECTION_BOTH
-	p.add_theme_stylebox_override("panel", _box(PAPER, WOOD, 16, 8, 20))
+	p.add_theme_stylebox_override("panel", _box(PAPER, WOOD, 18, 8, 20))
 	p.visible = false
 	var v := VBoxContainer.new()
+	v.name = "V"
 	v.add_theme_constant_override("separation", 10)
 	p.add_child(v)
 	var head := HBoxContainer.new()
+	head.name = "Head"
 	v.add_child(head)
-	var l := Label.new()
-	l.text = title
-	l.add_theme_font_size_override("font_size", 28)
+	var l := _label(title, 30)
+	l.name = "Title"
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(l)
 	var close := Button.new()
 	close.text = "✕"
-	close.custom_minimum_size = Vector2(40, 40)
+	close.custom_minimum_size = Vector2(42, 42)
 	close.add_theme_stylebox_override("normal", _box(Color("d9573b"), Color("8a2a17"), 10, 3, 6))
 	close.add_theme_stylebox_override("hover", _box(Color("e8704f"), Color("8a2a17"), 10, 3, 6))
 	close.pressed.connect(close_all)
 	head.add_child(close)
+	var scroll := ScrollContainer.new()
+	scroll.name = "Scroll"
+	scroll.custom_minimum_size = Vector2(0, 80)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(scroll)
+	var body := VBoxContainer.new()
+	body.name = "Body"
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 8)
+	scroll.add_child(body)
 	root.add_child(p)
+	windows.append(p)
 	return p
 
 
-# ================================================================== Статус
+func _body(p: PanelContainer) -> VBoxContainer:
+	return p.get_node("V/Scroll/Body")
+
+
+func _clear(p: PanelContainer) -> VBoxContainer:
+	var b := _body(p)
+	for c in b.get_children():
+		b.remove_child(c)
+		c.queue_free()
+	return b
+
+
+func _fit(p: PanelContainer, max_h := 560.0) -> void:
+	# высота прокрутки — по содержимому, но не больше max_h
+	await get_tree().process_frame
+	var b := _body(p)
+	var sc: ScrollContainer = p.get_node("V/Scroll")
+	sc.custom_minimum_size.y = minf(b.get_combined_minimum_size().y, max_h)
+
+
+func _open(p: PanelContainer) -> void:
+	for w in windows:
+		w.visible = false
+	p.visible = true
+	_fit(p)
+	panels_changed.emit(true)
+
+
+func _row() -> Array:
+	var row := PanelContainer.new()
+	row.add_theme_stylebox_override("panel", _box(WOOD, WOOD_DARK, 10, 3, 10))
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 12)
+	row.add_child(h)
+	return [row, h]
+
+
+func _icon(color: Color, size := 36) -> PanelContainer:
+	var icon := PanelContainer.new()
+	icon.custom_minimum_size = Vector2(size, size)
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var sb := _box(color, color.darkened(0.5), size / 2, 3, 0)
+	sb.shadow_size = 0
+	icon.add_theme_stylebox_override("panel", sb)
+	return icon
+
+
+# ================================================================== Статус и задание
 func _build_status() -> void:
 	var p := PanelContainer.new()
 	p.position = Vector2(16, 16)
 	root.add_child(p)
-	var v := VBoxContainer.new()
-	p.add_child(v)
-	clock_label = Label.new()
-	clock_label.text = Game.clock_text()
-	clock_label.add_theme_font_size_override("font_size", 20)
-	v.add_child(clock_label)
-	var h := HBoxContainer.new()
-	v.add_child(h)
-	var el := Label.new()
-	el.text = "Энергия"
-	h.add_child(el)
-	energy_bar = ProgressBar.new()
-	energy_bar.custom_minimum_size = Vector2(170, 22)
-	energy_bar.show_percentage = false
-	energy_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	h.add_child(energy_bar)
-	energy_label = Label.new()
-	h.add_child(energy_label)
-
-
-func _on_energy(v: float, m: float) -> void:
-	energy_bar.max_value = m
-	energy_bar.value = v
-	energy_label.text = "%d/%d" % [int(v), int(m)]
+	clock_label = _label(Game.clock_text(), 20)
+	p.add_child(clock_label)
 
 
 func _build_quest() -> void:
@@ -182,59 +229,59 @@ func _build_quest() -> void:
 	p.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	p.position = Vector2(-16, 16)
 	p.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	p.custom_minimum_size = Vector2(340, 0)
+	p.custom_minimum_size = Vector2(360, 0)
 	root.add_child(p)
-	var v := VBoxContainer.new()
-	p.add_child(v)
-	var t := Label.new()
-	t.text = "Задание"
-	t.add_theme_color_override("font_color", Color("ffe08a"))
-	t.add_theme_font_size_override("font_size", 20)
-	v.add_child(t)
-	quest_title = Label.new()
-	quest_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	quest_title.custom_minimum_size = Vector2(310, 0)
-	v.add_child(quest_title)
-	quest_progress = Label.new()
-	quest_progress.add_theme_color_override("font_color", Color("c9f59b"))
-	v.add_child(quest_progress)
+	quest_box = VBoxContainer.new()
+	quest_box.add_theme_constant_override("separation", 2)
+	p.add_child(quest_box)
 
 
 func _update_quest() -> void:
+	for c in quest_box.get_children():
+		quest_box.remove_child(c)
+		c.queue_free()
+	var ch := Game.current_chapter()
+	quest_box.add_child(_label(ch["title"], 14, Color("f3e2bd")))
 	var q := Game.current_quest()
 	if q.is_empty():
-		quest_title.text = "Все задания выполнены! Новые острова — в следующих версиях."
-		quest_progress.text = ""
+		quest_box.add_child(_label("Продолжение следует...", 20, Color("ffe08a")))
 		return
-	quest_title.text = q["text"]
-	quest_progress.text = "%d / %d" % [Game.quest_progress(), q["count"]]
+	quest_box.add_child(_label(q["title"], 22, Color("ffe08a")))
+	if not Game.quest_started:
+		quest_box.add_child(_label("...", 16))
+		return
+	for task in q["tasks"]:
+		var p := Game.task_progress(task)
+		var done: bool = p >= task["count"]
+		var l := _label(("✔ " if done else "• ") + task["text"] + ("" if task["count"] <= 1 else "  %d/%d" % [p, task["count"]]),
+			16, Color("b6f29a") if done else Color.WHITE)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size = Vector2(330, 0)
+		quest_box.add_child(l)
 
 
-# ================================================================== Предметы
+# ================================================================== Панель предметов
 func _build_hotbar() -> void:
 	var p := PanelContainer.new()
 	p.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	p.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	p.position.y = -16
-	p.name = "HotbarPanel"
 	root.add_child(p)
 	hotbar = HBoxContainer.new()
 	hotbar.add_theme_constant_override("separation", 6)
 	p.add_child(hotbar)
 
-	hint_label = Label.new()
+	hint_label = _label("", 22)
 	hint_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	hint_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	hint_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	hint_label.position.y = -120
+	hint_label.position.y = -178
 	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint_label.add_theme_font_size_override("font_size", 22)
 	root.add_child(hint_label)
 
 	crosshair = ColorRect.new()
-	crosshair.color = Color(1, 1, 1, 0.8)
-	crosshair.custom_minimum_size = Vector2(6, 6)
+	crosshair.color = Color(1, 1, 1, 0.85)
 	crosshair.size = Vector2(6, 6)
 	crosshair.set_anchors_preset(Control.PRESET_CENTER)
 	crosshair.position -= Vector2(3, 3)
@@ -245,27 +292,26 @@ func _build_hotbar() -> void:
 
 func _on_inventory_changed() -> void:
 	for c in hotbar.get_children():
+		hotbar.remove_child(c)
 		c.queue_free()
-	var any := false
-	for id in Game.ITEMS:
-		var n := Game.count(id)
-		if n <= 0:
-			continue
-		any = true
-		hotbar.add_child(_item_slot(id, n))
-	if not any:
-		var l := Label.new()
-		l.text = "  Инвентарь пуст — исследуй остров!  "
-		hotbar.add_child(l)
+	var shown := 0
+	for id in HOTBAR_ORDER:
+		if Game.count(id) > 0:
+			hotbar.add_child(_item_slot(id, Game.count(id)))
+			shown += 1
+	if shown == 0:
+		hotbar.add_child(_label("  Инвентарь пуст — исследуй остров!  "))
+	var tab := _label(" Tab — всё ", 14, Color("f3e2bd"))
+	tab.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hotbar.add_child(tab)
 	_update_quest()
-	if craft_panel and craft_panel.visible:
-		_fill_craft()
-	if build_panel and build_panel.visible:
-		_fill_build()
+	for p in [craft_panel, build_panel, inv_panel]:
+		if p and p.visible:
+			_refill(p)
 
 
 func _item_slot(id: String, n: int) -> Control:
-	var col: Color = Game.ITEMS[id]["color"]
+	var col: Color = Game.item(id).get("color", Color.WHITE)
 	var slot := PanelContainer.new()
 	slot.custom_minimum_size = Vector2(80, 76)
 	slot.add_theme_stylebox_override("panel", _box(WOOD_LIGHT, WOOD_DARK, 10, 3, 4))
@@ -274,19 +320,11 @@ func _item_slot(id: String, n: int) -> Control:
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_theme_constant_override("separation", 0)
 	slot.add_child(v)
-	var icon := PanelContainer.new()
-	icon.custom_minimum_size = Vector2(36, 36)
-	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	icon.add_theme_stylebox_override("panel", _box(col, col.darkened(0.45), 18, 3, 0))
-	v.add_child(icon)
-	var short := Label.new()
-	short.text = Game.item_short(id)
-	short.add_theme_font_size_override("font_size", 12)
+	v.add_child(_icon(col))
+	var short := _label(Game.item_short(id), 12)
 	short.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(short)
-	var cnt := Label.new()
-	cnt.text = "×%d" % n
-	cnt.add_theme_font_size_override("font_size", 16)
+	var cnt := _label("×%d" % n, 16)
 	cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(cnt)
 	return slot
@@ -303,62 +341,154 @@ func set_crosshair(v: bool) -> void:
 # ================================================================== Сообщения
 func _build_toasts() -> void:
 	toasts = VBoxContainer.new()
-	toasts.position = Vector2(20, 140)
+	toasts.position = Vector2(20, 80)
 	toasts.add_theme_constant_override("separation", 4)
 	toasts.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(toasts)
 
 
 func toast(text: String, color := Color.WHITE) -> void:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_color_override("font_color", color)
-	l.add_theme_font_size_override("font_size", 20)
+	var l := _label(text, 20, color)
 	toasts.add_child(l)
 	if toasts.get_child_count() > 7:
 		toasts.get_child(0).queue_free()
 	var tw := l.create_tween()
-	tw.tween_interval(2.5)
+	tw.tween_interval(3.0)
 	tw.tween_property(l, "modulate:a", 0.0, 0.8)
 	tw.tween_callback(l.queue_free)
 
 
-# ================================================================== Крафт
-func open_craft(station := "") -> void:
-	close_all(false)
-	_craft_station = station
-	_fill_craft()
-	craft_panel.visible = true
+# ================================================================== Диалоги
+func _build_dialogue() -> void:
+	dialogue_panel = PanelContainer.new()
+	dialogue_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	dialogue_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	dialogue_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	dialogue_panel.position.y = -130
+	dialogue_panel.custom_minimum_size = Vector2(820, 150)
+	dialogue_panel.add_theme_stylebox_override("panel", _box(PAPER, WOOD, 18, 8, 18))
+	dialogue_panel.visible = false
+	root.add_child(dialogue_panel)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 18)
+	dialogue_panel.add_child(h)
+	dlg_portrait = _icon(Color.RED, 96)
+	h.add_child(dlg_portrait)
+	dlg_letter = _label("Р", 44)
+	dlg_letter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	dlg_letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dlg_portrait.add_child(dlg_letter)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(v)
+	dlg_name = _label("", 22, Color("e07a2e"))
+	v.add_child(dlg_name)
+	dlg_text = _label("", 20, INK, false)
+	dlg_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dlg_text.custom_minimum_size = Vector2(560, 60)
+	v.add_child(dlg_text)
+	var next := Button.new()
+	next.text = "Далее  ▶"
+	next.size_flags_horizontal = Control.SIZE_SHRINK_END
+	next.pressed.connect(advance_dialogue)
+	v.add_child(next)
+
+
+func show_dialogue(lines: Array, on_done: Callable) -> void:
+	if lines.is_empty():
+		if on_done.is_valid():
+			on_done.call()
+		return
+	_dlg_queue.append([lines, on_done])
+	if not dialogue_panel.visible:
+		_next_block()
+
+
+func _next_block() -> void:
+	if _dlg_queue.is_empty():
+		dialogue_panel.visible = false
+		panels_changed.emit(any_open())
+		return
+	var block: Array = _dlg_queue.pop_front()
+	_dlg_lines = block[0].duplicate()
+	_dlg_done = block[1]
+	for w in windows:
+		w.visible = false
+	dialogue_panel.visible = true
 	panels_changed.emit(true)
+	_show_line()
+
+
+func _show_line() -> void:
+	var line: Array = _dlg_lines[0]
+	var sp: Dictionary = Data.SPEAKERS.get(line[0], Data.SPEAKERS["narrator"])
+	var nm: String = sp["name"]
+	dlg_name.text = nm
+	dlg_portrait.visible = nm != ""
+	dlg_letter.text = nm.left(1) if line[0] != "parrot" else "Р"
+	var c: Color = sp["color"]
+	var sb := _box(c, c.darkened(0.5), 48, 4, 0)
+	sb.shadow_size = 0
+	dlg_portrait.add_theme_stylebox_override("panel", sb)
+	dlg_text.text = line[1]
+	dlg_text.add_theme_color_override("font_color", INK if nm != "" else Color("6b4524"))
+
+
+func advance_dialogue() -> void:
+	if not dialogue_panel.visible:
+		return
+	_dlg_lines.pop_front()
+	if _dlg_lines.is_empty():
+		var cb := _dlg_done
+		_dlg_done = Callable()
+		dialogue_panel.visible = false
+		if cb.is_valid():
+			cb.call()
+		if not dialogue_panel.visible:
+			_next_block()
+	else:
+		_show_line()
+
+
+func dialogue_open() -> bool:
+	return dialogue_panel.visible
+
+
+# ================================================================== Окна
+func _refill(p: PanelContainer) -> void:
+	if p == craft_panel: _fill_craft()
+	elif p == build_panel: _fill_build()
+	elif p == inv_panel: _fill_inventory()
+	elif p == col_panel: _fill_collections()
+	elif p == journal_panel: _fill_journal()
+
+
+func open_craft(_station := "") -> void:
+	_fill_craft()
+	_open(craft_panel)
 
 
 func _fill_craft() -> void:
-	for c in craft_list.get_children():
-		c.queue_free()
+	var body := _clear(craft_panel)
 	var names := {"": "в руках", "workbench": "у верстака", "campfire": "у костра"}
-	craft_station_label.text = "Рецепты с пометкой «у верстака» / «у костра» доступны, только если стоять рядом."
-	craft_station_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	for r in Game.RECIPES:
+	var note := _label("Рецепты «у верстака» и «у костра» работают, только если стоять рядом.", 15, INK, false)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size = Vector2(580, 0)
+	body.add_child(note)
+	for r in Data.RECIPES:
+		if not Game.recipe_unlocked(r):
+			continue
 		var station: String = r["station"]
 		var near: bool = station == "" or (station_check.is_valid() and station_check.call(station))
-		var row := PanelContainer.new()
-		row.add_theme_stylebox_override("panel", _box(WOOD, WOOD_DARK, 10, 3, 10))
-		var h := HBoxContainer.new()
-		h.add_theme_constant_override("separation", 12)
-		row.add_child(h)
+		var rh := _row()
+		var h: HBoxContainer = rh[1]
+		var out_id: String = r["out"].keys()[0]
+		h.add_child(_icon(Game.item(out_id)["color"], 44))
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(info)
-		var title := Label.new()
-		var out_id: String = r["out"].keys()[0]
-		title.text = "%s ×%d   (%s)" % [Game.item_name(out_id), r["out"][out_id], names.get(station, station)]
-		title.add_theme_font_size_override("font_size", 20)
-		info.add_child(title)
-		var cost := Label.new()
-		cost.text = _cost_text(r["in"])
-		cost.add_theme_font_size_override("font_size", 15)
-		cost.add_theme_color_override("font_color", Color("c9f59b") if Game.can_afford(r["in"]) else Color("ffb199"))
-		info.add_child(cost)
+		info.add_child(_label("%s ×%d   (%s)" % [Game.item_name(out_id), r["out"][out_id], names.get(station, station)], 20))
+		info.add_child(_label(_cost_text(r["in"]), 15, Color("c9f59b") if Game.can_afford(r["in"]) else Color("ffb199")))
 		var b := Button.new()
 		b.text = "Создать" if near else "Далеко"
 		b.custom_minimum_size = Vector2(120, 44)
@@ -366,7 +496,7 @@ func _fill_craft() -> void:
 		b.disabled = not near or not Game.can_afford(r["in"])
 		b.pressed.connect(func(): Game.craft(r))
 		h.add_child(b)
-		craft_list.add_child(row)
+		body.add_child(rh[0])
 
 
 func _cost_text(cost: Dictionary) -> String:
@@ -376,114 +506,225 @@ func _cost_text(cost: Dictionary) -> String:
 	return ", ".join(parts)
 
 
-# ================================================================== Строительство
 func open_build() -> void:
-	close_all(false)
 	_fill_build()
-	build_panel.visible = true
-	panels_changed.emit(true)
+	_open(build_panel)
 
 
 func _fill_build() -> void:
-	for c in build_list.get_children():
-		c.queue_free()
-	for id in Game.BUILDINGS:
-		var cfg: Dictionary = Game.BUILDINGS[id]
-		var row := PanelContainer.new()
-		row.add_theme_stylebox_override("panel", _box(WOOD, WOOD_DARK, 10, 3, 10))
-		var h := HBoxContainer.new()
-		h.add_theme_constant_override("separation", 12)
-		row.add_child(h)
+	var body := _clear(build_panel)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 8)
+	body.add_child(tabs)
+	for tab in ["дом", "ферма", "декор"]:
+		var tb := Button.new()
+		tb.text = tab.capitalize()
+		tb.custom_minimum_size = Vector2(130, 40)
+		if tab != _build_tab:
+			tb.add_theme_stylebox_override("normal", _box(WOOD_LIGHT, WOOD_DARK, 10, 3, 8))
+		tb.pressed.connect(func():
+			_build_tab = tab
+			_fill_build()
+			_fit(build_panel))
+		tabs.add_child(tb)
+	for id in Data.BUILDINGS:
+		var cfg: Dictionary = Data.BUILDINGS[id]
+		if cfg.get("tab", "дом") != _build_tab:
+			continue
+		var unlocked := Game.is_unlocked(id, cfg)
+		if not unlocked:
+			body.add_child(_locked_row(cfg["name"]))
+			continue
+		if id == "fruit_tree":
+			var any := false
+			for sid in Data.ITEMS:
+				if Data.ITEMS[sid].get("cat", "") == "sapling" and Game.count(sid) > 0:
+					any = true
+					var tree: String = Data.ITEMS[sid]["tree"]
+					body.add_child(_build_row(Data.TREES[tree]["name"], cfg["desc"], {sid: 1}, id, tree))
+			if not any:
+				body.add_child(_build_row(cfg["name"], "Нужен саженец. Их дарит Румба, иногда роняют дикие деревья.", {"sapling_banana": 1}, id, "banana"))
+			continue
+		body.add_child(_build_row(cfg["name"], cfg["desc"], cfg["cost"], id, ""))
+
+
+func _locked_row(title: String) -> Control:
+	var rh := _row()
+	var h: HBoxContainer = rh[1]
+	rh[0].modulate = Color(1, 1, 1, 0.6)
+	h.add_child(_icon(Color("6b5c4a"), 40))
+	h.add_child(_label("%s — откроется по сюжету" % title, 18, Color("e8dcc0")))
+	return rh[0]
+
+
+func _build_row(title: String, desc: String, cost: Dictionary, id: String, variant: String) -> Control:
+	var rh := _row()
+	var h: HBoxContainer = rh[1]
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(info)
+	info.add_child(_label(title, 20))
+	var d := _label(desc, 14, Color("f3e2bd"))
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.custom_minimum_size = Vector2(430, 0)
+	info.add_child(d)
+	info.add_child(_label(_cost_text(cost) if not cost.is_empty() else "бесплатно", 15,
+		Color("c9f59b") if Game.can_afford(cost) else Color("ffb199")))
+	var b := Button.new()
+	b.text = "Строить"
+	b.custom_minimum_size = Vector2(120, 44)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.disabled = not Game.can_afford(cost)
+	b.pressed.connect(func():
+		close_all()
+		build_selected.emit(id, variant))
+	h.add_child(b)
+	return rh[0]
+
+
+func open_inventory() -> void:
+	_fill_inventory()
+	_open(inv_panel)
+
+
+func _fill_inventory() -> void:
+	var body := _clear(inv_panel)
+	var cats := {"tool": "Инструменты", "material": "Материалы", "seed": "Семена", "sapling": "Саженцы",
+		"crop": "Урожай", "fruit": "Фрукты", "product": "С фермы", "food": "Блюда"}
+	var any := false
+	for cat in cats:
+		var grid := GridContainer.new()
+		grid.columns = 7
+		grid.add_theme_constant_override("h_separation", 6)
+		grid.add_theme_constant_override("v_separation", 6)
+		for id in Data.ITEMS:
+			if Data.ITEMS[id]["cat"] == cat and Game.count(id) > 0:
+				grid.add_child(_item_slot(id, Game.count(id)))
+		if grid.get_child_count() > 0:
+			any = true
+			body.add_child(_label(cats[cat], 18, INK, false))
+			body.add_child(grid)
+		else:
+			grid.queue_free()
+	if not any:
+		body.add_child(_label("Пока пусто. Собирай всё, что видишь!", 18, INK, false))
+
+
+func open_collections() -> void:
+	_fill_collections()
+	_open(col_panel)
+
+
+func _fill_collections() -> void:
+	var body := _clear(col_panel)
+	for cid in Data.COLLECTIONS:
+		var col: Dictionary = Data.COLLECTIONS[cid]
+		var have: Dictionary = Game.collections.get(cid, {})
+		var rh := _row()
+		var h: HBoxContainer = rh[1]
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(info)
-		var title := Label.new()
-		title.text = cfg["name"]
-		title.add_theme_font_size_override("font_size", 20)
-		info.add_child(title)
-		var desc := Label.new()
-		desc.text = cfg["desc"]
-		desc.add_theme_font_size_override("font_size", 14)
-		desc.add_theme_color_override("font_color", Color("f3e2bd"))
-		info.add_child(desc)
-		var cost := Label.new()
-		cost.text = _cost_text(cfg["cost"])
-		cost.add_theme_font_size_override("font_size", 15)
-		cost.add_theme_color_override("font_color", Color("c9f59b") if Game.can_afford(cfg["cost"]) else Color("ffb199"))
-		info.add_child(cost)
+		var done := Game.collection_complete(cid)
+		info.add_child(_label(col["name"] + ("  — собрана!" if done else ""), 20, Color("b6f29a") if done else Color.WHITE))
+		info.add_child(_label(col["source"], 14, Color("f3e2bd")))
+		var slots := HBoxContainer.new()
+		slots.add_theme_constant_override("separation", 8)
+		info.add_child(slots)
+		for it in col["items"]:
+			var v := VBoxContainer.new()
+			v.custom_minimum_size = Vector2(100, 0)
+			var found: bool = have.has(it["id"])
+			v.add_child(_icon(it["color"] if found else Color("5a4a3a"), 44))
+			var nm := _label(it["name"] if found else "???", 13)
+			nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			v.add_child(nm)
+			if found:
+				var c := _label("×%d" % have[it["id"]], 13, Color("f3e2bd"))
+				c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				v.add_child(c)
+			slots.add_child(v)
+		body.add_child(rh[0])
+
+
+func open_journal() -> void:
+	_fill_journal()
+	_open(journal_panel)
+
+
+func _fill_journal() -> void:
+	var body := _clear(journal_panel)
+	var ch := Game.current_chapter()
+	body.add_child(_label(ch["title"], 22, INK, false))
+	var qs: Array = ch["quests"]
+	for i in qs.size():
+		var q: Dictionary = qs[i]
+		var state := "✔ " if i < Game.quest_index else ("▶ " if i == Game.quest_index else "   ")
+		var color := Color("3f7d1f") if i < Game.quest_index else (Color("b4561e") if i == Game.quest_index else Color("9a8a70"))
+		var title: String = q["title"] if i <= Game.quest_index else "???"
+		body.add_child(_label(state + title, 18, color, false))
+	var more := _label("Дальше: остров Великого Баньяна, Старый форт, Грозовой остров...", 15, Color("6b4524"), false)
+	more.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	more.custom_minimum_size = Vector2(560, 0)
+	body.add_child(more)
+
+
+func show_choices(title: String, options: Array) -> void:
+	var body := _clear(choice_panel)
+	(choice_panel.get_node("V/Head/Title") as Label).text = title
+	for o in options:
+		var rh := _row()
+		var h: HBoxContainer = rh[1]
+		h.add_child(_icon(o.get("color", Color.WHITE), 36))
 		var b := Button.new()
-		b.text = "Строить"
-		b.custom_minimum_size = Vector2(120, 44)
-		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		b.disabled = not Game.can_afford(cfg["cost"])
+		b.text = o["text"]
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var cb: Callable = o["callback"]
 		b.pressed.connect(func():
 			close_all()
-			build_selected.emit(id))
+			cb.call())
 		h.add_child(b)
-		build_list.add_child(row)
+		body.add_child(rh[0])
+	_open(choice_panel)
 
 
-# ================================================================== Помощь / победа
 func _build_help() -> void:
-	help_panel = _make_window("Как играть", 560)
-	var l := Label.new()
-	l.text = """WASD — ходить,  Shift — бег,  Пробел — прыжок
+	var body := _body(help_panel)
+	body.add_child(_label("""WASD — ходить,  Shift — бег,  Пробел — прыжок
 Мышь — камера,  колёсико — приблизить/отдалить
-ЛКМ или E — собирать / рубить / использовать (можно удерживать)
-Q — съесть лучшую еду (восстанавливает энергию)
-C — крафт,  B — строительство
-В режиме строительства: ЛКМ — поставить, R — повернуть, ПКМ — отмена
-F5 — сохранить,  F9 — загрузить,  F10 — новая игра
-F1 / H — эта справка,  Esc — освободить мышь / закрыть окно
+ЛКМ или E — собирать / рубить / использовать
+C — крафт,  B — строительство,  Tab — инвентарь
+J — журнал заданий,  K — коллекции
+В строительстве: ЛКМ — поставить, R — повернуть, ПКМ — отмена
+F5 — сохранить,  F9 — загрузить,  Esc — освободить мышь
 
-Совет: у пальм без топора можно трясти кокосы.
-Каждое действие тратит 1 энергию, она медленно восстанавливается сама."""
-	l.add_theme_font_size_override("font_size", 17)
-	help_panel.get_child(0).add_child(l)
+Грядки: посади семена, полей лейкой — растут вдвое быстрее.
+Животные: покорми — через время будут яйца или молоко.
+Их можно гладить!""", 17, INK, false))
 	var ng := Button.new()
 	ng.text = "Начать заново"
 	ng.add_theme_stylebox_override("normal", _box(Color("d9573b"), Color("8a2a17"), 10, 3, 8))
 	ng.pressed.connect(func(): new_game_requested.emit())
-	help_panel.get_child(0).add_child(ng)
-
-
-func _build_victory() -> void:
-	victory_panel = _make_window("Ты отплываешь!", 560)
-	var l := Label.new()
-	l.text = """Плот готов, парус наполнился ветром.
-Вдали видны другие острова — ледяной, вулканический, туманный...
-
-Это конец прототипа. В следующих версиях: путешествия
-между островами, ферма с животными, коллекции и гости-соседи."""
-	l.add_theme_font_size_override("font_size", 18)
-	victory_panel.get_child(0).add_child(l)
-	var b := Button.new()
-	b.text = "Остаться на острове"
-	b.pressed.connect(close_all)
-	victory_panel.get_child(0).add_child(b)
+	body.add_child(ng)
 
 
 func show_help() -> void:
-	close_all(false)
-	help_panel.visible = true
-	panels_changed.emit(true)
-
-
-func show_victory() -> void:
-	close_all(false)
-	victory_panel.visible = true
-	panels_changed.emit(true)
+	_open(help_panel)
 
 
 func any_open() -> bool:
-	return craft_panel.visible or build_panel.visible or help_panel.visible or victory_panel.visible
+	if dialogue_panel.visible:
+		return true
+	for w in windows:
+		if w.visible:
+			return true
+	return false
 
 
-func close_all(emit := true) -> void:
-	for p in [craft_panel, build_panel, help_panel, victory_panel]:
-		p.visible = false
-	if emit:
-		panels_changed.emit(false)
+func close_all() -> void:
+	for w in windows:
+		w.visible = false
+	panels_changed.emit(any_open())
 
 
 func fade_through(mid: Callable) -> void:

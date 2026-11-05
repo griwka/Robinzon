@@ -1,11 +1,13 @@
 extends Node3D
-## Точка входа: собирает мир (остров, свет, небо, игрок, UI) и связывает системы.
+## Точка входа: собирает мир (остров, свет, небо, игрок, NPC, UI) и связывает системы.
 
 var island: Island
 var player: Player
 var hud: HUD
 var build: BuildSystem
 var buildings_root: Node3D
+var critters: Critters
+var parrot: NPCParrot
 var env: Environment
 var sky_mat: ProceduralSkyMaterial
 var sun: DirectionalLight3D
@@ -13,10 +15,10 @@ var moon: DirectionalLight3D
 var clouds: Array[Node3D] = []
 var _autosave_t := 0.0
 
-# палитры неба: [верх, горизонт, свет солнца, энергия солнца, окружающий свет]
-const SKY_DAY := [Color("3d9be9"), Color("bfe8ff"), Color("fff3d6"), 1.25, 0.8]
-const SKY_SUNSET := [Color("4a5fa8"), Color("ffb37a"), Color("ffb070"), 0.9, 0.6]
-const SKY_NIGHT := [Color("0c1430"), Color("2c3f6e"), Color("8fa8ff"), 0.0, 0.35]
+# палитры: [верх неба, горизонт, цвет солнца, сила солнца, цвет теней, яркость теней, яркость воды]
+const SKY_DAY := [Color("3a9cf0"), Color("bde9ff"), Color("fff4dc"), 0.56, Color("8f86c9"), 0.78, 1.0]
+const SKY_SUNSET := [Color("4f63b8"), Color("ffb47a"), Color("ffb070"), 0.5, Color("8d6fb0"), 0.62, 0.85]
+const SKY_NIGHT := [Color("0b1633"), Color("27406f"), Color("8fa8ff"), 0.0, Color("4a5c9a"), 0.48, 0.42]
 
 
 func _ready() -> void:
@@ -24,6 +26,7 @@ func _ready() -> void:
 
 	island = Island.new()
 	island.name = "Island"
+	island.add_to_group("island")
 	add_child(island)
 	island.build()
 	island.spawn_distant_scenery(self)
@@ -36,7 +39,10 @@ func _ready() -> void:
 	player.name = "Player"
 	add_child(player)
 	player.global_position = island.spawn_point
-	player.camera_yaw = PI  # смотрим вглубь острова
+	var to_sea := island.wreck_point - island.spawn_point
+	player.camera_yaw = atan2(to_sea.x, to_sea.z) + PI * 0.85
+
+	_spawn_story_objects()
 
 	build = BuildSystem.new()
 	build.island = island
@@ -46,6 +52,10 @@ func _ready() -> void:
 	build.placed.connect(_on_building_placed)
 	build.cancelled.connect(func(): player.can_interact = true)
 
+	critters = Critters.new()
+	add_child(critters)
+	critters.setup(island, player)
+
 	hud = HUD.new()
 	add_child(hud)
 	hud.station_check = _near_station
@@ -54,15 +64,44 @@ func _ready() -> void:
 	hud.new_game_requested.connect(_new_game)
 
 	_spawn_clouds()
-	_load()
+	var loaded := _load()
+	_capture_mouse(true)
+	if not loaded or not Game.quest_started:
+		Game.start_current_quest.call_deferred()
 	if not OS.get_cmdline_user_args().is_empty():
 		var dev := preload("res://scripts/dev_tools.gd").new()
 		dev.main = self
 		add_child(dev)
-	_capture_mouse(true)
-	if Game.quest_index == 0:
-		hud.toast("Ты очнулся на берегу необитаемого острова...", Color("ffe08a"))
-		hud.toast("F1 — управление", Color("bfe3ff"))
+
+
+func _spawn_story_objects() -> void:
+	var wreck := Models.boat_wreck()
+	var w := island.wreck_point
+	add_child(wreck)
+	wreck.position = w
+	var to_camp := island.camp_center - w
+	wreck.rotation.y = atan2(to_camp.x, to_camp.z) + PI / 2
+	var body := StaticBody3D.new()
+	body.collision_layer = 4
+	var cs := CollisionShape3D.new()
+	var b := BoxShape3D.new()
+	b.size = Vector3(3.6, 1.2, 1.4)
+	cs.shape = b
+	cs.position.y = 0.5
+	body.add_child(cs)
+	wreck.add_child(body)
+	# попугай на сломанной мачте
+	parrot = NPCParrot.new()
+	wreck.add_child(parrot)
+	parrot.position = Vector3(1.6, 2.45, 0.6)
+	# ящик неподалёку
+	var crate := SupplyCrate.new()
+	add_child(crate)
+	var side := Vector3(cos(wreck.rotation.y), 0, -sin(wreck.rotation.y))
+	var cp := w + side * 4.0 + to_camp.normalized() * 1.0
+	cp.y = island.height_at(cp.x, cp.z)
+	crate.position = cp
+	crate.rotation.y = 0.4
 
 
 # ================================================================== Окружение
@@ -71,28 +110,29 @@ func _setup_environment() -> void:
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	sky_mat = ProceduralSkyMaterial.new()
-	sky_mat.sky_curve = 0.12
-	sky_mat.ground_bottom_color = Color("1d6fa8")
-	sky_mat.ground_horizon_color = Color("bfe8ff")
-	sky_mat.sun_angle_max = 20.0
+	sky_mat.sky_curve = 0.1
+	sky_mat.sun_angle_max = 8.0
+	sky_mat.sun_curve = 0.05
 	sky.sky_material = sky_mat
 	env.sky = sky
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.55
-	env.ambient_light_color = Color("ffe9cf")  # тёплые тени, как в мультфильмах
-	env.ambient_light_sky_contribution = 0.55
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_white = 6.0
-	env.glow_enabled = true
-	env.glow_intensity = 0.5
-	env.glow_bloom = 0.05
+	# Тени — не серые, а тёплого сиреневого оттенка, как в мультфильмах
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("8f86c9")
+	env.ambient_light_energy = 0.78
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	# Чёткая картинка: без свечения, без размывающего тонмаппинга, туман только вдали
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	env.glow_enabled = false
 	env.fog_enabled = true
-	env.fog_light_color = Color("bfe8ff")
-	env.fog_density = 0.0035
-	env.fog_sky_affect = 0.15
+	env.fog_mode = Environment.FOG_MODE_DEPTH
+	env.fog_depth_begin = 140.0
+	env.fog_depth_end = 520.0
+	env.fog_density = 1.0
+	env.fog_light_color = Color("bde9ff")
+	env.fog_sky_affect = 0.0
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.15
-	env.adjustment_contrast = 1.05
+	env.adjustment_saturation = 1.05
+	env.adjustment_contrast = 1.04
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -100,12 +140,14 @@ func _setup_environment() -> void:
 	sun = DirectionalLight3D.new()
 	sun.name = "Sun"
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 70.0
-	sun.shadow_blur = 1.5
+	sun.directional_shadow_max_distance = 60.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.shadow_blur = 0.6
+	sun.light_specular = 0.6
 	add_child(sun)
 	moon = DirectionalLight3D.new()
 	moon.name = "Moon"
-	moon.light_color = Color("8fa8ff")
+	moon.light_color = Color("9fb4ff")
 	moon.light_energy = 0.0
 	moon.rotation = Vector3(-1.0, 0.6, 0)
 	add_child(moon)
@@ -113,8 +155,8 @@ func _setup_environment() -> void:
 
 func _update_sky() -> void:
 	var t := Game.time_of_day
-	var angle := (t - 0.25) * TAU            # 0 — рассвет, PI/2 — полдень, PI — закат
-	var elev := sin(angle)                    # высота солнца над горизонтом -1..1
+	var angle := (t - 0.25) * TAU
+	var elev := sin(angle)
 	sun.rotation = Vector3(-angle, deg_to_rad(-35), 0)
 	var a: Array
 	var b: Array
@@ -137,10 +179,12 @@ func _update_sky() -> void:
 	sun.light_color = a[2].lerp(b[2], k)
 	sun.light_energy = lerpf(a[3], b[3], k) if elev > -0.05 else 0.0
 	sun.visible = sun.light_energy > 0.01
-	env.ambient_light_energy = lerpf(a[4], b[4], k)
-	moon.light_energy = clampf(-elev * 1.5, 0.0, 0.35)
-	# у горизонта тени очень длинные и рябят — плавно гасим их
 	sun.shadow_opacity = clampf((elev - 0.05) * 5.0, 0.0, 1.0)
+	env.ambient_light_color = a[4].lerp(b[4], k)
+	env.ambient_light_energy = lerpf(a[5], b[5], k)
+	moon.light_energy = clampf(-elev * 1.2, 0.0, 0.25)
+	if island and island.water_mat:
+		island.water_mat.set_shader_parameter("brightness", lerpf(a[6], b[6], k))
 
 
 func _spawn_clouds() -> void:
@@ -162,7 +206,7 @@ func _process(delta: float) -> void:
 			c.position.x = -280
 	if not hud.any_open():
 		if build.is_active():
-			hud.set_hint("ЛКМ — поставить «%s»,  R — повернуть,  ПКМ — отмена" % Game.BUILDINGS[build.active_id]["name"])
+			hud.set_hint("ЛКМ — поставить «%s»,  R — повернуть,  ПКМ — отмена" % Data.BUILDINGS[build.active_id]["name"])
 		else:
 			hud.set_hint(player.get_hint())
 	else:
@@ -176,6 +220,11 @@ func _process(delta: float) -> void:
 
 # ================================================================== Ввод
 func _unhandled_input(event: InputEvent) -> void:
+	if hud.dialogue_open():
+		if event.is_action_pressed("interact") or event.is_action_pressed("jump") or event.is_action_pressed("ui_accept"):
+			hud.advance_dialogue()
+			get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel"):
 		if hud.any_open():
 			hud.close_all()
@@ -186,26 +235,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		_capture_mouse(true)
 		get_viewport().set_input_as_handled()
 		return
-	if event.is_action_pressed("craft_menu"):
-		if hud.craft_panel.visible:
-			hud.close_all()
-		else:
-			build.cancel(false)
-			hud.open_craft()
-	elif event.is_action_pressed("build_menu"):
-		if hud.build_panel.visible:
-			hud.close_all()
-		else:
-			build.cancel(false)
-			hud.open_build()
-	elif event.is_action_pressed("help"):
-		if hud.help_panel.visible:
-			hud.close_all()
-		else:
-			hud.show_help()
-	elif event.is_action_pressed("eat"):
-		Game.eat_best_food()
-	elif event.is_action_pressed("save"):
+	var toggles := {"craft_menu": hud.craft_panel, "build_menu": hud.build_panel, "inventory": hud.inv_panel,
+		"collections": hud.col_panel, "journal": hud.journal_panel, "help": hud.help_panel}
+	for action in toggles:
+		if event.is_action_pressed(action):
+			var p: PanelContainer = toggles[action]
+			if p.visible:
+				hud.close_all()
+			else:
+				build.cancel(false)
+				player.can_interact = true
+				match action:
+					"craft_menu": hud.open_craft()
+					"build_menu": hud.open_build()
+					"inventory": hud.open_inventory()
+					"collections": hud.open_collections()
+					"journal": hud.open_journal()
+					"help": hud.show_help()
+			get_viewport().set_input_as_handled()
+			return
+	if event.is_action_pressed("save"):
 		_save()
 	elif event.is_action_pressed("load"):
 		get_tree().reload_current_scene()
@@ -222,24 +271,22 @@ func _on_panels_changed(open: bool) -> void:
 	_capture_mouse(not open)
 
 
-func _on_build_selected(id: String) -> void:
+func _on_build_selected(id: String, variant: String) -> void:
 	player.can_interact = false
-	build.start(id)
+	build.start(id, variant)
 
 
 func _on_building_placed(b: Building) -> void:
 	_connect_building(b)
 	if not build.is_active():
-		# небольшая задержка, чтобы клик установки не засчитался как удар
 		get_tree().create_timer(0.2).timeout.connect(func(): player.can_interact = true)
 
 
 func _connect_building(b: Building) -> void:
 	b.craft_requested.connect(func(station): hud.open_craft(station))
 	b.sleep_requested.connect(_sleep)
-	b.sail_requested.connect(func():
-		Game.register_sailed()
-		hud.show_victory())
+	b.choice_requested.connect(hud.show_choices)
+	b.sail_requested.connect(func(): Game.bump("sailed", "raft"))
 
 
 func _near_station(station: String) -> bool:
@@ -252,11 +299,8 @@ func _near_station(station: String) -> bool:
 func _sleep() -> void:
 	player.controls_enabled = false
 	hud.fade_through(func():
-		if Game.time_of_day > 0.27:
-			Game.day += 1
-		Game.time_of_day = 0.27
-		Game.add_energy(Game.MAX_ENERGY)
-		hud.toast("Доброе утро! Силы восстановлены.", Color("ffe08a"))
+		Game.sleep_until_morning()
+		hud.toast("Доброе утро! Пока ты спал, грядки подросли.", Color("ffe08a"))
 		player.controls_enabled = true
 		_save())
 
@@ -265,28 +309,30 @@ func _sleep() -> void:
 func _save() -> void:
 	var list := []
 	for b in get_tree().get_nodes_in_group("building"):
-		list.append({"id": b.id, "x": b.global_position.x, "y": b.global_position.y,
-			"z": b.global_position.z, "rot": b.rotation.y})
+		list.append({"id": b.id, "v": b.variant, "x": b.global_position.x, "y": b.global_position.y,
+			"z": b.global_position.z, "rot": b.rotation.y, "s": b.get_state()})
 	var p := player.global_position
 	Game.save_game({"buildings": list, "player": [p.x, p.y, p.z]})
 
 
-func _load() -> void:
+func _load() -> bool:
 	var data := Game.load_game()
 	if data.is_empty():
-		return
+		return false
 	for b in data.get("buildings", []):
-		var node := build.spawn_building(b["id"], Vector3(b["x"], b["y"], b["z"]), b["rot"])
+		var node := build.spawn_building(b["id"], Vector3(b["x"], b["y"], b["z"]), b["rot"], b.get("v", ""), b.get("s", {}))
 		_connect_building(node)
 	var p: Array = data.get("player", [])
 	if p.size() == 3:
 		player.global_position = Vector3(p[0], p[1] + 0.3, p[2])
 		player.cam_rig.global_position = player.global_position + Vector3(0, 1.4, 0)
 	hud.toast("Сохранение загружено (день %d)" % Game.day, Color("bfe3ff"))
+	return true
 
 
 func _new_game() -> void:
-	Game.reset()
+	Game.delete_save()
+	Game.reset_state()
 	get_tree().reload_current_scene()
 
 

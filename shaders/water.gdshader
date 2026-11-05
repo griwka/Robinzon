@@ -1,24 +1,26 @@
-// Стилизованная вода: глубина берётся из карты высот острова (работает на любом рендерере),
-// у берега — светлая бирюза и анимированные полосы пены.
+// Мультяшная вода: чёткие полосы цвета по глубине (без размытия), белая кромка прибоя,
+// бегущие к берегу волны-полоски и блики.
 shader_type spatial;
-render_mode diffuse_toon, specular_toon, cull_disabled, depth_draw_always, shadows_disabled;
+render_mode cull_disabled, depth_draw_always, shadows_disabled, unshaded;
 
-uniform vec4 shallow_color : source_color = vec4(0.30, 0.90, 0.85, 1.0);
-uniform vec4 deep_color : source_color = vec4(0.05, 0.42, 0.72, 1.0);
+uniform vec4 shallow_color : source_color = vec4(0.42, 0.93, 0.90, 1.0);
+uniform vec4 mid_color : source_color = vec4(0.17, 0.74, 0.88, 1.0);
+uniform vec4 deep_color : source_color = vec4(0.07, 0.50, 0.80, 1.0);
 uniform vec4 foam_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
-uniform sampler2D height_map : filter_linear, repeat_disable; // высоты острова
+uniform sampler2D height_map : filter_linear, repeat_disable;
+uniform sampler2D noise_tex : filter_linear_mipmap, repeat_enable;
 uniform vec2 map_origin = vec2(-100.0, -100.0);
 uniform float map_size = 200.0;
 uniform float height_min = -6.0;
 uniform float height_max = 14.0;
+uniform float brightness = 1.0;   // меняется со временем суток
 
 varying vec3 world_pos;
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	float wave = sin(world_pos.x * 0.12 + TIME * 0.9) * 0.07 + cos(world_pos.z * 0.1 + TIME * 1.1) * 0.07;
+	float wave = sin(world_pos.x * 0.12 + TIME * 0.9) * 0.06 + cos(world_pos.z * 0.1 + TIME * 1.1) * 0.06;
 	VERTEX.y += wave;
-	world_pos.y += wave;
 }
 
 void fragment() {
@@ -27,22 +29,25 @@ void fragment() {
 	if (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) {
 		h = mix(height_min, height_max, texture(height_map, uv).r);
 	}
-	float depth = clamp(-h, 0.0, 10.0);
-	float t = smoothstep(0.0, 4.5, depth);
-	vec3 col = mix(shallow_color.rgb, deep_color.rgb, t);
+	float depth = max(-h, 0.0);
+	float wob = (texture(noise_tex, world_pos.xz * 0.03 + TIME * 0.01).r - 0.5) * 0.8;
 
-	// Полосы пены, бегущие к берегу
-	float shore = smoothstep(2.2, 0.0, depth);
-	float stripes = step(0.82, fract(depth * 1.3 - TIME * 0.35 + sin(world_pos.x * 0.3) * 0.08));
-	float edge = smoothstep(0.35, 0.05, depth);
-	float foam = max(edge, stripes * shore * 0.8);
-	// Мелкие блики по всей воде
-	float sparkle = step(0.985, sin(world_pos.x * 1.7 + TIME * 1.5) * sin(world_pos.z * 1.9 - TIME * 1.2));
-	col = mix(col, foam_color.rgb, clamp(foam + sparkle * 0.6, 0.0, 1.0));
+	vec3 col = deep_color.rgb;
+	col = mix(col, mid_color.rgb, step(depth + wob, 3.2));
+	col = mix(col, shallow_color.rgb, step(depth + wob * 0.6, 1.3));
 
-	ALBEDO = col;
-	ROUGHNESS = 0.2;
-	SPECULAR = 0.5;
-	ALPHA = mix(0.72, 0.97, t);
+	// полоски волн, бегущие к берегу
+	float shore = step(depth, 2.4);
+	float stripes = step(0.86, fract(depth * 0.9 - TIME * 0.25 + wob * 0.4));
+	// белая кромка прибоя
+	float edge = step(depth, 0.22 + sin(TIME * 1.5 + world_pos.x * 0.4) * 0.06);
+	// блики-штрихи на глубокой воде
+	float glint = step(0.8, texture(noise_tex, world_pos.xz * vec2(0.08, 0.25) + vec2(TIME * 0.02, 0.0)).r)
+		* step(0.75, texture(noise_tex, world_pos.xz * 0.05 - TIME * 0.015).r);
+	float foam = max(edge, stripes * shore * 0.85);
+	col = mix(col, foam_color.rgb, clamp(foam + glint * 0.7, 0.0, 1.0));
+
+	ALBEDO = col * brightness;
+	ALPHA = mix(0.78, 0.96, step(1.3, depth));
 	ALPHA = max(ALPHA, foam);
 }
