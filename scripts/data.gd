@@ -16,6 +16,7 @@ const ITEMS := {
 	"sail": {"name": "Парус", "short": "Парус", "color": Color("f2ead3"), "cat": "material"},
 	"bamboo": {"name": "Бамбук", "short": "Бамбук", "color": Color("b8c450"), "cat": "material"},
 	"scrap": {"name": "Обломок металла", "short": "Обломок", "color": Color("9aa3ab"), "cat": "material"},
+	"liana": {"name": "Лиана", "short": "Лиана", "color": Color("6f7a35"), "cat": "material"},
 	# семена
 	"seed_carrot": {"name": "Семена моркови", "short": "Сем. морк.", "color": Color("f08a2c"), "cat": "seed", "crop": "carrot"},
 	"seed_potato": {"name": "Семенной картофель", "short": "Сем. карт.", "color": Color("c9a26b"), "cat": "seed", "crop": "potato"},
@@ -24,31 +25,32 @@ const ITEMS := {
 	"seed_cabbage": {"name": "Семена капусты", "short": "Сем. капус.", "color": Color("a6dc6a"), "cat": "seed", "crop": "cabbage"},
 	"seed_watermelon": {"name": "Семечки арбуза", "short": "Сем. арбуз", "color": Color("2f8f3a"), "cat": "seed", "crop": "watermelon"},
 	# урожай
-	"carrot": {"name": "Морковь", "short": "Морковь", "color": Color("f58a1f"), "cat": "crop"},
-	"potato": {"name": "Картофель", "short": "Картошка", "color": Color("c8a064"), "cat": "crop"},
-	"corn": {"name": "Кукуруза", "short": "Кукуруза", "color": Color("ffd23f"), "cat": "crop"},
-	"tomato": {"name": "Томат", "short": "Томат", "color": Color("e8443a"), "cat": "crop"},
-	"cabbage": {"name": "Капуста", "short": "Капуста", "color": Color("a6dc6a"), "cat": "crop"},
-	"watermelon": {"name": "Арбуз", "short": "Арбуз", "color": Color("3aa64a"), "cat": "crop"},
+	"carrot": {"name": "Морковь", "short": "Морковь", "color": Color("f58a1f"), "cat": "crop", "food": 8},
+	"potato": {"name": "Картофель", "short": "Картошка", "color": Color("c8a064"), "cat": "crop", "food": 6},
+	"corn": {"name": "Кукуруза", "short": "Кукуруза", "color": Color("ffd23f"), "cat": "crop", "food": 10},
+	"tomato": {"name": "Томат", "short": "Томат", "color": Color("e8443a"), "cat": "crop", "food": 8},
+	"cabbage": {"name": "Капуста", "short": "Капуста", "color": Color("a6dc6a"), "cat": "crop", "food": 8},
+	"watermelon": {"name": "Арбуз", "short": "Арбуз", "color": Color("3aa64a"), "cat": "crop", "food": 25},
 	# фрукты
-	"coconut": {"name": "Кокос", "short": "Кокос", "color": Color("7b5230"), "cat": "fruit"},
-	"banana": {"name": "Банан", "short": "Банан", "color": Color("ffe14d"), "cat": "fruit"},
-	"mango": {"name": "Манго", "short": "Манго", "color": Color("ff9f2e"), "cat": "fruit"},
-	"lemon": {"name": "Лимон", "short": "Лимон", "color": Color("f4ee52"), "cat": "fruit"},
+	"coconut": {"name": "Кокос", "short": "Кокос", "color": Color("7b5230"), "cat": "fruit", "food": 10},
+	"banana": {"name": "Банан", "short": "Банан", "color": Color("ffe14d"), "cat": "fruit", "food": 15},
+	"mango": {"name": "Манго", "short": "Манго", "color": Color("ff9f2e"), "cat": "fruit", "food": 18},
+	"lemon": {"name": "Лимон", "short": "Лимон", "color": Color("f4ee52"), "cat": "fruit", "food": 6},
 	# саженцы
 	"sapling_banana": {"name": "Саженец банана", "short": "Саж. банан", "color": Color("8bd65a"), "cat": "sapling", "tree": "banana"},
 	"sapling_mango": {"name": "Саженец манго", "short": "Саж. манго", "color": Color("6fbf4a"), "cat": "sapling", "tree": "mango"},
 	"sapling_lemon": {"name": "Саженец лимона", "short": "Саж. лимон", "color": Color("9be05f"), "cat": "sapling", "tree": "lemon"},
 	# продукты животных
-	"egg": {"name": "Яйцо", "short": "Яйцо", "color": Color("fff4dc"), "cat": "product"},
-	"milk": {"name": "Козье молоко", "short": "Молоко", "color": Color("f4f7ff"), "cat": "product"},
+	"egg": {"name": "Яйцо", "short": "Яйцо", "color": Color("fff4dc"), "cat": "product", "food": 8},
+	"milk": {"name": "Козье молоко", "short": "Молоко", "color": Color("f4f7ff"), "cat": "product", "food": 12},
 	# блюда
-	"fried_egg": {"name": "Яичница", "short": "Яичница", "color": Color("ffd75e"), "cat": "food"},
-	"baked_potato": {"name": "Печёная картошка", "short": "Печ. карт.", "color": Color("b9793a"), "cat": "food"},
-	"cheese": {"name": "Козий сыр", "short": "Сыр", "color": Color("ffe9a6"), "cat": "food"},
-	"fruit_salad": {"name": "Фруктовый салат", "short": "Салат", "color": Color("ff8fa3"), "cat": "food"},
+	"fried_egg": {"name": "Яичница", "short": "Яичница", "color": Color("ffd75e"), "cat": "food", "food": 30},
+	"baked_potato": {"name": "Печёная картошка", "short": "Печ. карт.", "color": Color("b9793a"), "cat": "food", "food": 30},
+	"cheese": {"name": "Козий сыр", "short": "Сыр", "color": Color("ffe9a6"), "cat": "food", "food": 40},
+	"fruit_salad": {"name": "Фруктовый салат", "short": "Салат", "color": Color("ff8fa3"), "cat": "food", "food": 60},
 	# инструменты
 	"machete": {"name": "Мачете", "short": "Мачете", "color": Color("c9cfd6"), "cat": "tool"},
+	"climbing_gloves": {"name": "Перчатки лазальщика", "short": "Перчатки", "color": Color("b8834b"), "cat": "tool"},
 	"stone_axe": {"name": "Каменный топор", "short": "Топор", "color": Color("7d9bb3"), "cat": "tool"},
 	"watering_can": {"name": "Лейка", "short": "Лейка", "color": Color("5fb0e8"), "cat": "tool"},
 	"net": {"name": "Сачок", "short": "Сачок", "color": Color("f2d16b"), "cat": "tool"},
@@ -59,6 +61,7 @@ const ITEMS := {
 # station: "" — в руках; "workbench" / "campfire" — рядом с постройкой
 const RECIPES := [
 	{"id": "rope", "out": {"rope": 1}, "in": {"fiber": 3}, "station": ""},
+	{"id": "climbing_gloves", "out": {"climbing_gloves": 1}, "in": {"liana": 3, "fiber": 4, "rope": 1}, "station": "", "unlock": true},
 	{"id": "machete", "out": {"machete": 1}, "in": {"scrap": 1, "wood": 1, "rope": 1}, "station": "", "unlock": true},
 	{"id": "stone_axe", "out": {"stone_axe": 1}, "in": {"wood": 2, "stone": 2, "rope": 1}, "station": "", "unlock": true},
 	{"id": "plank", "out": {"plank": 2}, "in": {"wood": 2}, "station": "workbench", "unlock": true},
@@ -168,6 +171,14 @@ const COLLECTIONS := {
 		"reward": {"items": {"sapling_mango": 1}}},
 }
 
+# ======================================================================= ОСТРОВА
+# Каждый остров строится одним генератором с разными параметрами.
+const LOCATIONS := {
+	"home": {"name": "Остров крушения", "seed": 1337, "radius": 52.0, "peak": Vector2(14, -12), "peak_h": 10.0, "mix": "home"},
+	"banyan": {"name": "Остров Великого Баньяна", "seed": 2024, "radius": 46.0, "peak": Vector2(0, 0), "peak_h": 3.0, "mix": "banyan",
+		"unlock_flag": "lighthouse_lit"},
+}
+
 # ======================================================================= ЗАДАНИЯ — ГЛАВА 1
 # Задание выполняется само, когда все пункты выполнены; затем показывается следующее.
 # kinds: talk, collected, crafted, built, planted, harvested, watered, fed, product, caught, sailed
@@ -176,6 +187,7 @@ const SPEAKERS := {
 	"parrot": {"name": "Попугай Румба", "color": Color("e8443a")},
 	"player": {"name": "Ты", "color": Color("e07a2e")},
 	"journal": {"name": "Журнал «Альбатроса»", "color": Color("b8834b")},
+	"melanie": {"name": "Мелани, кок «Альбатроса»", "color": Color("6f8fb0")},
 }
 
 # Сюжет: три года назад у неизвестного архипелага пропала шхуна «Альбатрос» и её капитан — твой брат Лёва.
@@ -340,5 +352,62 @@ const CHAPTERS := [
 			["parrot", "Карр. Румба не боится. Почти."],
 			["narrator", "Конец первой главы. Продолжение следует."]],
 		"reward": {"pages": 1}},
+	]},
+	{"title": "Глава 2. Остров Великого Баньяна", "quests": [
+	{"id": "landing", "title": "Чужой берег",
+		"intro": [["narrator", "Плот уткнулся в песок. Над джунглями, выше облаков, поднимается крона исполинского дерева. Где-то в ней горит огонь."],
+			["parrot", "Карр... Высоко. Очень высоко. Румба не любит высоту. Румба любит землю. И бананы."],
+			["parrot", "Сначала лагерь. Как дома: огонь и укрытие."]],
+		"tasks": [{"kind": "cleared", "target": "tall_grass", "count": 3, "text": "Расчисти место на берегу", "fresh": true},
+			{"kind": "built", "target": "campfire", "count": 1, "text": "Разведи костёр", "fresh": true}],
+		"outro": [["player", "Огонь наверху горит ровно, как на маяке. Его кто-то поддерживает. Каждую ночь."],
+			["parrot", "Корни дерева — в самой середине острова. Иди к ним. Лианы режь мачете — они висят завесами."]],
+		"reward": {}},
+	{"id": "roots", "title": "Корни великана",
+		"intro": [["parrot", "Прорубись к центру острова. Завесы лиан рубятся мачете — и дают лиану. Пригодится."]],
+		"tasks": [{"kind": "cleared", "target": "liana_curtain", "count": 2, "text": "Разруби завесы лиан"},
+			{"kind": "found", "target": "banyan_roots", "count": 1, "text": "Доберись до корней Великого Баньяна"}],
+		"outro": [["player", "Корни толщиной с дом. А наверху — площадки, верёвки, корзины. Там кто-то живёт."],
+			["parrot", "По лиане не залезть голыми руками — сотрёшь ладони. Лёва плёл перчатки из лиан и волокна."]],
+		"reward": {"unlock": ["climbing_gloves"]}},
+	{"id": "gloves", "title": "Перчатки лазальщика",
+		"intro": [["parrot", "Сплети перчатки: лианы, волокно, верёвка."]],
+		"tasks": [{"kind": "collected", "target": "liana", "count": 3, "text": "Добудь лианы", "fresh": true},
+			{"kind": "crafted", "target": "climbing_gloves", "count": 1, "text": "Сплети перчатки лазальщика"}],
+		"outro": [["parrot", "Подойди к лиане и нажми пробел. Лезь вверх — W, вниз — S. Следи за силами!"],
+			["parrot", "Устанешь — отдохни на площадке или съешь что-нибудь (Q). Бананы — лучшее топливо для лазания, карр!"]],
+		"reward": {"items": {"banana": 3}}},
+	{"id": "deck1", "title": "Первый ярус",
+		"intro": [["parrot", "Лиана у южного корня ведёт на первый ярус. Румба подождёт внизу... нет, Румба полетит. Румба храбрый."]],
+		"tasks": [{"kind": "reached", "target": "deck1", "count": 1, "text": "Взберись на первый ярус"}],
+		"outro": [["player", "Корзины с сушёными фруктами, свёрнутые сети... и запах дыма сверху."],
+			["melanie", "Эй, внизу! Кто там шумит? Если вы пришли за моими манго — я вас половником!"]],
+		"reward": {}},
+	{"id": "melanie", "title": "Голос сверху",
+		"intro": [["parrot", "Карр! Этот голос! Румба знает этот голос! Выше, на втором ярусе!"]],
+		"tasks": [{"kind": "reached", "target": "deck2", "count": 1, "text": "Поднимись на второй ярус"},
+			{"kind": "talk", "target": "melanie", "count": 1, "text": "Поговори с хозяйкой голоса"}],
+		"outro": [["melanie", "Румба?! Живой! А ты... Святые угодники. Ты же вылитый Лёва. Брат? Ну конечно, брат."],
+			["melanie", "Я Мелани, кок «Альбатроса». Была. Теперь я хранительница этого огня."],
+			["player", "Где он? Где Лёва?"],
+			["melanie", "Жил здесь полгода. Мы вместе держали огонь. Потом он ушёл к Старому форту — сказал, там ответ на всё."],
+			["melanie", "Но сначала накорми старуху. Три года на одних манго — я забыла вкус яичницы."]],
+		"reward": {}},
+	{"id": "feast", "title": "Ужин для кока",
+		"intro": [["melanie", "Яичница и печёная картошка. Курятник у тебя ведь есть на твоём острове? Плот у берега — сплавай, если надо."]],
+		"tasks": [{"kind": "delivered", "target": "fried_egg", "count": 1, "text": "Принеси Мелани яичницу"},
+			{"kind": "delivered", "target": "baked_potato", "count": 1, "text": "Принеси Мелани печёную картошку"}],
+		"outro": [["melanie", "Ох... Вот это я понимаю. Лёва тоже готовил ужасно, так что не обижайся, но это лучше, чем у него."],
+			["melanie", "Слушай. На самом верху — чаша огня. Лёва оставил там кое-что для тебя. Сказал: «Он придёт. Он упрямый»."]],
+		"reward": {"items": {"mango": 4}}},
+	{"id": "summit", "title": "Чаша огня",
+		"intro": [["melanie", "Последняя лиана самая длинная. Поешь перед подъёмом и не смотри вниз."]],
+		"tasks": [{"kind": "reached", "target": "deck3", "count": 1, "text": "Взберись на вершину дерева"},
+			{"kind": "found", "target": "fire_bowl", "count": 1, "text": "Осмотри чашу огня"}],
+		"outro": [["narrator", "Под чашей, в нише из корней, — свёрток в промасленной ткани. Карта архипелага, вся в пометках, и записка."],
+			["narrator", "«Форт на северо-востоке. Ворота заперты изнутри, ключ у того, кто не хочет, чтобы его нашли. Не верь тихой воде. — Л.»"],
+			["parrot", "Форт... Румба помнит форт. Там злой боцман. Очень злой. С трубкой."],
+			["narrator", "Конец пролога второй главы. Продолжение следует: Старый форт."]],
+		"reward": {}},
 	]},
 ]

@@ -14,7 +14,7 @@ OUT = os.path.join(HERE, "..", "..", "assets", "models")
 
 import kit  # noqa: E402
 
-MODULES = ["models_characters", "models_nature", "models_buildings", "models_farm", "models_jungle"]
+MODULES = ["models_characters", "models_nature", "models_buildings", "models_farm", "models_jungle", "models_banyan"]
 
 
 def all_builders():

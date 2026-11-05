@@ -29,6 +29,17 @@ func _process(_delta: float) -> void:
 		if args.has("dist"): p.camera_distance = float(args["dist"])
 		if args.has("demo"):
 			_demo()
+		if args.has("deck"):
+			for n in get_tree().get_nodes_in_group("obstacle"):
+				if n is BanyanTree:
+					p.global_position = n.to_global(n._deck_center(int(args["deck"]) - 1)) + Vector3(1.2, 0.3, 0.6)
+					p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+			_flush()
+		if args.has("at"):
+			var v: PackedStringArray = args["at"].split(",")
+			p.global_position = Vector3(float(v[0]), float(v[1]), float(v[2]))
+			p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+			_flush()
 		if args.has("gallery"):
 			_gallery(args["gallery"].split(","))
 	if args.has("time"):
@@ -139,12 +150,39 @@ func _demo() -> void:
 	main.player.cam_rig.global_position = main.player.global_position
 
 
+# ------------------------------------------------------------------ Лазание
+func _test_climb() -> void:
+	var p: Player = main.player
+	var lianas := get_tree().get_nodes_in_group("climb")
+	_check(lianas.size() == 3, "на Баньяне три лианы")
+	var c: Climbable = lianas[0]
+	var b := c.world_bottom()
+	p.global_position = b + Vector3(0.6, 0.3, 0)
+	p._find_climb()
+	_check(p.near_climb == c, "у лианы появляется подсказка лезть")
+	Game.inventory["climbing_gloves"] = 1
+	_flush()
+	p.controls_enabled = true
+	p._start_climb(c)
+	Input.action_press("move_forward")
+	var start_stamina := p.stamina
+	var steps := 0
+	while p.climbing and steps < 1200:
+		p._physics_process(1.0 / 60.0)
+		steps += 1
+	Input.action_release("move_forward")
+	_check(p.climbing == null and p.global_position.y > c.world_top().y - 1.5, "лазание доводит до яруса (высота %.1f м за %.1f c)" % [p.global_position.y - b.y, steps / 60.0])
+	_check(p.stamina < start_stamina - 10.0, "подъём тратит силы (%d → %d)" % [start_stamina, p.stamina])
+	Game.inventory.erase("climbing_gloves")
+
+
 # ------------------------------------------------------------------ Проходимость
 ## Заливка по сетке от внешнего края кольца к сюжетному месту: можно ли дойти, ничего не расчищая.
 func _reachable(poi_id: String) -> bool:
 	var isl: Island = main.island
 	var c: Vector3 = isl.poi[poi_id]
-	var R := 11.0
+	var R := 16.0 if poi_id == "banyan_roots" else 11.0
+	var goal := 6.0 if poi_id == "banyan_roots" else 2.5   # у Баньяна в центре ствол — цель: зона корней
 	var cell := 0.4
 	var blockers := []
 	for n in get_tree().get_nodes_in_group("obstacle"):
@@ -181,7 +219,7 @@ func _reachable(poi_id: String) -> bool:
 		var z := c.z - R + g.y * cell
 		if blocked.call(x, z):
 			continue
-		if Vector2(x - c.x, z - c.z).length() < 2.5:
+		if Vector2(x - c.x, z - c.z).length() < goal:
 			return true
 		for dlt in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			queue.append(g + dlt)
@@ -276,7 +314,12 @@ func _do_task(t: Dictionary) -> void:
 	var target: String = t["target"]
 	match t["kind"]:
 		"talk":
-			main.parrot.interact(main.player)
+			if target == "parrot":
+				main.parrot.interact(main.player)
+			else:
+				for n in get_tree().get_nodes_in_group("interactable"):
+					if n is NPCPerson and n.npc_id == target:
+						n.interact(main.player)
 		"collected":
 			if target == "crate":
 				for c in get_tree().get_nodes_in_group("interactable"):
@@ -326,7 +369,7 @@ func _do_task(t: Dictionary) -> void:
 				pen.interact(main.player)
 				guard += 1
 		"cleared":
-			var tools := {"thicket": "machete", "bamboo": "machete", "jungle_tree": "stone_axe", "fallen_log": "stone_axe", "cliff": "pickaxe", "rock": "pickaxe"}
+			var tools := {"thicket": "machete", "bamboo": "machete", "jungle_tree": "stone_axe", "fallen_log": "stone_axe", "cliff": "pickaxe", "rock": "pickaxe", "liana_curtain": "machete"}
 			if tools.has(target) and not Game.has_tool(tools[target]):
 				_give({tools[target]: 1})
 			var done := 0
@@ -358,9 +401,22 @@ func _do_task(t: Dictionary) -> void:
 					c.interact(main.player)
 					n += 1
 		"sailed":
-			for b in get_tree().get_nodes_in_group("building"):
-				if b.id == "raft":
-					b.interact(main.player)
+			# прибытие на новый остров (в игре — после перезагрузки сцены)
+			Game.bump("sailed", "raft")
+		"reached":
+			var tree := get_tree().get_first_node_in_group("obstacle")
+			for n in get_tree().get_nodes_in_group("obstacle"):
+				if n is BanyanTree:
+					tree = n
+			var idx := int(target.substr(4)) - 1
+			main.player.global_position = tree.to_global(tree._deck_center(idx)) + Vector3(0, 0.3, 0)
+			tree._process(0.0)
+		"delivered":
+			_give({target: 1})
+			for n in get_tree().get_nodes_in_group("interactable"):
+				if n is NPCPerson:
+					n.interact(main.player)
+					break
 
 
 func _autotest() -> void:
@@ -377,13 +433,21 @@ func _autotest() -> void:
 	_check(p.global_position.y > 0.0, "игрок появился на суше")
 	_check(get_tree().get_nodes_in_group("interactable").size() > 150, "на острове есть ресурсы и живность")
 	_check(Game.quest_started and Game.current_quest()["id"] == "wake", "первое задание началось")
-	for poi_id in ["old_camp", "lifeboat", "lighthouse"]:
+	for poi_id in main.island.poi.keys():
 		_check(not _reachable(poi_id), "к месту «%s» не пройти без инструментов" % poi_id)
 
-	# проходим главу 1 целиком
-	var qs: Array = Data.CHAPTERS[0]["quests"]
+	var ch := int(args.get("chapter", "1")) - 1
+	if ch == 1:
+		_test_climb()
+	if ch > 0:
+		Game.chapter = ch
+		Game.quest_index = 0
+		Game.quest_started = false
+		Game.start_current_quest()
+		_flush()
+	var qs: Array = Data.CHAPTERS[ch]["quests"]
 	var guard := 0
-	while not Game.current_quest().is_empty() and guard < 60:
+	while not Game.current_quest().is_empty() and Game.chapter == ch and guard < 60:
 		guard += 1
 		var q := Game.current_quest()
 		_flush()
@@ -402,7 +466,12 @@ func _autotest() -> void:
 			for t in q["tasks"]:
 				print("      %s: %d/%d" % [t["text"], Game.task_progress(t), t["count"]])
 			break
-	_check(Game.quest_index == qs.size(), "глава 1 пройдена (%d/%d)" % [Game.quest_index, qs.size()])
+	var done_ch: bool = Game.chapter > ch or (Game.quest_index >= qs.size())
+	_check(done_ch, "глава %d пройдена" % (ch + 1))
+	if ch > 0:
+		print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
+		get_tree().quit(0 if fails.is_empty() else 1)
+		return
 	_check(Game.unlocked.has("raft") and Game.unlocked.has("hut"), "постройки открываются по сюжету")
 	_check(Game.collections.get("butterflies", {}).size() > 0, "бабочки попадают в коллекцию")
 
@@ -413,9 +482,10 @@ func _autotest() -> void:
 	Game.inventory = {}
 	var data := Game.load_game()
 	_check(Game.inventory == inv_copy, "инвентарь сохраняется и загружается")
-	_check(data.get("buildings", []).size() == n_build, "постройки сохраняются (%d)" % n_build)
+	var here: Dictionary = data.get("locations", {}).get(Game.location, {})
+	_check(here.get("buildings", []).size() == n_build, "постройки сохраняются (%d)" % n_build)
 	var bed_state := false
-	for b in data.get("buildings", []):
+	for b in here.get("buildings", []):
 		if b["id"] == "garden_bed" and b["s"].has("crop"):
 			bed_state = true
 	_check(bed_state, "состояние грядок сохраняется")

@@ -28,9 +28,13 @@ const SKY_NIGHT := [Color("0b1633"), Color("27406f"), Color("8fa8ff"), 0.0, Colo
 
 func _ready() -> void:
 	Game.load_game()   # заранее: остров должен знать, какие заросли уже расчищены
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--location="):   # для разработки: сразу на нужный остров
+			Game.location = a.split("=")[1]
 	_setup_environment()
 
 	island = Island.new()
+	island.configure(Game.location)
 	island.name = "Island"
 	island.add_to_group("island")
 	add_child(island)
@@ -48,7 +52,10 @@ func _ready() -> void:
 	var to_sea := island.wreck_point - island.spawn_point
 	player.camera_yaw = atan2(to_sea.x, to_sea.z) + PI * 0.85
 
-	_spawn_story_objects()
+	if Game.location == "home":
+		_spawn_story_objects()
+	else:
+		_spawn_arrival_dock()
 
 	build = BuildSystem.new()
 	build.island = island
@@ -117,6 +124,12 @@ func start_play() -> void:
 	player.camera.current = true
 	player.controls_enabled = true
 	_capture_mouse(true)
+	if Game.flags.get("pending_sail", false):
+		Game.flags.erase("pending_sail")
+		player.global_position = island.spawn_point
+		player.cam_rig.global_position = player.global_position + Vector3(0, 1.4, 0)
+		hud.toast(Data.LOCATIONS[Game.location]["name"], Color("ffe08a"))
+		Game.bump("sailed", "raft")
 	if not Game.quest_started:
 		Game.start_current_quest()
 
@@ -131,6 +144,23 @@ func _resume() -> void:
 	menu.hide_all()
 	get_tree().paused = false
 	_capture_mouse(not hud.any_open())
+
+
+## Причал на новом острове: плот, на котором мы приплыли (на нём можно уплыть обратно), и Румба на мачте.
+func _spawn_arrival_dock() -> void:
+	var dock := Building.new()
+	dock.setup("raft")
+	var w := island.wreck_point
+	w.y = maxf(w.y, 0.0)
+	dock.position = w
+	var to_land := island.camp_center - w
+	dock.rotation.y = atan2(to_land.x, to_land.z)
+	add_child(dock)
+	dock.remove_from_group("building")   # не сохраняется: причал есть всегда
+	dock.sail_requested.connect(_choose_destination)
+	parrot = NPCParrot.new()
+	dock.add_child(parrot)
+	parrot.position = Vector3(0, 2.9, 0)
 
 
 func _spawn_story_objects() -> void:
@@ -266,7 +296,7 @@ var _answer_fire: Node3D
 
 ## Когда маяк зажжён — на острове Великого Баньяна отвечает огонь брата.
 func _update_answer_fire() -> void:
-	if _answer_fire or not Game.flags.get("lighthouse_lit", false) or island.banyan == null:
+	if _answer_fire or Game.location != "home" or not Game.flags.get("lighthouse_lit", false) or island.banyan == null:
 		return
 	_answer_fire = Node3D.new()
 	island.banyan.add_child(_answer_fire)
@@ -314,6 +344,7 @@ func _process(delta: float) -> void:
 	else:
 		hud.set_hint("")
 	hud.set_crosshair(build.is_active())
+	hud.set_stamina(player.stamina, Player.STAMINA_MAX)
 	if not in_menu:
 		_autosave_t += delta
 	if _autosave_t > 90.0:
@@ -394,7 +425,36 @@ func _connect_building(b: Building) -> void:
 	b.craft_requested.connect(func(station): hud.open_craft(station))
 	b.sleep_requested.connect(_sleep)
 	b.choice_requested.connect(hud.show_choices)
-	b.sail_requested.connect(func(): Game.bump("sailed", "raft"))
+	b.sail_requested.connect(_choose_destination)
+
+
+# ================================================================== Плавание между островами
+func _choose_destination() -> void:
+	var options := []
+	for loc in Data.LOCATIONS:
+		if loc == Game.location:
+			continue
+		var cfg: Dictionary = Data.LOCATIONS[loc]
+		if cfg.has("unlock_flag") and not Game.flags.get(cfg["unlock_flag"], false):
+			continue
+		options.append({"text": "Плыть: %s" % cfg["name"], "icon": "sail", "callback": travel_to.bind(loc)})
+	if options.is_empty():
+		Game.notified.emit("Плыть пока некуда. Куда указывает свет?..", Color("ffe08a"))
+		return
+	hud.show_choices("Куда плывём?", options)
+
+
+func travel_to(loc: String) -> void:
+	player.controls_enabled = false
+	Audio.play("water", 0.0, 0.0)
+	hud.fade_through(func():
+		_save()
+		Game.location = loc
+		Game.flags["pending_sail"] = true
+		Game.flags["visited_" + loc] = true
+		Game.save_game(Game.loc_data.get(loc, {}))
+		Game.skip_menu = true
+		get_tree().reload_current_scene())
 
 
 func _near_station(station: String) -> bool:
@@ -425,9 +485,10 @@ func _save() -> void:
 
 
 func _load() -> bool:
-	var data := Game.load_game()
-	if data.is_empty():
+	var full := Game.load_game()
+	if full.is_empty():
 		return false
+	var data: Dictionary = Game.loc_data.get(Game.location, {})
 	for b in data.get("buildings", []):
 		var node := build.spawn_building(b["id"], Vector3(b["x"], b["y"], b["z"]), b["rot"], b.get("v", ""), b.get("s", {}))
 		_connect_building(node)
