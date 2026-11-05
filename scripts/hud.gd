@@ -19,7 +19,7 @@ const CARD := Color("f6e3b8")        # светлая карточка пред�
 const CARD_EDGE := Color("b88552")
 const ROW := Color("c99a5e")         # строка в окне — тёплое светлое дерево
 const ROW_EDGE := Color("8a5a30")
-const HOTBAR_ORDER := ["stone_axe", "pickaxe", "watering_can", "net", "wood", "stone", "fiber", "leaf", "rope", "plank"]
+const HOTBAR_ORDER := ["machete", "stone_axe", "pickaxe", "watering_can", "net", "wood", "stone", "fiber", "leaf", "rope", "plank", "bamboo"]
 
 var station_check: Callable
 

@@ -12,6 +12,7 @@ var env: Environment
 var sky_mat: ProceduralSkyMaterial
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
+var fill: DirectionalLight3D
 var clouds: Array[Node3D] = []
 var _autosave_t := 0.0
 var menu: GameMenu
@@ -20,12 +21,13 @@ var in_menu := false
 var _orbit := 0.0
 
 # палитры: [верх неба, горизонт, цвет солнца, сила солнца, цвет теней, яркость теней, яркость воды]
-const SKY_DAY := [Color("3a9cf0"), Color("bde9ff"), Color("fff4dc"), 0.56, Color("8f86c9"), 0.78, 1.0]
+const SKY_DAY := [Color("3a9cf0"), Color("bde9ff"), Color("fff4dc"), 0.5, Color("9a92cf"), 0.92, 1.0]
 const SKY_SUNSET := [Color("4f63b8"), Color("ffb47a"), Color("ffb070"), 0.5, Color("8d6fb0"), 0.62, 0.85]
 const SKY_NIGHT := [Color("0b1633"), Color("27406f"), Color("8fa8ff"), 0.0, Color("4a5c9a"), 0.48, 0.42]
 
 
 func _ready() -> void:
+	Game.load_game()   # заранее: остров должен знать, какие заросли уже расчищены
 	_setup_environment()
 
 	island = Island.new()
@@ -151,6 +153,11 @@ func _spawn_story_objects() -> void:
 	parrot = NPCParrot.new()
 	wreck.add_child(parrot)
 	parrot.position = Vector3(1.6, 2.45, 0.6)
+	# обломки можно обыскать (там металл для мачете)
+	var search := StoryPlace.new()
+	search.id = "wreck"
+	wreck.add_child(search)
+	search.position = Vector3(0, 0.4, 0)
 	# ящик неподалёку
 	var crate := SupplyCrate.new()
 	add_child(crate)
@@ -188,7 +195,7 @@ func _setup_environment() -> void:
 	env.fog_light_color = Color("bde9ff")
 	env.fog_sky_affect = 0.0
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.05
+	env.adjustment_saturation = 0.97
 	env.adjustment_contrast = 1.04
 	var we := WorldEnvironment.new()
 	we.environment = env
@@ -202,6 +209,14 @@ func _setup_environment() -> void:
 	sun.shadow_blur = 0.6
 	sun.light_specular = 0.6
 	add_child(sun)
+	# мягкий заполняющий свет без теней: теневая сторона персонажей не уходит в грязь
+	fill = DirectionalLight3D.new()
+	fill.name = "Fill"
+	fill.light_color = Color("ffe6c8")
+	fill.light_energy = 0.16
+	fill.light_specular = 0.0
+	fill.shadow_enabled = false
+	add_child(fill)
 	moon = DirectionalLight3D.new()
 	moon.name = "Moon"
 	moon.light_color = Color("9fb4ff")
@@ -215,6 +230,8 @@ func _update_sky() -> void:
 	var angle := (t - 0.25) * TAU
 	var elev := sin(angle)
 	sun.rotation = Vector3(-angle, deg_to_rad(-35), 0)
+	fill.rotation = Vector3(-0.5, deg_to_rad(145), 0)
+	fill.light_energy = 0.22 * clampf(elev * 3.0, 0.0, 1.0)
 	var a: Array
 	var b: Array
 	var k: float
@@ -244,6 +261,27 @@ func _update_sky() -> void:
 		island.water_mat.set_shader_parameter("brightness", lerpf(a[6], b[6], k))
 
 
+var _answer_fire: Node3D
+
+
+## Когда маяк зажжён — на острове Великого Баньяна отвечает огонь брата.
+func _update_answer_fire() -> void:
+	if _answer_fire or not Game.flags.get("lighthouse_lit", false) or island.banyan == null:
+		return
+	_answer_fire = Node3D.new()
+	island.banyan.add_child(_answer_fire)
+	_answer_fire.position = Vector3(0, 40.0, 0)
+	var f := MeshInstance3D.new()
+	f.mesh = Models.sphere(2.2, 10, 6)
+	f.material_override = Models.unshaded(Color("ffb030"))
+	_answer_fire.add_child(f)
+	var l := OmniLight3D.new()
+	l.light_color = Color("ffb35c")
+	l.light_energy = 8.0
+	l.omni_range = 60.0
+	_answer_fire.add_child(l)
+
+
 func _spawn_clouds() -> void:
 	var g := RandomNumberGenerator.new()
 	g.seed = 4242
@@ -257,6 +295,7 @@ func _spawn_clouds() -> void:
 
 func _process(delta: float) -> void:
 	_update_sky()
+	_update_answer_fire()
 	if in_menu:
 		# камера медленно облетает остров
 		_orbit += delta * 0.05

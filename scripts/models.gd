@@ -5,13 +5,58 @@ class_name Models
 const TOON := preload("res://shaders/toon.gdshader")
 const OUTLINE := preload("res://shaders/outline.gdshader")
 const WING := preload("res://shaders/wing.gdshader")
+const TOON_FOLIAGE := preload("res://shaders/toon_foliage.gdshader")
 
 static var _mat_cache: Dictionary = {}
 static var _outline_cache: Dictionary = {}
 static var _unshaded_cache: Dictionary = {}
 
 
+static var _scene_cache: Dictionary = {}
+
+
+## Загрузить модель из Blender (assets/models/<name>.glb) и наложить игровые материалы:
+## toon-шейдер с цветом вершин и контуром; у листвы — ветер и растворение у камеры.
+## Если файла нет — вернёт null (тогда используется простая модель из примитивов).
+static func glb(name: String) -> Node3D:
+	var path := "res://assets/models/%s.glb" % name
+	var ps: PackedScene = _scene_cache.get(name)
+	if ps == null:
+		if not ResourceLoader.exists(path):
+			return null
+		ps = load(path)
+		_scene_cache[name] = ps
+	var n: Node3D = ps.instantiate()
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var nm: String = mi.name.to_lower()
+		if nm.contains("leaf") or nm.contains("frond") or nm.contains("crown_l"):
+			mi.material_override = model_mat(true)
+		else:
+			mi.material_override = model_mat(false)
+	return n
+
+
+static func model_mat(foliage: bool) -> ShaderMaterial:
+	var key := "model|%s" % foliage
+	if _mat_cache.has(key):
+		return _mat_cache[key]
+	var m := ShaderMaterial.new()
+	m.shader = TOON_FOLIAGE if foliage else TOON
+	m.set_shader_parameter("albedo", Color.WHITE)
+	m.set_shader_parameter("use_vertex_color", true)
+	m.set_shader_parameter("rim_amount", 0.2)
+	m.set_shader_parameter("gloss", 0.03)
+	if foliage:
+		m.set_shader_parameter("wind_strength", 0.8)
+		m.set_shader_parameter("near_fade", 1.0)
+	else:
+		m.next_pass = outline_mat(0.022)
+	_mat_cache[key] = m
+	return m
+
+
 static func clear_caches() -> void:
+	_scene_cache.clear()
 	_mat_cache.clear()
 	_outline_cache.clear()
 	_unshaded_cache.clear()
@@ -198,6 +243,9 @@ static func flower_mesh() -> ArrayMesh:
 
 # ============================================================== Природа
 static func palm(rng: RandomNumberGenerator) -> Node3D:
+	var g := glb(["palm_a", "palm_b", "palm_c"][rng.randi() % 3])
+	if g:
+		return g
 	var root := Node3D.new()
 	var height := rng.randf_range(4.2, 6.2)
 	var lean := Vector3(rng.randf_range(-0.3, 0.3), 0, rng.randf_range(-0.3, 0.3))
@@ -235,6 +283,9 @@ static func palm(rng: RandomNumberGenerator) -> Node3D:
 
 
 static func banana_tree(rng: RandomNumberGenerator) -> Node3D:
+	var g := glb("banana_tree")
+	if g:
+		return g
 	var root := Node3D.new()
 	var h := rng.randf_range(2.4, 3.0)
 	part(root, cyl(0.16, 0.24, h, 9), Color("8f9a4a"), Vector3(0, h * 0.5, 0))
@@ -293,6 +344,10 @@ static func round_tree(rng: RandomNumberGenerator, leaf: Color, fruit_col: Color
 
 
 static func fruit_tree(kind: String, rng: RandomNumberGenerator) -> Node3D:
+	if kind in ["mango", "lemon"]:
+		var g := glb(kind + "_tree")
+		if g:
+			return g
 	match kind:
 		"banana": return banana_tree(rng)
 		"mango": return round_tree(rng, Color("2f9a45"), Color("ff9f2e"), 0.13)
@@ -301,6 +356,9 @@ static func fruit_tree(kind: String, rng: RandomNumberGenerator) -> Node3D:
 
 
 static func sapling() -> Node3D:
+	var g := glb("sapling")
+	if g:
+		return g
 	var root := Node3D.new()
 	part(root, cyl(0.08, 0.3, 0.12, 10), Color("7a5232"), Vector3(0, 0.05, 0))
 	part(root, cyl(0.025, 0.035, 0.6, 6), Color("7a5a32"), Vector3(0, 0.35, 0))
@@ -311,6 +369,9 @@ static func sapling() -> Node3D:
 
 
 static func rock(rng: RandomNumberGenerator, big := true) -> Node3D:
+	var g := glb(["rock_a", "rock_b", "rock_c"][rng.randi() % 3] if big else ["pebble_a", "pebble_b"][rng.randi() % 2])
+	if g:
+		return g
 	var root := Node3D.new()
 	var base := Color("a7abb0").lerp(Color("bdb3a3"), rng.randf())
 	var count := 3 if big else 1
@@ -334,6 +395,9 @@ static func rock(rng: RandomNumberGenerator, big := true) -> Node3D:
 
 
 static func bush(rng: RandomNumberGenerator) -> Node3D:
+	var g := glb(["bush_a", "bush_b", "bush_c"][rng.randi() % 3])
+	if g:
+		return g
 	var root := Node3D.new()
 	var col := Color("2f9a3e").lerp(Color("4cb63f"), rng.randf())
 	for i in 4:
@@ -352,6 +416,10 @@ static func bush(rng: RandomNumberGenerator) -> Node3D:
 
 
 static func driftwood(rng: RandomNumberGenerator) -> Node3D:
+	var g := glb("driftwood")
+	if g:
+		g.rotation.y = rng.randf() * TAU
+		return g
 	var root := Node3D.new()
 	var col := Color("c8a985")
 	part(root, cyl(0.12, 0.15, 1.6, 8), col, Vector3(0, 0.12, 0), Vector3(0, 0, PI / 2))
@@ -361,6 +429,9 @@ static func driftwood(rng: RandomNumberGenerator) -> Node3D:
 
 
 static func shell(rng: RandomNumberGenerator) -> Node3D:
+	var g := glb("shell")
+	if g:
+		return g
 	var root := Node3D.new()
 	var col: Color = [Color("f6c7c0"), Color("ffe4b5"), Color("f7a8b8"), Color("ffffff")][rng.randi() % 4]
 	part(root, cyl(0.02, 0.17, 0.12, 10), col, Vector3(0, 0.05, 0), Vector3(0.2, rng.randf() * TAU, 0))
@@ -370,6 +441,13 @@ static func shell(rng: RandomNumberGenerator) -> Node3D:
 
 
 static func supply_crate(opened := false) -> Node3D:
+	var g := glb("supply_crate")
+	if g:
+		if opened:
+			var lid := g.find_child("Lid", true, false) as Node3D
+			lid.position += Vector3(0, -0.3, 0.55)
+			lid.rotation.x = 1.3
+		return g
 	var root := Node3D.new()
 	var wood := Color("b07a45")
 	part(root, box(Vector3(1.0, 0.7, 0.7)), wood, Vector3(0, 0.35, 0))
@@ -387,6 +465,9 @@ static func supply_crate(opened := false) -> Node3D:
 
 
 static func boat_wreck() -> Node3D:
+	var g := glb("boat_wreck")
+	if g:
+		return g
 	var root := Node3D.new()
 	var wood := Color("9a6a3e")
 	# корпус на боку
@@ -436,6 +517,9 @@ static func cloud(rng: RandomNumberGenerator) -> Node3D:
 
 # ============================================================== Грядки и урожай
 static func garden_bed() -> Node3D:
+	var g := glb("garden_bed")
+	if g:
+		return g
 	var root := Node3D.new()
 	var wood := Color("b8834b")
 	for z in [-0.55, 0.55]:
@@ -452,6 +536,9 @@ static func garden_bed() -> Node3D:
 
 ## Модель растения на грядке: stage 1 — ростки, 2 — подросшие, 3 — созрело.
 static func crop(kind: String, stage: int) -> Node3D:
+	var g := glb("crop_sprout" if stage == 1 else ("crop_young" if stage == 2 else "crop_" + kind))
+	if g:
+		return g
 	var root := Node3D.new()
 	var green := Color("5cc94a")
 	var spots := []
@@ -519,6 +606,9 @@ static func crop(kind: String, stage: int) -> Node3D:
 
 # ============================================================== Животные и NPC
 static func chicken() -> Node3D:
+	var g := glb("chicken")
+	if g:
+		return g
 	var root := Node3D.new()
 	var body := Node3D.new()
 	body.name = "Body"
@@ -544,6 +634,9 @@ static func chicken() -> Node3D:
 
 
 static func goat() -> Node3D:
+	var g := glb("goat")
+	if g:
+		return g
 	var root := Node3D.new()
 	var fur := Color("f4efe4")
 	var patch := Color("b98a5a")
@@ -572,6 +665,9 @@ static func goat() -> Node3D:
 
 
 static func parrot() -> Node3D:
+	var g := glb("parrot")
+	if g:
+		return g
 	var root := Node3D.new()
 	var body := Node3D.new()
 	body.name = "Body"
@@ -599,6 +695,9 @@ static func parrot() -> Node3D:
 
 
 static func crab() -> Node3D:
+	var g := glb("crab")
+	if g:
+		return g
 	var root := Node3D.new()
 	var red := Color("ff5a3a")
 	part(root, sphere(0.14, 10, 6), red, Vector3(0, 0.1, 0), Vector3.ZERO, Vector3(1.3, 0.55, 1))
@@ -637,6 +736,13 @@ static func butterfly(color: Color) -> Node3D:
 
 # ============================================================== Постройки
 static func building(id: String) -> Node3D:
+	var names := {"fruit_tree": "sapling"}
+	var g := glb(names.get(id, id))
+	if g:
+		match id:
+			"campfire": _add_fire(g)
+			"torch": _add_torch_flame(g)
+		return g
 	match id:
 		"tent": return tent()
 		"campfire": return campfire()
@@ -671,6 +777,42 @@ static func tent() -> Node3D:
 	part(root, cyl(0.035, 0.035, 2.6, 6), Color("7a5232"), Vector3(0, 1.42, 0), Vector3(PI / 2, 0, 0))
 	part(root, box(Vector3(1.3, 0.04, 1.8)), Color("c9a050"), Vector3(0, 0.03, 0), Vector3.ZERO, Vector3.ONE, false)
 	return root
+
+
+static func _add_fire(root: Node3D) -> void:
+	var fire := Node3D.new()
+	fire.name = "Fire"
+	root.add_child(fire)
+	for spec in [[0.3, 0.85, 0.5, Color("ff8a1e")], [0.17, 0.55, 0.42, Color("ffe066")]]:
+		var f := MeshInstance3D.new()
+		f.mesh = cyl(0.0, spec[0], spec[1], 7)
+		f.material_override = unshaded(spec[3])
+		f.position.y = spec[2]
+		f.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		fire.add_child(f)
+	var light := OmniLight3D.new()
+	light.name = "Light"
+	light.light_color = Color("ffb35c")
+	light.light_energy = 2.0
+	light.omni_range = 9.0
+	light.position.y = 1.0
+	root.add_child(light)
+
+
+static func _add_torch_flame(root: Node3D) -> void:
+	var f := MeshInstance3D.new()
+	f.name = "Flame"
+	f.mesh = cyl(0.0, 0.14, 0.4, 6)
+	f.material_override = unshaded(Color("ffb030"))
+	f.position.y = 1.92
+	root.add_child(f)
+	var light := OmniLight3D.new()
+	light.name = "Light"
+	light.light_color = Color("ffb35c")
+	light.light_energy = 1.4
+	light.omni_range = 7.0
+	light.position.y = 2.1
+	root.add_child(light)
 
 
 static func campfire() -> Node3D:
@@ -904,6 +1046,9 @@ static func shell_path() -> Node3D:
 
 # ============================================================== Инструменты
 static func tool_model(id: String) -> Node3D:
+	var g := glb("tool_" + id)
+	if g:
+		return g
 	var root := Node3D.new()
 	match id:
 		"stone_axe":

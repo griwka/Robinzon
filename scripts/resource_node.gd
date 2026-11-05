@@ -3,12 +3,13 @@ extends StaticBody3D
 ## Ресурс на острове: пальма, куст, валун, камешек, плавник, ракушка.
 ## Добывается ударами (ЛКМ / E), после добычи исчезает и со временем вырастает снова.
 
+# respawn = 0 — преграда: расчищается навсегда (сохраняется), открывая путь вглубь острова.
 const KINDS := {
-	"palm": {"hp": 3, "tool": "stone_axe", "drops": {"wood": 3, "leaf": 2}, "respawn": 120.0,
-		"verb": "Срубить пальму", "radius": 0.35, "height": 5.0},
+	"palm": {"hp": 3, "tool": "stone_axe", "drops": {"wood": 3, "leaf": 2}, "respawn": 160.0,
+		"verb": "Срубить пальму", "radius": 0.4, "height": 5.0},
 	"bush": {"hp": 1, "tool": "", "drops": {"fiber": 2}, "respawn": 45.0,
 		"verb": "Собрать волокно", "radius": 0.7, "height": 1.2},
-	"rock": {"hp": 4, "tool": "pickaxe", "drops": {"stone": 5}, "respawn": 160.0,
+	"rock": {"hp": 4, "tool": "pickaxe", "drops": {"stone": 5}, "respawn": 0.0,
 		"verb": "Разбить валун", "radius": 1.0, "height": 1.4},
 	"pebble": {"hp": 1, "tool": "", "drops": {"stone": 1}, "respawn": 50.0,
 		"verb": "Подобрать камень", "radius": 0.25, "height": 0.3},
@@ -16,11 +17,31 @@ const KINDS := {
 		"verb": "Собрать плавник", "radius": 0.4, "height": 0.4},
 	"shell": {"hp": 1, "tool": "", "drops": {"shell": 1}, "respawn": 60.0,
 		"verb": "Подобрать ракушку", "radius": 0.2, "height": 0.2},
+	# --- заросли и преграды
+	"tall_grass": {"hp": 1, "tool": "", "drops": {"fiber": 1}, "respawn": 0.0,
+		"verb": "Вырвать высокую траву", "radius": 0.75, "height": 1.2},
+	"fern": {"hp": 1, "tool": "", "drops": {"fiber": 1, "leaf": 1}, "respawn": 0.0,
+		"verb": "Убрать папоротник", "radius": 0.8, "height": 0.9},
+	"thicket": {"hp": 2, "tool": "machete", "drops": {"fiber": 3}, "respawn": 0.0,
+		"verb": "Прорубить колючие заросли", "radius": 1.1, "height": 1.5},
+	"bamboo": {"hp": 3, "tool": "machete", "drops": {"bamboo": 3}, "respawn": 0.0,
+		"verb": "Срубить бамбук", "radius": 0.9, "height": 4.0},
+	"jungle_tree": {"hp": 6, "tool": "stone_axe", "drops": {"wood": 6}, "respawn": 0.0,
+		"verb": "Срубить дерево-гигант", "radius": 1.3, "height": 7.0},
+	"fallen_log": {"hp": 3, "tool": "stone_axe", "drops": {"wood": 4}, "respawn": 0.0,
+		"verb": "Разрубить поваленный ствол", "radius": 0.8, "height": 0.8, "long": 1.6},
+	"cliff": {"hp": 6, "tool": "pickaxe", "drops": {"stone": 8}, "respawn": 0.0,
+		"verb": "Разбить каменную гряду", "radius": 1.0, "height": 2.2, "long": 1.9},
 }
+const MODEL_NAMES := {"tall_grass": ["tall_grass"], "fern": ["fern_a", "fern_b"], "thicket": ["thicket"],
+	"bamboo": ["bamboo_clump"], "jungle_tree": ["jungle_tree_a", "jungle_tree_b"], "fallen_log": ["fallen_log"],
+	"cliff": ["cliff_a", "cliff_b"]}
 const BUSH_SEEDS := ["seed_carrot", "seed_carrot", "seed_potato", "seed_corn", "seed_cabbage"]
 
 @export var kind := "bush"
 var rng_seed := 0
+var uid := ""   # постоянный номер преграды — чтобы сохранить, что её расчистили
+var yaw := -1.0
 var hp := 1
 var active := true
 var visual: Node3D
@@ -38,24 +59,53 @@ func _ready() -> void:
 	var cfg: Dictionary = KINDS[kind]
 	hp = cfg["hp"]
 	match kind:
+		"tall_grass", "fern", "thicket", "bamboo", "jungle_tree", "fallen_log", "cliff":
+			var names: Array = MODEL_NAMES[kind]
+			visual = Models.glb(names[rng.randi() % names.size()])
+			if visual == null:
+				visual = Models.bush(rng)
 		"palm": visual = Models.palm(rng)
 		"bush": visual = Models.bush(rng)
 		"rock": visual = Models.rock(rng, true)
 		"pebble": visual = Models.rock(rng, false)
 		"driftwood": visual = Models.driftwood(rng)
 		"shell": visual = Models.shell(rng)
-	visual.rotation.y = rng.randf() * TAU
+	visual.rotation.y = rng.randf() * TAU if yaw < 0.0 else yaw
 	add_child(visual)
+	_setup_visibility()
 	_base_scale = visual.scale
 	var cs := CollisionShape3D.new()
-	var shape := CylinderShape3D.new()
-	shape.radius = cfg["radius"]
-	shape.height = cfg["height"]
-	cs.shape = shape
+	if cfg.has("long"):
+		# вытянутые преграды (ствол, гряда) — коробка вдоль модели
+		var bx := BoxShape3D.new()
+		bx.size = Vector3(cfg["long"] * 2.0, cfg["height"], cfg["radius"] * 1.6)
+		cs.shape = bx
+		cs.rotation.y = visual.rotation.y
+	else:
+		var shape := CylinderShape3D.new()
+		shape.radius = cfg["radius"]
+		shape.height = cfg["height"]
+		cs.shape = shape
 	cs.position.y = cfg["height"] * 0.5
 	add_child(cs)
 	if kind in ["pebble", "shell", "driftwood"]:
 		collision_layer = 8  # мелочь не мешает ходить
+
+
+func _setup_visibility() -> void:
+	# дальние мелкие объекты не рисуем и не даём им тени — так тысяча растений не тормозит
+	var far := 90.0 if kind in ["jungle_tree", "palm", "cliff", "bamboo"] else 55.0
+	for mi in visual.find_children("*", "GeometryInstance3D", true, false):
+		var gi := mi as GeometryInstance3D
+		gi.visibility_range_end = far
+		gi.visibility_range_end_margin = 6.0
+		gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		if kind in ["tall_grass", "fern", "pebble", "shell", "driftwood"]:
+			gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func is_obstacle() -> bool:
+	return KINDS[kind]["respawn"] <= 0.0
 
 
 func block_radius() -> float:
@@ -104,10 +154,6 @@ func interact(player: Node) -> void:
 			"shell":
 				if randf() < 0.45:
 					Game.add_collectible("shells")
-		# страницы журнала Лёвы иногда находятся в кустах, у плавника, среди камней и ракушек
-		if kind in ["bush", "driftwood", "shell", "rock"] and Game.flags.get("crate_opened", false) \
-				and Game.journal_incomplete() and randf() < 0.09:
-			Game.add_collectible("journal")
 		_deplete()
 
 
@@ -134,7 +180,8 @@ func _shake_palm() -> void:
 			crown.get_node("Coconuts").visible = true)
 
 
-const HIT_SOUND := {"palm": "chop", "driftwood": "chop", "rock": "rock", "pebble": "rock", "bush": "rustle", "shell": "pickup"}
+const HIT_SOUND := {"palm": "chop", "driftwood": "chop", "rock": "rock", "pebble": "rock", "bush": "rustle", "shell": "pickup",
+	"jungle_tree": "chop", "fallen_log": "chop", "bamboo": "chop", "cliff": "rock", "thicket": "rustle", "fern": "rustle", "tall_grass": "rustle"}
 
 
 func _hit_fx(_player: Node) -> void:
@@ -144,7 +191,9 @@ func _hit_fx(_player: Node) -> void:
 	tw.tween_property(visual, "rotation:z", 0.12 * dir, 0.05)
 	tw.tween_property(visual, "rotation:z", -0.06 * dir, 0.08)
 	tw.tween_property(visual, "rotation:z", 0.0, 0.1)
-	var colors := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color("a0a4a8")}
+	var colors := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color("a0a4a8"), "cliff": Color("a0a4a8"),
+		"jungle_tree": Color("c9a26b"), "fallen_log": Color("c9a26b"), "bamboo": Color("c9c46a"),
+		"thicket": Color("3c7a40"), "fern": Color("4f9a4a"), "tall_grass": Color("8fa850")}
 	FX.burst(self, Vector3(0, minf(KINDS[kind]["height"] * 0.3, 1.2), 0), colors.get(kind, Color("e9d8b0")))
 
 
@@ -160,6 +209,12 @@ func _deplete() -> void:
 	else:
 		tw.tween_property(visual, "scale", Vector3(0.01, 0.01, 0.01), 0.25)
 	tw.tween_callback(func(): visual.visible = false)
+	if is_obstacle():
+		Game.bump("cleared", kind)
+		if uid != "":
+			Game.cleared[uid] = true
+		tw.tween_callback(queue_free)
+		return
 	get_tree().create_timer(KINDS[kind]["respawn"]).timeout.connect(func(): _respawn(saved_layer))
 
 
