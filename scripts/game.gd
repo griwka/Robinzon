@@ -11,6 +11,7 @@ signal collection_changed(col_id: String, item_id: String, is_new: bool)
 signal time_changed(time_of_day: float, day: int)
 
 const SAVE_PATH := "user://save.json"
+const SAVE_VERSION := 3
 const SETTINGS_PATH := "user://settings.cfg"
 const DEFAULT_SETTINGS := {"music": 0.6, "sfx": 0.8, "ambience": 0.7, "mouse": 1.0,
 	"shadows": 2, "msaa": 2, "fullscreen": false, "vsync": true}
@@ -310,7 +311,7 @@ func _grant(reward: Dictionary) -> void:
 # ======================================================================= Сохранение
 func save_game(extra: Dictionary) -> void:
 	var data := {
-		"version": 2,
+		"version": SAVE_VERSION,
 		"inventory": inventory, "stats": stats, "unlocked": unlocked.keys(),
 		"collections": collections, "chapter": chapter, "quest_index": quest_index,
 		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags, "cleared": cleared.keys(),
@@ -336,8 +337,8 @@ func load_game() -> Dictionary:
 		return {}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
 	var data = JSON.parse_string(f.get_as_text())
-	if typeof(data) != TYPE_DICTIONARY or int(data.get("version", 0)) < 2:
-		return {}
+	if typeof(data) != TYPE_DICTIONARY or int(data.get("version", 0)) < SAVE_VERSION:
+		return {}   # сохранение старой версии (другой сюжет) — начинаем заново
 	inventory = _int_dict(data.get("inventory", {}))
 	stats = {}
 	var s: Dictionary = data.get("stats", {})

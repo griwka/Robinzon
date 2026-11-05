@@ -346,7 +346,7 @@ func _spawn_resources() -> void:
 				if h > 1.1 and roll > 0.94 and dc > 9.5:
 					_add_decor(decor, "flower_patch", Vector3(x, h - 0.03, z), seed_v)
 				continue
-			_spawn(holder, kind, Vector3(x, h - 0.05, z), seed_v, "j%d" % _uid, -1.0)
+			_spawn(holder, kind, Vector3(x, h - 0.05, z), seed_v, "j%d" % _uid, -100.0)
 	_barrier_rings(holder)
 
 
@@ -360,7 +360,8 @@ func _near_poi(p2: Vector2, r: float) -> bool:
 
 ## Кольца преград вокруг сюжетных мест — без нужного инструмента не пройти.
 func _barrier_rings(holder: Node3D) -> void:
-	var specs := {"old_camp": [["thicket", 5.6, 11], ["jungle_tree", 7.4, 9]],
+	# шаг по кольцу меньше диаметра преграды + игрока — щелей нет
+	var specs := {"old_camp": [["thicket", 5.4, 18], ["jungle_tree", 7.6, 17]],
 		"lifeboat": [["cliff", 6.0, 10]],
 		"lighthouse": [["cliff", 6.2, 11]]}
 	for id in specs:
@@ -375,7 +376,7 @@ func _barrier_rings(holder: Node3D) -> void:
 				var a := TAU * i / cnt + (0.15 if kind == "jungle_tree" else 0.0)
 				var pos := c + Vector3(cos(a) * rad, 0, sin(a) * rad)
 				pos.y = height_at(pos.x, pos.z) - 0.05
-				var yaw := -a + PI / 2 if kind == "cliff" else -1.0
+				var yaw := -a + PI / 2 if kind == "cliff" else -100.0
 				_spawn(holder, kind, pos, k * 7919 + i, "r_%s_%d" % [id, k], yaw)
 
 
