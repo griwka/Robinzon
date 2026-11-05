@@ -431,6 +431,55 @@ func _spawn_resources() -> void:
 			_occupy(p2, fr)
 			_spawn(holder, kind, Vector3(x, h - 0.05, z), seed_v, ("j%d" if loc == "home" else loc + ":j%d") % _uid, -100.0)
 	_spawn_fishing_spots(holder)
+	_spawn_finds(holder)
+
+
+# ------------------------------------------------------------------ Находки
+const BOTTLES := 3
+const STASHES := 2
+var finds: Array[Vector3] = []
+
+
+## Бутылки с записками — у кромки воды подальше от лагеря, тайники — в глубине чащи.
+## Свой генератор случайных чисел: расстановка зарослей от этого не меняется.
+func _spawn_finds(holder: Node3D) -> void:
+	var g := RandomNumberGenerator.new()
+	g.seed = seed_value + 31
+	var camp2 := Vector2(camp_center.x, camp_center.z)
+	var placed: Array[Vector2] = []
+	for want in [["bottle", BOTTLES], ["stash", STASHES]]:
+		var kind: String = want[0]
+		var made := 0
+		for attempt in 3000:
+			if made >= int(want[1]):
+				break
+			var a := g.randf() * TAU
+			var r := g.randf_range(0.2, 1.3) * radius
+			var p := Vector2(cos(a), sin(a)) * r
+			var h := height_at(p.x, p.y)
+			var ok := false
+			if kind == "bottle":
+				ok = h > 0.2 and h < 0.7 and p.distance_to(camp2) > 15.0
+			else:
+				ok = h > 1.6 and h < 8.5 and p.distance_to(camp2) > 20.0 and normal_at(p.x, p.y).y > 0.85
+			if not ok or _near_poi(p, 14.0 if mix == "home" else 16.0):
+				continue
+			var spaced := true
+			for q in placed:
+				spaced = spaced and q.distance_to(p) > 22.0
+			if not spaced or not _is_free(p, 0.8, 1.0):
+				continue
+			placed.append(p)
+			_occupy(p, 0.8)
+			var f := FindSpot.new()
+			f.kind = kind
+			f.index = made if kind == "bottle" else BOTTLES + made
+			f.loc = loc
+			f.position = Vector3(p.x, h - 0.04, p.y)
+			f.rotation.y = g.randf() * TAU
+			holder.add_child(f)
+			finds.append(f.position)
+			made += 1
 
 
 # ------------------------------------------------------------------ Занятые места

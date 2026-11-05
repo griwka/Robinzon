@@ -89,6 +89,8 @@ static func name_of(n: Node) -> String:
 		return NAMES.get(n.kind, n.kind)
 	if n is FruitTree:
 		return Data.TREES[n.tree_type]["name"]
+	if n is FindSpot:
+		return "Бутылка с запиской" if n.kind == "bottle" else "Тайник"
 	return ""
 
 

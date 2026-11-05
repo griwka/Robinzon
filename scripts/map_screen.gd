@@ -219,7 +219,13 @@ func open() -> void:
 	_fog_dirty = true
 	var title := panel.get_node("V/Head/Title") as Label
 	title.text = "Карта: %s" % Data.LOCATIONS[Game.location]["name"]
-	legend.text = "Открыто %d%% острова.  Тёмная зелень — джунгли, светлое — расчищено.  ★ — цель задания" % int(explored_share() * 100.0)
+	var total := 0
+	var got := 0
+	for f in get_tree().get_nodes_in_group("obstacle"):
+		if f is FindSpot:
+			total += 1
+			got += 1 if f.found() else 0
+	legend.text = "Открыто %d%% острова · находок %d из %d.  Тёмная зелень — джунгли, светлое — расчищено.  ★ — цель задания" % [int(explored_share() * 100.0), got, total]
 	hud._open(panel)
 
 
@@ -270,6 +276,11 @@ func _draw_map() -> void:
 		elif n is SupplyCrate:
 			if is_explored(wp.x, wp.z):
 				_icon(mp, Color("d39a5c"), 5.0)
+	# находки: найденные — значком; ненайденные не выдаём, пусть ищут
+	for f in get_tree().get_nodes_in_group("obstacle"):
+		if f is FindSpot and f.found():
+			var fp := _w2m((f as Node3D).global_position)
+			_icon(fp, Color("8fd8b8") if f.kind == "bottle" else Color("e0503a"), 4.5)
 	# сюжетные места острова, которые уже открыты, но сейчас без действий (не в группе interactable)
 	var px := VIEW / span
 	for id in island.poi:

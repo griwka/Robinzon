@@ -419,6 +419,8 @@ func _find_target() -> void:
 			continue
 		var facing := forward.dot(Vector3(to.x, 0, to.z).normalized())
 		var score := d - facing * 1.2
+		if n == target:
+			score -= 0.35   # текущая цель «залипает»: выбор не прыгает между соседними кустами
 		if score < best_score:
 			best_score = score
 			best = n
@@ -432,7 +434,7 @@ func _build_ring() -> void:
 	_ring = MeshInstance3D.new()
 	_ring.name = "TargetRing"
 	var tm := TorusMesh.new()
-	tm.inner_radius = 0.84
+	tm.inner_radius = 0.8
 	tm.outer_radius = 1.0
 	tm.rings = 40
 	tm.ring_segments = 6
@@ -484,17 +486,21 @@ func _update_ring(delta: float) -> void:
 		return
 	var t := target as Node3D
 	var p := t.global_position
-	if t is NPCParrot:
-		# попугай сидит на мачте — кольцо на земле под ним
-		var isl := get_tree().get_first_node_in_group("island")
-		if isl:
-			p.y = isl.height_at(p.x, p.z)
+	var up := Vector3.UP
+	var isl := get_tree().get_first_node_in_group("island")
+	if isl:
+		var ground: float = isl.height_at(p.x, p.z)
+		if t is NPCParrot:
+			p.y = ground   # попугай сидит на мачте — кольцо на земле под ним
+		if absf(p.y - ground) < 0.6:
+			up = isl.normal_at(p.x, p.z)   # на склоне кольцо ложится по земле, а не тонет в ней
 	_ring_t += delta
 	var r := _ring_radius(t) * (1.0 + 0.05 * sin(_ring_t * 5.0))
-	_ring.global_position = p + Vector3(0, 0.07, 0)
-	_ring.scale = Vector3(r, 0.12, r)
+	var right := up.cross(Vector3.FORWARD).normalized()
+	var fwd := right.cross(up).normalized()
+	_ring.global_transform = Transform3D(Basis(right * r, up * 0.12, -fwd * r), p + up * 0.12)
 	var ok := _target_ready(t)
-	_ring_mat.albedo_color = Color(1.0, 0.93, 0.55, 0.9) if ok else Color(1.0, 0.5, 0.42, 0.85)
+	_ring_mat.albedo_color = Color(1.0, 0.93, 0.55, 0.8) if ok else Color(1.0, 0.5, 0.42, 0.75)
 
 
 func try_interact() -> void:

@@ -61,6 +61,25 @@ func _process(_delta: float) -> void:
 			p.global_position = np_ + Vector3(2.5, 0.5, 2.5)
 			p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
 			_flush()
+		if args.has("nearkind"):
+			# герой — в паре шагов от ближайшего объекта этого вида (thicket, bush, find, ...) и смотрит на него
+			var best: Node3D = null
+			for n in get_tree().get_nodes_in_group("interactable"):
+				var k := ""
+				if n is ResourceNode: k = n.kind
+				elif n is FindSpot: k = "find_" + n.kind
+				elif n is StoryPlace: k = n.id
+				if k == args["nearkind"] and (best == null or (n as Node3D).global_position.distance_to(p.global_position) < best.global_position.distance_to(p.global_position)):
+					best = n
+			if best:
+				var dir := (p.global_position - best.global_position)
+				dir.y = 0
+				dir = dir.normalized() if dir.length() > 0.1 else Vector3.BACK
+				p.global_position = best.global_position + dir * 2.0 + Vector3(0, 0.6, 0)
+				p.model.rotation.y = atan2(dir.x, dir.z)
+				p.camera_yaw = atan2(dir.x, dir.z)
+				p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+			_flush()
 		if args.has("at"):
 			var v: PackedStringArray = args["at"].split(",")
 			p.global_position = Vector3(float(v[0]), float(v[1]), float(v[2]))
@@ -408,6 +427,8 @@ func _footprint(n: Node) -> Array:
 		return [c, 0.5, "npc_" + n.npc_id]
 	if n is SupplyCrate:
 		return [c, 0.6, "crate"]
+	if n is FindSpot and not n.found():
+		return [c, n.block_radius(), "find_" + n.kind]
 	return []
 
 
@@ -474,7 +495,7 @@ func _layout_problems(verbose := true) -> int:
 		if not str(f[2]).begins_with("место:"):
 			blockers.append(f)
 	for n in get_tree().get_nodes_in_group("interactable"):
-		if not (n is NPCPerson or n is SupplyCrate or n is FishingSpot or (n is ResourceNode and n.kind == "clay")):
+		if not (n is NPCPerson or n is SupplyCrate or n is FishingSpot or n is FindSpot or (n is ResourceNode and n.kind == "clay")):
 			continue
 		var p: Vector3 = (n as Node3D).global_position
 		var c := Vector2(p.x, p.z)
@@ -512,6 +533,31 @@ func _layout_only() -> void:
 	print("      состав: ", kinds)
 	print("=== %d проблем ===" % n)
 	get_tree().quit(0)
+
+
+# ------------------------------------------------------------------ Находки
+func _test_finds() -> void:
+	var list: Array = []
+	for n in get_tree().get_nodes_in_group("obstacle"):
+		if n is FindSpot:
+			list.append(n)
+	var bottles := list.filter(func(f): return f.kind == "bottle").size()
+	var stashes := list.filter(func(f): return f.kind == "stash").size()
+	_check(bottles == Island.BOTTLES and stashes == Island.STASHES, "на острове находки: бутылок %d, тайников %d" % [bottles, stashes])
+	if list.is_empty():
+		return
+	var isl: Island = main.island
+	var f: FindSpot = list[list.size() - 1]
+	var h := isl.height_at(f.global_position.x, f.global_position.z)
+	_check(h > 0.1, "находка стоит на суше (высота %.1f)" % h)
+	var inv: Dictionary = Game.inventory.duplicate()
+	f.interact(main.player)
+	_flush()
+	_check(f.found() and Game.inventory != inv and Game.count("coins") == int(inv.get("coins", 0)),
+		"находка открывается и даёт вещи (без монет)")
+	_check(not f.is_in_group("interactable"), "открытую находку второй раз не открыть")
+	Game.inventory = inv
+	Game.flags.erase(f.flag())
 
 
 # ------------------------------------------------------------------ Проходимость
@@ -833,6 +879,7 @@ func _autotest() -> void:
 			continue   # форт закрыт стенами, а не зарослями — проверяется отдельно (_test_fort)
 		_check(not _reachable(poi_id), "к месту «%s» не пройти без инструментов" % poi_id)
 	_check(_layout_problems(false) == 0, "заросли не налезают друг на друга и на особые места, к жителям и ящикам можно подойти")
+	_test_finds()
 	var guide: QuestGuide = main.guide
 	guide._find_target()
 	_check(guide.has_target(), "компас задания находит цель (%s)" % guide.target_name)

@@ -14,6 +14,7 @@ var active_variant := ""
 var ghost: Node3D
 var ghost_rot := 0.0
 var valid := false
+var reason := ""   # почему здесь строить нельзя (показывается в подсказке)
 var _ok_mat: StandardMaterial3D
 var _bad_mat: StandardMaterial3D
 
@@ -95,33 +96,53 @@ func _process(_delta: float) -> void:
 
 
 func _check_valid(pos: Vector3, cfg: Dictionary) -> bool:
+	reason = _invalid_reason(pos, cfg)
+	return reason == ""
+
+
+## Пустая строка — строить можно; иначе — понятная причина, почему нельзя.
+func _invalid_reason(pos: Vector3, cfg: Dictionary) -> String:
 	var r: float = cfg["radius"]
 	if pos.distance_to(player.global_position) > 12.0:
-		return false
+		return "слишком далеко"
 	if cfg.get("shore", false):
 		# плот: центр у кромки воды
 		var h := island.height_at(pos.x, pos.z)
-		if h > 0.4 or h < -1.5:
-			return false
+		if h > 0.4:
+			return "нужна кромка воды"
+		if h < -1.5:
+			return "слишком глубоко"
 	else:
 		if island.height_at(pos.x, pos.z) < 0.35:
-			return false
+			return "в воде не построить"
 		# не слишком крутой склон
 		var hs: Array[float] = []
 		for a in 6:
 			var ang := TAU * a / 6.0
 			hs.append(island.height_at(pos.x + cos(ang) * r, pos.z + sin(ang) * r))
 		if hs.max() - hs.min() > 0.9:
-			return false
+			return "слишком круто"
 	var p2 := Vector2(pos.x, pos.z)
 	for group in ["building", "obstacle"]:
 		for b in get_tree().get_nodes_in_group(group):
 			var br: float = b.block_radius()
 			if br > 0.0 and Vector2(b.global_position.x, b.global_position.z).distance_to(p2) < r + br + 0.1:
-				return false
+				if b is ResourceNode and b.is_obstacle():
+					return "мешают заросли — расчисти место"
+				return "мешает: " + _what(b)
 	if not cfg.get("shore", false) and Vector2(player.global_position.x, player.global_position.z).distance_to(p2) < r + 0.35:
-		return false
-	return true
+		return "отойди в сторону"
+	return ""
+
+
+func _what(n: Node) -> String:
+	if n is Building:
+		return Data.BUILDINGS[n.id]["name"].to_lower()
+	var nm := QuestGuide.name_of(n)
+	if nm == "":
+		return "что-то рядом"
+	# имена жителей и мест — с большой буквы, остальное — с маленькой
+	return nm.to_lower() if (n is ResourceNode or n is FruitTree or n is FindSpot) else nm
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -144,7 +165,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _try_place() -> void:
 	if not valid:
-		Game.notified.emit("Здесь строить нельзя", Color("ff9d7a"))
+		Game.notified.emit("Здесь строить нельзя: %s" % reason if reason != "" else "Здесь строить нельзя", Color("ff9d7a"))
 		return
 	var cfg: Dictionary = Data.BUILDINGS[active_id]
 	if not Game.pay(cost_of(active_id, active_variant)):
