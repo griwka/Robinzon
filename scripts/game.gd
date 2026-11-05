@@ -9,12 +9,14 @@ signal quest_completed(quest: Dictionary)
 signal dialogue_requested(lines: Array, on_done: Callable)
 signal collection_changed(col_id: String, item_id: String, is_new: bool)
 signal time_changed(time_of_day: float, day: int)
+signal shop_requested(shop_id: String)
+signal choice_requested(title: String, options: Array)
 
 const SAVE_PATH := "user://save.json"
-const SAVE_VERSION := 3
+const SAVE_VERSION := 4
 const SETTINGS_PATH := "user://settings.cfg"
 const DEFAULT_SETTINGS := {"music": 0.6, "sfx": 0.8, "ambience": 0.7, "mouse": 1.0,
-	"shadows": 2, "msaa": 2, "fullscreen": false, "vsync": true}
+	"shadows": 2, "msaa": 2, "fullscreen": false, "vsync": true, "sharpen": 2}
 const DAY_LENGTH := 600.0  # секунд на сутки (ночь идёт вдвое быстрее)
 
 var inventory: Dictionary = {}
@@ -168,16 +170,59 @@ func craft(recipe: Dictionary) -> bool:
 	return true
 
 
+# ======================================================================= Торговля
+func shop_open(shop_id: String) -> bool:
+	return unlocked.has("shop_" + shop_id)
+
+
+func shop_items(shop_id: String) -> Array:
+	var out := []
+	for e in Data.SHOPS[shop_id]["buy"]:
+		if not e.has("unlock") or unlocked.has(e["unlock"]):
+			out.append(e)
+	return out
+
+
+func buy(shop_id: String, id: String, price: int) -> bool:
+	if count("coins") < price:
+		notified.emit("Не хватает монет: нужно %d" % price, Color("ff9d7a"))
+		return false
+	pay({"coins": price})
+	add_item(id, 1, false, true)
+	notified.emit("Куплено: %s" % item_name(id), Color("ffe08a"))
+	Audio.play("pickup", -3.0)
+	bump("bought", id)
+	bump("bought", "any")
+	return true
+
+
+## Сколько штук можно продать: всё, кроме отложенного для задания.
+func sellable(id: String) -> int:
+	return maxi(0, count(id) - reserved(id))
+
+
+func sell(shop_id: String, id: String, n := 1) -> void:
+	n = mini(n, sellable(id))
+	if n <= 0 or not Data.SELL_PRICES.has(id):
+		return
+	pay({id: n})
+	add_item("coins", Data.SELL_PRICES[id] * n, false, true)
+	notified.emit("Продано: %s ×%d  +%d мон." % [item_name(id), n, Data.SELL_PRICES[id] * n], Color("f3e2b8"))
+	Audio.play("pickup", -3.0, 0.1)
+	bump("sold", shop_id, n)
+	bump("sold", "any", n)
+
+
 # ======================================================================= Еда
 ## Съесть самое сытное. Возвращает сытность (0 — нечего есть). Еда восстанавливает силы при лазании.
 func eat_best_food() -> int:
 	var best := ""
 	for id in Data.ITEMS:
-		if Data.ITEMS[id].has("food") and count(id) > 0:
+		if Data.ITEMS[id].has("food") and count(id) - reserved(id) > 0:
 			if best == "" or Data.ITEMS[id]["food"] > Data.ITEMS[best]["food"]:
 				best = id
 	if best == "":
-		notified.emit("Нечего есть — потряси пальму или банан!", Color("ff9d7a"))
+		notified.emit("Нечего есть (то, что нужно для задания, не трогаю) — потряси пальму или банан!", Color("ff9d7a"))
 		return 0
 	pay({best: 1})
 	var v: int = Data.ITEMS[best]["food"]
@@ -245,9 +290,12 @@ func collection_complete(col_id: String) -> bool:
 
 
 # ======================================================================= Задания
+## Учесть событие для заданий. Счётчик ведётся и в целом, и отдельно по острову (target@остров).
 func bump(kind: String, target: String, amount: int = 1) -> void:
 	var d: Dictionary = stats.get(kind, {})
 	d[target] = d.get(target, 0) + amount
+	var at := target + "@" + location
+	d[at] = d.get(at, 0) + amount
 	stats[kind] = d
 	_check_quest()
 
@@ -267,14 +315,16 @@ func current_quest() -> Dictionary:
 	return {}
 
 
-## Отдать предметы, которые просит текущее задание (например, еду для Мелани). Возвращает, что-то отдали ли.
-func deliver_for_quest() -> bool:
+## Отдать предметы, которые просит текущее задание (например, еду для Марты). Возвращает, что-то отдали ли.
+func deliver_for_quest(to := "") -> bool:
 	var q := current_quest()
 	if q.is_empty() or not quest_started:
 		return false
 	var gave := false
 	for t in q["tasks"]:
-		if t["kind"] == "delivered" and task_progress(t) < t["count"] and count(t["target"]) > 0:
+		if t["kind"] != "delivered" or (to != "" and t.get("to", to) != to):
+			continue
+		while task_progress(t) < t["count"] and count(t["target"]) > 0:
 			pay({t["target"]: 1})
 			notified.emit("Отдано: %s" % item_name(t["target"]), Color("ffe08a"))
 			bump("delivered", t["target"])
@@ -282,10 +332,39 @@ func deliver_for_quest() -> bool:
 	return gave
 
 
+## Сколько штук предмета нужно отложить для текущего задания (не продавать и не съедать).
+func reserved(id: String) -> int:
+	var q := current_quest()
+	if q.is_empty() or not quest_started:
+		return 0
+	var need := 0
+	for t in q["tasks"]:
+		if t["kind"] == "delivered" and t["target"] == id:
+			need += t["count"] - task_progress(t)
+	return need
+
+
+# Разовые события считаем с нуля (сделал раньше — тоже засчитано), повторяемые — от начала задания.
+# cleared — тоже с нуля: преграды конечны, игрок мог расчистить их заранее.
+const ZERO_BASE_KINDS := ["talk", "built", "sailed", "collection", "found", "lit", "reached", "bought", "restored", "delivered", "cleared"]
+
+
+func _task_target(task: Dictionary) -> String:
+	return task["target"] + ("@" + task["where"] if task.has("where") else "")
+
+
 func task_progress(task: Dictionary) -> int:
-	var key: String = task["kind"] + ":" + task["target"]
+	var tgt := _task_target(task)
+	var key: String = task["kind"] + ":" + tgt
 	var base: int = quest_baseline.get(key, 0)
-	return clampi(stat(task["kind"], task["target"]) - base, 0, task["count"])
+	var p := clampi(stat(task["kind"], tgt) - base, 0, task["count"])
+	# инструмент уже есть (сделан раньше или подарен) — «смастери» засчитывается
+	if task["kind"] in ["crafted", "collected", "bought"] and item(task["target"]).get("cat", "") == "tool" and has_tool(task["target"]):
+		p = task["count"]
+	# «собери N» засчитывается и тем, что уже лежит в сумке (ресурс мог кончиться на острове раньше задания)
+	if task["kind"] == "collected" and not task.has("where"):
+		p = maxi(p, mini(count(task["target"]), task["count"]))
+	return p
 
 
 func quest_done(q: Dictionary) -> bool:
@@ -303,10 +382,10 @@ func start_current_quest() -> void:
 	quest_started = true
 	quest_baseline = {}
 	for t in q["tasks"]:
-		var key: String = t["kind"] + ":" + t["target"]
-		# постройки и разговоры считаем с нуля, ресурсы — от момента получения задания
-		var zero: bool = t["kind"] in ["talk", "built", "sailed", "collection", "found", "lit", "reached"] and not t.get("fresh", false)
-		quest_baseline[key] = 0 if zero else stat(t["kind"], t["target"])
+		var tgt := _task_target(t)
+		var key: String = t["kind"] + ":" + tgt
+		var zero: bool = t["kind"] in ZERO_BASE_KINDS and not t.get("fresh", false)
+		quest_baseline[key] = 0 if zero else stat(t["kind"], tgt)
 	quest_changed.emit()
 	dialogue_requested.emit(q.get("intro", []), func(): _check_quest())
 
@@ -336,6 +415,10 @@ func _grant(reward: Dictionary) -> void:
 		var b: Dictionary = Data.BUILDINGS.get(id, {})
 		if not b.is_empty():
 			notified.emit("Открыта постройка: %s" % b["name"], Color("bfe3ff"))
+		elif id.begins_with("buy_"):
+			notified.emit("В лавке новый товар: %s" % item_name(id.substr(4)), Color("bfe3ff"))
+		elif id.begins_with("shop_"):
+			notified.emit("Открыта лавка: %s" % Data.SHOPS[id.substr(5)]["name"], Color("bfe3ff"))
 		else:
 			for r in Data.RECIPES:
 				if r["id"] == id:

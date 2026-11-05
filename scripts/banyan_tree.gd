@@ -1,7 +1,7 @@
 class_name BanyanTree
 extends Node3D
 ## Великий Баньян: ствол, три яруса-площадки на разной высоте, лианы между ними, чаша огня наверху
-## и Мелани на втором ярусе. Ярусы — по спирали вокруг ствола, каждая лиана висит над нижним ярусом.
+## и Марта на втором ярусе. Ярусы — по спирали вокруг ствола, каждая лиана висит над нижним ярусом.
 
 const DECKS := [   # [высота над корнями, угол вокруг ствола]
 	[6.5, 0.0],
@@ -52,8 +52,23 @@ func _ready() -> void:
 		dcs.rotation.y = -a
 		body.add_child(dcs)
 		decks.append(holder)
-	# лианы: с земли на 1-й ярус и между ярусами
-	_add_liana(Vector3(cos(DECKS[0][1]) * (DECK_R + 2.3), 0.0, sin(DECKS[0][1]) * (DECK_R + 2.3)), DECKS[0][0], _deck_center(0))
+	# лианы: с земли на 1-й ярус (сбоку от яруса) и между ярусами
+	var a0: float = DECKS[0][1]
+	var radial := Vector3(cos(a0), 0, sin(a0))
+	var tangent := Vector3(-sin(a0), 0, cos(a0))
+	var d0 := _deck_center(0)
+	_add_liana(Vector3(d0.x, 0.0, d0.z) + tangent * 2.35, DECKS[0][0], d0 - radial * 1.4)
+	# дом Лёвы (развалины) и его сундук — на первом ярусе
+	var th := StoryPlace.new()
+	th.id = "treehouse"
+	th.position = d0 + radial * 1.25 + Vector3(0, 0.08, 0)
+	th.rotation.y = -a0 + PI / 2
+	add_child(th)
+	var ch := StoryPlace.new()
+	ch.id = "lyova_chest"
+	ch.position = d0 - radial * 0.4 + tangent * 1.45 + Vector3(0, 0.08, 0)
+	ch.rotation.y = -a0
+	add_child(ch)
 	for i in range(1, DECKS.size()):
 		var a_mid: float = (DECKS[i - 1][1] + DECKS[i][1]) * 0.5
 		var base := Vector3(cos(a_mid) * (DECK_R + 0.6), DECKS[i - 1][0], sin(a_mid) * (DECK_R + 0.6))
@@ -79,12 +94,17 @@ func _ready() -> void:
 	l.light_energy = 4.0
 	l.omni_range = 28.0
 	bowl_fire.add_child(l)
-	# Мелани на втором ярусе
+	# Марта на втором ярусе
 	var mel := NPCPerson.new()
-	mel.npc_id = "melanie"
+	mel.npc_id = "marta"
 	mel.position = _deck_center(1) + Vector3(0, 0.08, 0)
 	mel.rotation.y = -DECKS[1][1] + PI
 	add_child(mel)
+	# обезьянка Кешью — у корней, на земле
+	var kesha := NPCPerson.new()
+	kesha.npc_id = "kesha"
+	kesha.position = Vector3(cos(2.6) * 6.3, 0.0, sin(2.6) * 6.3)
+	add_child(kesha)
 	# места для осмотра: корни и чаша огня
 	for spec in [["banyan_roots", Vector3(cos(0.0) * 4.3, 0.2, sin(0.0) * 4.3)], ["fire_bowl", top + Vector3(0, 0.6, 0)]]:
 		var sp := StoryPlace.new()

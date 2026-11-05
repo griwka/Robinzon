@@ -99,4 +99,9 @@ func interact(_player: Node) -> void:
 				lines.append(["parrot", "Сейчас главное — %s. Карр!" % t["text"].to_lower()])
 				break
 	Game.bump("talk", "parrot_idle")
+	if Game.shop_open("rumba"):
+		Game.choice_requested.emit("Попугай Румба", [
+			{"text": "Торговать", "icon": "coins", "callback": func(): Game.shop_requested.emit("rumba")},
+			{"text": "Поговорить", "icon": "portrait_parrot", "callback": func(): Game.dialogue_requested.emit(lines, Callable())}])
+		return
 	Game.dialogue_requested.emit(lines, Callable())

@@ -47,8 +47,8 @@ func _init() -> void:
 	detail_noise.seed = seed_value + 2
 	detail_noise.frequency = 0.25
 	noise_tex = NoiseTexture2D.new()
-	noise_tex.width = 256
-	noise_tex.height = 256
+	noise_tex.width = 512
+	noise_tex.height = 512
 	noise_tex.seamless = true
 	var nz := FastNoiseLite.new()
 	nz.seed = 7

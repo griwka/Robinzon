@@ -1,17 +1,20 @@
 class_name NPCPerson
 extends StaticBody3D
-## Житель острова (Мелани и будущие выжившие с «Альбатроса»): говорит, принимает предметы по заданию.
+## Житель острова (Марта и будущие выжившие с «Альбатроса»): говорит, принимает предметы по заданию.
 
 const IDLE := {
-	"melanie": [
+	"marta": [
 		"Огонь — как суп: отвернёшься, и всё, пригорел. Или погас.",
 		"Лёва ел всё подряд и хвалил. Ужасный критик, золотое сердце.",
 		"Румба! Не клюй корзину с манго, я вижу!",
 		"Ночью отсюда видно твой маяк. Мне стало спокойнее.",
 	],
+	"kesha": ["Ук-ук!", "Кешью почёсывает за ухом и косится на твою сумку.", "Кешью делает вид, что спит. Одним глазом."],
 }
+const MODELS := {"marta": "marta", "kesha": "monkey"}
+const SHOP := {"marta": "marta"}
 
-var npc_id := "melanie"
+var npc_id := "marta"
 var model: Node3D
 var head: Node3D
 var _t := 0.0
@@ -20,15 +23,15 @@ var _t := 0.0
 func _ready() -> void:
 	add_to_group("interactable")
 	collision_layer = 4
-	model = Models.glb(npc_id)
+	model = Models.glb(MODELS.get(npc_id, npc_id))
 	if model:
 		add_child(model)
 		var body := model.get_node_or_null("Body")
 		head = body.get_node_or_null("Head") if body else null
 	var cs := CollisionShape3D.new()
 	var c := CapsuleShape3D.new()
-	c.radius = 0.35
-	c.height = 1.7
+	c.radius = 0.35 if npc_id != "kesha" else 0.25
+	c.height = 1.7 if npc_id != "kesha" else 0.8
 	cs.shape = c
 	cs.position.y = 0.85
 	add_child(cs)
@@ -64,7 +67,13 @@ func interact(_player: Node) -> void:
 			if t["kind"] == "talk" and t["target"] == npc_id and Game.task_progress(t) < t["count"]:
 				Game.bump("talk", npc_id)
 				return
-	if Game.deliver_for_quest():
+	if Game.deliver_for_quest(npc_id):
 		return
 	var lines: Array = IDLE.get(npc_id, ["..."])
-	Game.dialogue_requested.emit([[npc_id, lines[randi() % lines.size()]]], Callable())
+	var say := func(): Game.dialogue_requested.emit([[npc_id, lines[randi() % lines.size()]]], Callable())
+	if SHOP.has(npc_id) and Game.shop_open(SHOP[npc_id]):
+		Game.choice_requested.emit(Data.SPEAKERS[npc_id]["name"], [
+			{"text": "Торговать", "icon": "coins", "callback": func(): Game.shop_requested.emit(SHOP[npc_id])},
+			{"text": "Поговорить", "icon": "portrait_" + npc_id, "callback": say}])
+		return
+	say.call()

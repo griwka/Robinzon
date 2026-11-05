@@ -8,7 +8,7 @@ signal sleep_requested
 signal craft_requested(station: String)
 signal choice_requested(title: String, options: Array)
 
-const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench"]
+const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe"]
 
 var id := "campfire"
 var variant := ""
@@ -61,7 +61,9 @@ func _make_collision() -> void:
 			_add_box(Vector3(1.6, 1.3, 2.2), Vector3(0, 0.65, 0), 0.0)
 		"raft":
 			_add_box(Vector3(2.2, 0.4, 3.0), Vector3(0, 0.2, 0), 0.0)
-		"goat_pen", "garden_bed", "torch", "flowerbed", "shell_path":
+		"canoe":
+			_add_box(Vector3(1.0, 0.4, 3.0), Vector3(0, 0.2, 0), 0.0)
+		"goat_pen", "sheep_pen", "garden_bed", "torch", "flowerbed", "shell_path":
 			_add_cyl(r * 0.6, 0.6)
 			collision_layer = 8  # не мешают ходить
 		"coop":
@@ -113,7 +115,7 @@ func _process(delta: float) -> void:
 		var fire := visual.get_node_or_null("Fire")
 		if fire:
 			fire.scale = Vector3(1, 0.85 + 0.2 * abs(sin(_t * 9.0)), 1)
-	if id == "raft":
+	if id in ["raft", "canoe"]:
 		visual.position.y = sin(_t * 1.4) * 0.06
 		visual.rotation.z = sin(_t * 1.1) * 0.03
 	if marker and marker.visible:
@@ -141,6 +143,7 @@ func get_hint() -> String:
 		"hammock": return "Гамак — вздремнуть до утра"
 		"torch": return "Факел — " + ("погасить" if lit else "зажечь")
 		"raft": return "Плот — отправиться в плавание!"
+		"canoe": return "Каноэ — плыть"
 		"bench": return "Скамейка — присесть отдохнуть"
 	return Data.BUILDINGS[id]["name"]
 
@@ -150,7 +153,7 @@ func interact(_player: Node) -> void:
 		"campfire": craft_requested.emit("campfire")
 		"workbench": craft_requested.emit("workbench")
 		"tent", "hut", "hammock": sleep_requested.emit()
-		"raft": sail_requested.emit()
+		"raft", "canoe": sail_requested.emit()
 		"bench": Game.notified.emit("Ты присел на скамейку. Шумит прибой, кричат чайки...", Color("ffe08a"))
 		"torch":
 			lit = not lit

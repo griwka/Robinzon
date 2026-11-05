@@ -18,6 +18,8 @@ func _ready() -> void:
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	if args.has("autotest"):
 		_autotest.call_deferred()
+	if args.has("validate"):
+		_validate_only.call_deferred()
 
 
 func _process(_delta: float) -> void:
@@ -66,6 +68,11 @@ func _process(_delta: float) -> void:
 				Game.dialogue_requested.emit([["parrot", "Карр! Живой! Живой! Я уж думал, ты рыба! Я — Румба, местный житель."]], Callable())
 			"pause":
 				main._pause()
+			"shop":
+				Game.unlocked.merge({"shop_marta": true, "buy_hive_frame": true}, true)
+				Game.inventory["coins"] = 47
+				main.hud._shop_tab = args.get("tab", "buy")
+				main.hud.open_shop("marta")
 			"settings":
 				main._pause()
 				main.menu.open_settings(main.menu.show_pause)
@@ -148,6 +155,101 @@ func _demo() -> void:
 	Game.inventory_changed.emit()
 	main.player.global_position = c + to_sea * 2.5 + right * 1.0 + Vector3(0, 0.5, 0)
 	main.player.cam_rig.global_position = main.player.global_position
+
+
+var earned_by_selling := 0
+
+
+func _shop_for(item_id: String) -> String:
+	for sh in Data.SHOPS:
+		if not Game.shop_open(sh):
+			continue
+		if item_id == "any":
+			return sh
+		for e in Game.shop_items(sh):
+			if e["item"] == item_id:
+				return sh
+	return "rumba"
+
+
+# ------------------------------------------------------------------ Ошибки игрока
+## Ситуации, когда игрок делает «не то» или «не в том порядке», а задание всё равно должно быть выполнимо.
+func _test_mistakes() -> void:
+	var start_q := func(task: Dictionary) -> int:
+		var key: String = task["kind"] + ":" + Game._task_target(task)
+		var zero: bool = task["kind"] in Game.ZERO_BASE_KINDS
+		Game.quest_baseline = {key: 0 if zero else Game.stat(task["kind"], Game._task_target(task))}
+		return Game.task_progress(task)
+	Game.reset_state()
+	Game.bump("found", "crate")
+	_check(start_q.call({"kind": "found", "target": "crate", "count": 1}) == 1, "ящик открыт раньше задания — засчитано")
+	Game.bump("cleared", "cliff", 21)
+	_check(start_q.call({"kind": "cleared", "target": "cliff", "count": 2}) == 2, "все скалы разбиты раньше задания — засчитано")
+	Game.add_item("bamboo", 12, true, true)
+	_check(start_q.call({"kind": "collected", "target": "bamboo", "count": 12}) == 12, "бамбук нарублен раньше задания (весь) — засчитано")
+	Game.add_item("stone_axe", 1, true, true)
+	_check(start_q.call({"kind": "crafted", "target": "stone_axe", "count": 1}) == 1, "топор сделан раньше задания — засчитано")
+	# еда, нужная по заданию, не съедается и не продаётся
+	Game.reset_state()
+	var qs: Array = Data.CHAPTERS[1]["quests"]
+	for i in qs.size():
+		if qs[i]["id"] == "feast":
+			Game.chapter = 1
+			Game.quest_index = i
+	Game.quest_started = true
+	Game.quest_baseline = {}
+	Game.inventory = {"fried_egg": 1, "baked_potato": 1, "banana": 2}
+	var got := Game.eat_best_food()
+	_check(Game.count("fried_egg") == 1 and Game.count("baked_potato") == 1 and got > 0, "на лиане съедается банан, а не еда для Марты")
+	_check(Game.sellable("fried_egg") == 0, "еду для задания нельзя случайно продать")
+	Game.sell("marta", "fried_egg", 1)
+	_check(Game.count("fried_egg") == 1, "продажа отложенного предмета не проходит")
+	# монеты не уходят в минус, без денег покупка не проходит
+	Game.inventory = {"coins": 3}
+	_check(not Game.buy("marta", "hive_frame", 40) and Game.count("coins") == 3, "без денег купить нельзя, монеты не пропадают")
+	# семена всегда можно купить — земледелие не заходит в тупик
+	Game.location = args.get("location", "home")
+	Game.unlocked = {"shop_rumba": true}
+	var has_seed := false
+	for e in Game.shop_items("rumba"):
+		has_seed = has_seed or e["item"] == "seed_carrot"
+	_check(has_seed, "семена моркови в лавке Румбы есть всегда")
+	# конечные ресурсы острова покрывают задания
+	if Game.location == "home":
+		var bamboo := 0
+		var cliffs := 0
+		for n in get_tree().get_nodes_in_group("obstacle"):
+			if n is ResourceNode and n.kind == "bamboo":
+				bamboo += 1
+			if n is ResourceNode and n.kind == "cliff":
+				cliffs += 1
+		_check(bamboo * 3 >= 18, "бамбука на острове хватает на хижину с запасом (%d рощ = %d бамбука, нужно 12)" % [bamboo, bamboo * 3])
+		_check(cliffs >= 10, "скал хватает на задание (%d)" % cliffs)
+	# проверка самого валидатора: ломаем копию сюжета — он должен заметить
+	var broken: Array = Data.CHAPTERS.duplicate(true)
+	broken[0]["quests"][2]["reward"]["unlock"] = []   # палатка больше не открывает мачете
+	var v := QuestValidator.new()
+	_check(v.run(broken).size() > 0, "валидатор ловит сломанный сюжет («%s»)" % (v.errors[0] if v.errors.size() else "—"))
+	Game.reset_state()
+	Game.location = args.get("location", "home")
+
+
+# ------------------------------------------------------------------ Проверка сюжета «на бумаге»
+func _validate() -> void:
+	var v := QuestValidator.new()
+	var errs := v.run()
+	_check(errs.is_empty(), "все задания всех глав выполнимы по данным (%d проблем)" % errs.size())
+	for e in errs:
+		print("      ✗ " + e)
+	for r in v.report:
+		print("      ₭ " + r)
+
+
+func _validate_only() -> void:
+	print("=== VALIDATE ===")
+	_validate()
+	print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
+	get_tree().quit(0 if fails.is_empty() else 1)
 
 
 # ------------------------------------------------------------------ Лазание
@@ -358,7 +460,10 @@ func _do_task(t: Dictionary) -> void:
 			_give(Data.PENS[target]["feed"])
 			pen.interact(main.player)
 		"product":
-			var pen_id := "coop" if target == "egg" else "goat_pen"
+			var pen_id := ""
+			for pid in Data.PENS:
+				if Data.PENS[pid]["product"] == target:
+					pen_id = pid
 			var guard := 0
 			while Game.task_progress(t) < t["count"] and guard < 10:
 				var pen := _pen(pen_id)
@@ -381,10 +486,43 @@ func _do_task(t: Dictionary) -> void:
 						c.interact(main.player)
 					done += 1
 		"found", "lit":
+			if target == "crate":
+				for c in get_tree().get_nodes_in_group("interactable"):
+					if c is SupplyCrate:
+						c.interact(main.player)
+				return
 			if t["kind"] == "lit":
 				_give(StoryPlace.PLACES[target]["fuel"])
 			for c in get_tree().get_nodes_in_group("interactable"):
 				if c is StoryPlace and c.id == target:
+					c.interact(main.player)
+					break
+		"sold":
+			var shop := "rumba" if target == "any" else target
+			_give({"carrot": need})
+			Game.sell(shop, "carrot", need)
+		"bought":
+			var shop_id := _shop_for(target)
+			var item_id := "seed_carrot" if target == "any" else target
+			var price := 0
+			for e in Game.shop_items(shop_id):
+				if e["item"] == item_id:
+					price = e["price"]
+			# честная экономика: монеты зарабатываем продажей урожая, а не выдаём даром
+			var want_coins := price * need - Game.count("coins")
+			if want_coins > 0:
+				var n_sell: int = int(ceil(want_coins / float(Data.SELL_PRICES["watermelon"])))
+				_give({"watermelon": n_sell})
+				Game.sell(shop_id, "watermelon", n_sell)
+				earned_by_selling += Data.SELL_PRICES["watermelon"] * n_sell
+			for i in need:
+				Game.buy(shop_id, item_id, price)
+		"restored":
+			_give(StoryPlace.PLACES[target]["restore"])
+			for c in get_tree().get_nodes_in_group("interactable"):
+				if c is StoryPlace and c.id == target:
+					c.interact(main.player)
+					_flush()
 					c.interact(main.player)
 					break
 		"collection":
@@ -412,9 +550,9 @@ func _do_task(t: Dictionary) -> void:
 			main.player.global_position = tree.to_global(tree._deck_center(idx)) + Vector3(0, 0.3, 0)
 			tree._process(0.0)
 		"delivered":
-			_give({target: 1})
+			_give({target: need})
 			for n in get_tree().get_nodes_in_group("interactable"):
-				if n is NPCPerson:
+				if n is NPCPerson and n.npc_id == t.get("to", "marta"):
 					n.interact(main.player)
 					break
 
@@ -423,6 +561,7 @@ func _autotest() -> void:
 	print("=== AUTOTEST ===")
 	Game.delete_save()
 	Game.reset_state()
+	Game.location = args.get("location", "home")
 	await get_tree().process_frame
 	_flush()
 	Game.start_current_quest()
@@ -437,6 +576,11 @@ func _autotest() -> void:
 		_check(not _reachable(poi_id), "к месту «%s» не пройти без инструментов" % poi_id)
 
 	var ch := int(args.get("chapter", "1")) - 1
+	if ch == 0:
+		_validate()
+		_test_mistakes()
+		Game.start_current_quest()
+		_flush()
 	if ch == 1:
 		_test_climb()
 	if ch > 0:
@@ -468,6 +612,11 @@ func _autotest() -> void:
 			break
 	var done_ch: bool = Game.chapter > ch or (Game.quest_index >= qs.size())
 	_check(done_ch, "глава %d пройдена" % (ch + 1))
+	print("      ₭ заработано продажей урожая по ходу главы: %d монет" % earned_by_selling)
+	if ch + 1 < Data.CHAPTERS.size():
+		var nq := Game.current_quest()
+		_check(Game.chapter == ch + 1 and not nq.is_empty() and nq["id"] == Data.CHAPTERS[ch + 1]["quests"][0]["id"],
+			"после главы %d сразу начинается глава %d («%s»)" % [ch + 1, ch + 2, nq.get("title", "—")])
 	if ch > 0:
 		print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
 		get_tree().quit(0 if fails.is_empty() else 1)

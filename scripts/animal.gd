@@ -18,7 +18,13 @@ var _voice_t := randf_range(6.0, 20.0)
 
 func _ready() -> void:
 	add_to_group("interactable")
-	model = Models.chicken() if kind == "chicken" else Models.goat()
+	match kind:
+		"chicken": model = Models.chicken()
+		"goat": model = Models.goat()
+		_:
+			model = Models.glb(kind)
+			if model == null:
+				model = Models.goat()
 	add_child(model)
 	body = model.get_node("Body")
 	head = body.get_node("Head")
@@ -87,7 +93,7 @@ func tool_hint() -> String:
 
 
 func get_hint() -> String:
-	return "Погладить %s" % ("курочку" if kind == "chicken" else "козу")
+	return "Погладить %s" % {"chicken": "курочку", "goat": "козу", "sheep": "овечку"}.get(kind, "зверя")
 
 
 func interact(_player: Node) -> void:
@@ -98,6 +104,7 @@ func interact(_player: Node) -> void:
 	Audio.play("cluck" if kind == "chicken" else "bleat", -2.0, 0.12, global_position)
 	Game.bump("petted", kind)
 	var lines := {"chicken": ["Ко-ко-ко!", "Курочка довольно кудахчет", "Курица смотрит на тебя одним глазом"],
-		"goat": ["Ме-е-е!", "Коза жуёт и не обращает внимания", "Коза бодает тебя в руку — ещё!"]}
+		"goat": ["Ме-е-е!", "Коза жуёт и не обращает внимания", "Коза бодает тебя в руку — ещё!"],
+		"sheep": ["Бе-е-е!", "Овечка тёплая и мягкая, как облако", "Овечка жмурится от удовольствия"]}
 	var l: Array = lines[kind]
 	Game.notified.emit(l[randi() % l.size()], Color("ffe08a"))

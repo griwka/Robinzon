@@ -13,6 +13,7 @@ var sky_mat: ProceduralSkyMaterial
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
 var fill: DirectionalLight3D
+var sharpen: ColorRect
 var clouds: Array[Node3D] = []
 var _autosave_t := 0.0
 var menu: GameMenu
@@ -226,17 +227,28 @@ func _setup_environment() -> void:
 	env.fog_sky_affect = 0.0
 	env.adjustment_enabled = true
 	env.adjustment_saturation = 0.97
-	env.adjustment_contrast = 1.04
+	env.adjustment_contrast = 1.07
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
+	# резкость поверх 3D, под интерфейсом
+	var post := CanvasLayer.new()
+	post.layer = 1
+	add_child(post)
+	sharpen = ColorRect.new()
+	sharpen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sharpen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sm := ShaderMaterial.new()
+	sm.shader = preload("res://shaders/sharpen.gdshader")
+	sharpen.material = sm
+	post.add_child(sharpen)
 
 	sun = DirectionalLight3D.new()
 	sun.name = "Sun"
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 60.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.shadow_blur = 0.6
+	sun.shadow_blur = 0.0   # резкие мультяшные тени
 	sun.light_specular = 0.6
 	add_child(sun)
 	# мягкий заполняющий свет без теней: теневая сторона персонажей не уходит в грязь
@@ -325,6 +337,9 @@ func _spawn_clouds() -> void:
 
 func _process(delta: float) -> void:
 	_update_sky()
+	var sh := int(Game.settings.get("sharpen", 2))
+	sharpen.visible = sh > 0
+	(sharpen.material as ShaderMaterial).set_shader_parameter("strength", 0.25 if sh == 1 else 0.5)
 	_update_answer_fire()
 	if in_menu:
 		# камера медленно облетает остров
@@ -438,6 +453,9 @@ func _choose_destination() -> void:
 		if cfg.has("unlock_flag") and not Game.flags.get(cfg["unlock_flag"], false):
 			continue
 		options.append({"text": "Плыть: %s" % cfg["name"], "icon": "sail", "callback": travel_to.bind(loc)})
+	if Game.stat("built", "canoe") > 0:
+		options.append({"text": "Старый форт — глава 3 (в разработке)", "icon": "lyova_key",
+			"callback": func(): Game.notified.emit("Старый форт появится в следующей версии игры", Color("ffe08a"))})
 	if options.is_empty():
 		Game.notified.emit("Плыть пока некуда. Куда указывает свет?..", Color("ffe08a"))
 		return

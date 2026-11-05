@@ -20,7 +20,7 @@ func _ready() -> void:
 		var a := Animal.new()
 		a.kind = cfg["animal"]
 		a.home = global_position
-		a.radius = 1.2 if id == "coop" else 1.5
+		a.radius = 1.2 if id == "coop" else 1.4
 		a.position = position + Vector3(randf_range(-1, 1), 0, randf_range(-1, 1))
 		get_parent().add_child.call_deferred(a)
 		animals.append(a)
@@ -34,7 +34,7 @@ func _exit_tree() -> void:
 
 
 func marker_height() -> float:
-	return 2.6 if id == "coop" else 1.8
+	return {"coop": 2.6, "beehive": 2.1, "sheep_pen": 1.9}.get(id, 1.8)
 
 
 func _process(delta: float) -> void:
@@ -88,7 +88,7 @@ func interact(_player: Node) -> void:
 			fed = true
 			progress = 0.0
 			Game.bump("fed", id)
-			Audio.play("cluck" if id == "coop" else "bleat", -2.0, 0.1, global_position)
+			Audio.play({"coop": "cluck", "beehive": "rustle"}.get(id, "bleat"), -2.0, 0.1, global_position)
 			Game.notified.emit("%s накормлены!" % cfg["animal_name"], Color("ffe08a"))
 			for a in animals:
 				if is_instance_valid(a):
