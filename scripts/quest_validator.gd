@@ -8,13 +8,15 @@ class_name QuestValidator
 const KNOWN_KINDS := ["talk", "collected", "crafted", "built", "planted", "harvested", "watered", "fed", "product",
 	"caught", "sailed", "cleared", "found", "lit", "reached", "collection", "delivered", "sold", "bought", "restored",
 	"fished", "solved"]
-const NPCS := ["parrot", "marta", "kesha", "stepa"]
+const NPCS := ["parrot", "marta", "kesha", "stepa", "timur"]
 const PUZZLES := ["cellar"]
-const DECKS := ["deck1", "deck2", "deck3"]
+const DECKS := ["deck1", "deck2", "deck3",
+	"bunker1", "bunker2", "bunker3", "bunker4", "bunker5", "bunker6", "bunker7"]
 
 var unlocked := {}
 var given := {}        # предметы из наград и находок (разовые)
 var solved_seen := {}
+var restored_seen := {}
 var errors: Array[String] = []
 var report: Array[String] = []
 var _where := ""
@@ -36,6 +38,8 @@ func run(chapters: Array = Data.CHAPTERS) -> Array[String]:
 				_check_task(t)
 				if t["kind"] == "solved":
 					solved_seen[t["target"]] = true
+				if t["kind"] == "restored":
+					restored_seen[t["target"]] = true
 				if t["kind"] == "bought" and t["target"] != "any":
 					spend += _min_price(t["target"]) * int(t["count"])
 				# находка сразу доступна для следующих пунктов того же задания
@@ -253,6 +257,10 @@ func _check_task(t: Dictionary) -> void:
 		"sailed":
 			if not (_building_ok("raft") or _building_ok("canoe")):
 				_err("не на чем плыть")
+			if Data.LOCATIONS.has(tgt):
+				var flag: String = Data.LOCATIONS[tgt].get("unlock_flag", "")
+				if flag.begins_with("restored_") and not restored_seen.has(flag.substr(9)):
+					_err("на «%s» не доплыть: «%s» ещё не починен" % [tgt, flag.substr(9)])
 		"cleared":
 			if not ResourceNode.KINDS.has(tgt):
 				_err("нет преграды «%s»" % tgt)
@@ -273,9 +281,19 @@ func _check_task(t: Dictionary) -> void:
 				_err("«%s» заперт, а ключа не достать" % tgt)
 			if cfg.has("needs_flag") and cfg["needs_flag"] == "cellar_drained" and not solved_seen.has("cellar"):
 				_err("«%s» за водой, а головоломку подвала ещё не решали" % tgt)
+			if cfg.has("needs_flag") and str(cfg["needs_flag"]).begins_with("restored_") \
+					and not restored_seen.has(str(cfg["needs_flag"]).substr(9)):
+				_err("«%s» откроется после починки «%s», а её ещё не было" % [tgt, str(cfg["needs_flag"]).substr(9)])
 		"reached":
 			if not tgt in DECKS:
 				_err("нет яруса «%s»" % tgt)
+			elif tgt.begins_with("bunker"):
+				# бункер: ярусы 2–3 видны при свете генератора (или фонаря), ниже — только с фонарём
+				var k := int(tgt.substr(6))
+				if k >= 4 and not can_get("lantern"):
+					_err("на ярус «%s» без фонаря не спуститься" % tgt)
+				elif k >= 2 and not (restored_seen.has("generator") or can_get("lantern")):
+					_err("на ярус «%s» темно: генератор не починен и фонаря нет" % tgt)
 			elif not can_get("climbing_gloves"):
 				_err("на ярус не залезть без перчаток")
 		"collection":

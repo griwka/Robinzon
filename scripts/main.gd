@@ -130,6 +130,7 @@ func start_play() -> void:
 		player.cam_rig.global_position = player.global_position + Vector3(0, 1.4, 0)
 		hud.toast(Data.LOCATIONS[Game.location]["name"], Color("ffe08a"))
 		Game.bump("sailed", "raft")
+		Game.bump("sailed", Game.location)
 	if not Game.quest_started:
 		Game.start_current_quest()
 
@@ -149,7 +150,8 @@ func _resume() -> void:
 ## Причал на новом острове: плот, на котором мы приплыли (на нём можно уплыть обратно), и Румба на мачте.
 func _spawn_arrival_dock() -> void:
 	var dock := Building.new()
-	dock.setup("canoe" if Game.location == "fort" else "raft")
+	var vessel: String = {"fort": "canoe", "storm": "boat"}.get(Game.location, "raft")
+	dock.setup(vessel)
 	var w := island.wreck_point
 	w.y = maxf(w.y, 0.0)
 	dock.position = w
@@ -160,7 +162,10 @@ func _spawn_arrival_dock() -> void:
 	dock.sail_requested.connect(_choose_destination)
 	parrot = NPCParrot.new()
 	dock.add_child(parrot)
-	parrot.position = Vector3(0, 2.6 if Game.location == "fort" else 2.9, 0) + (Vector3(0, 0, 0.45) if Game.location == "fort" else Vector3.ZERO)
+	match vessel:
+		"canoe": parrot.position = Vector3(0, 2.6, 0.45)
+		"boat": parrot.position = Vector3(0, 3.1, 0.3)
+		_: parrot.position = Vector3(0, 2.9, 0)
 
 
 func _spawn_story_objects() -> void:
@@ -220,6 +225,43 @@ func _update_answer_fire() -> void:
 	_answer_fire.add_child(l)
 
 
+# ================================================================== Фонарь и рация
+var _lantern: OmniLight3D
+
+
+## Фонарь в руке светит в бункере и ночью.
+func _update_lantern() -> void:
+	var on: bool = Game.has_tool("lantern") and (world_env.indoor or not Game.is_day())
+	if on and _lantern == null:
+		_lantern = OmniLight3D.new()
+		_lantern.light_color = Color("ffd59a")
+		_lantern.light_energy = 1.8
+		_lantern.omni_range = 9.0
+		_lantern.omni_attenuation = 1.2
+		_lantern.shadow_enabled = true
+		_lantern.position = Vector3(0.0, 2.6, 0.0)   # над головой: светит вокруг и не слепит в лицо
+		player.add_child(_lantern)
+	if _lantern:
+		_lantern.visible = on
+		if on:
+			var t := Time.get_ticks_msec() / 1000.0
+			_lantern.light_energy = (1.6 if world_env.indoor else 1.1) * (0.94 + 0.06 * sin(t * 7.0))
+
+
+## Рация Тимура (клавиша T): короткая связь с Тимуром с любого острова.
+func _radio_call() -> void:
+	Audio.play("radio", -4.0, 0.05)
+	var lines := {
+		"home": "ПРИЁМ! Ты дома? Полей там грядки и за меня. У меня опять дождь. Как всегда.",
+		"banyan": "ПРИЁМ! Привет Марте! Скажи, что я помню её пирог. И что я ВСЁ ЕЩЁ голоден.",
+		"fort": "ПРИЁМ! Стёпа рядом? Передай: «Тимур говорит — не кури трубку в трюме». Он поймёт.",
+		"storm": "ПРИЁМ! Я тебя ВИЖУ. Помаши. ...Нет, другой рукой. Ладно, конец связи.",
+	}
+	var night := "" if Game.is_day() else " Ночью слушаю эфир. Пока тишина. Только шорох... как будто туман шуршит."
+	var text: String = lines.get(Game.location, "ПРИЁМ! Слышу тебя хорошо!")
+	Game.dialogue_requested.emit([["timur", text + night]], Callable())
+
+
 func rain_wind() -> float:
 	return weather.rain * 3.0 if weather else 0.0
 
@@ -241,6 +283,7 @@ func _spawn_clouds() -> void:
 func _process(delta: float) -> void:
 	world_env.update(delta)
 	_update_answer_fire()
+	_update_lantern()
 	if in_menu:
 		# камера медленно облетает остров
 		_orbit += delta * 0.05
@@ -308,6 +351,10 @@ func _unhandled_input(event: InputEvent) -> void:
 					"help": hud.show_help()
 			get_viewport().set_input_as_handled()
 			return
+	if event.is_action_pressed("radio") and Game.has_tool("radio_set"):
+		_radio_call()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("save"):
 		_save()
 	elif event.is_action_pressed("load"):
@@ -359,9 +406,12 @@ func _choose_destination() -> void:
 		if cfg.has("unlock_flag") and not Game.flags.get(cfg["unlock_flag"], false):
 			continue
 		options.append({"text": "Плыть: %s" % cfg["name"], "icon": "sail", "callback": travel_to.bind(loc)})
-	if Game.flags.get("storm_route", false):
-		options.append({"text": "Грозовой остров — глава 4 (в разработке)", "icon": "sym_star",
-			"callback": func(): Game.notified.emit("Грозовой остров появится в следующей версии игры", Color("ffe08a"))})
+	if Game.flags.get("storm_route", false) and not Game.flags.get("restored_stepa_boat", false):
+		options.append({"text": "Грозовой остров — на каноэ не доплыть, нужен бот Стёпы", "icon": "sym_star",
+			"callback": func(): Game.notified.emit("Почини бот Стёпы на берегу форта", Color("ffe08a"))})
+	if Game.flags.get("ice_route", false):
+		options.append({"text": "Ледяной остров — глава 5 (в разработке)", "icon": "sym_star",
+			"callback": func(): Game.notified.emit("Ледяной остров появится в следующей версии игры", Color("ffe08a"))})
 	if options.is_empty():
 		Game.notified.emit("Плыть пока некуда. Куда указывает свет?..", Color("ffe08a"))
 		return

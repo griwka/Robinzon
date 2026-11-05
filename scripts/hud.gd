@@ -25,6 +25,7 @@ var station_check: Callable
 
 var root: Control
 var clock_label: Label
+var storm_label: Label
 var quest_box: VBoxContainer
 var hotbar: HBoxContainer
 var hint_label: Label
@@ -90,7 +91,9 @@ func _ready() -> void:
 	Game.shop_requested.connect(open_shop)
 	Game.choice_requested.connect(show_choices)
 	Game.collection_changed.connect(func(_c, _i, _n): if col_panel.visible: _fill_collections())
-	Game.time_changed.connect(func(_t, _d): clock_label.text = Game.clock_text())
+	Game.time_changed.connect(func(_t, _d):
+		clock_label.text = Game.clock_text()
+		_update_storm())
 	_on_inventory_changed()
 	_update_quest()
 
@@ -276,12 +279,29 @@ func _build_status() -> void:
 	p.add_child(h)
 	clock_label = _label(Game.clock_text(), 20)
 	h.add_child(clock_label)
+	storm_label = _label("", 20, Color("bfe3ff"))
+	storm_label.visible = false
+	h.add_child(storm_label)
 	var k := HBoxContainer.new()
 	k.add_theme_constant_override("separation", 4)
 	h.add_child(k)
 	k.add_child(_item_icon("coins", 28))
 	coin_label = _label("0", 20, Color("f3e2b8"))
 	k.add_child(coin_label)
+
+
+## Значок тучи: гроза близко / идёт (только на Грозовом острове).
+func _update_storm() -> void:
+	if storm_label == null:
+		return
+	var v := Game.storm
+	storm_label.visible = v > 0.0 or Game.storm_force
+	if Game.storm_active():
+		storm_label.text = "Гроза! Молнии бьют"
+		storm_label.modulate = Color(1, 1, 1, 0.75 + 0.25 * sin(Time.get_ticks_msec() / 150.0))
+	else:
+		storm_label.text = "Гроза близко — под навес!"
+		storm_label.modulate = Color.WHITE
 
 
 func _build_quest() -> void:
@@ -815,7 +835,7 @@ func open_inventory() -> void:
 func _fill_inventory() -> void:
 	var body := _clear(inv_panel)
 	var cats := {"tool": "Инструменты", "quest": "Особые предметы", "livestock": "Живность", "material": "Материалы", "seed": "Семена", "sapling": "Саженцы",
-		"crop": "Урожай", "fruit": "Фрукты", "product": "С фермы", "food": "Блюда"}
+		"crop": "Урожай", "fruit": "Фрукты", "product": "С фермы", "food": "Блюда", "clothes": "Одежда"}
 	var any := false
 	for cat in cats:
 		var grid := GridContainer.new()
@@ -926,13 +946,15 @@ func _build_help() -> void:
 Мышь — камера,  колёсико — приблизить/отдалить
 ЛКМ или E — собирать / рубить / использовать
 C — крафт,  B — строительство,  Tab — инвентарь
-J — журнал заданий,  K — коллекции
+J — журнал заданий,  K — коллекции,  Q — поесть,  T — рация (когда появится)
 В строительстве: ЛКМ — поставить, R — повернуть, ПКМ — отмена
 F5 — сохранить,  F9 — загрузить,  Esc — пауза и настройки
 
 Грядки: посади семена, полей лейкой — растут вдвое быстрее.
 Животные: покорми — через время будут яйца или молоко.
-Их можно гладить!""", 17, INK, false))
+Их можно гладить!
+Гроза (Грозовой остров): переждать под навесом, не стоять на вершинах.
+Ливень сам поливает грядки, а громоотвод заряжает аккумуляторы.""", 17, INK, false))
 
 
 func show_help() -> void:

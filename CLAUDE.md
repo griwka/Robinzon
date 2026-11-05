@@ -4,7 +4,7 @@
 
 ## Что прочитать в первую очередь
 - `ОПИСАНИЕ.md` — вся игра и устройство проекта.
-- `СЦЕНАРИЙ.md` — полный сюжет 8 глав. Главы 1–3 сделаны, 4–8 расписаны по заданиям. Это план работ.
+- `СЦЕНАРИЙ.md` — полный сюжет 8 глав. Главы 1–4 сделаны, 5–8 расписаны по заданиям. Это план работ.
 - `docs/DESIGN.md` — стиль, системы, дорожная карта.
 
 ## Пожелания автора (соблюдать всегда)
@@ -27,7 +27,10 @@
 - **`scripts/quest_validator.gd`** — проверка, что каждое задание выполнимо по порядку, плюс отчёт по монетам.
   Новых жителей, головоломки и ярусы добавляй в `NPCS`, `PUZZLES`, `DECKS`.
 - **`scripts/dev_tools.gd`** — автотесты и скриншоты. Каждой новой главе нужен свой автотест.
-- **Острова:** один генератор `scripts/island.gd`; особые места — `fort_ruin.gd`, `banyan_tree.gd`, `story_place.gd`.
+- **Острова:** один генератор `scripts/island.gd`; особые места — `fort_ruin.gd`, `banyan_tree.gd`, `storm_station.gd`
+  (бункер), `story_place.gd`. Кольца преград вокруг мест — `Island.RINGS`.
+- **Гроза** — `scripts/weather.gd` (только на Грозовом): `Game.storm_active()`; громоотвод — загон `lightning_rod`
+  с `"storm": true` в `Data.PENS`. Ярусы бункера `bunker1..7` — свет от генератора (1–3) или фонарь.
 - **Ассеты собираются скриптами, руками не правятся:**
   - модели: `tools/blender/*.py` → `assets/models/*.glb`;
   - иконки: `tools/gen_icons.py` → `assets/icons/`;
@@ -66,6 +69,8 @@ godot --headless --path . -- --validate
 godot --headless --path . -- --autotest
 godot --headless --path . -- --autotest --location=banyan --chapter=2
 godot --headless --path . -- --autotest --location=fort --chapter=3
+godot --headless --path . -- --autotest --location=fort --chapter=4 --upto=1
+godot --headless --path . -- --autotest --location=storm --chapter=4 --from=1
 godot --path . --resolution 1600x900 -- --shot=shot.png --frames=90 --location=fort
 ```
 
@@ -87,10 +92,16 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 - `--nohud` — кадр без интерфейса;
 - `--flush` — закрыть вступительные диалоги;
 - `--rain=0.8` — дождь;
+- `--storm=1` / `--storm=0` — на Грозовом: гроза всё время / без грозы;
+- `--bunker=N` (+ `--lit=1` — генератор и фонарь) — герой на ярусе N бункера;
+- `--near=timur|storm_tower|seaplane|stepa_boat` — герой у места;
+- автотест: `--from=K` — начать с K-го задания главы, `--upto=K` — пройти только K заданий;
 - `--fxtest` — все эффекты перед кадром;
 - `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO.
 
-Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для звука — ffmpeg в PATH):
+Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для музыки и фона — ffmpeg в PATH;
+`python tools/gen_audio.py thunder0 radio` — только указанные эффекты, без ffmpeg). Иконки главы 4 — в `tools/icons_storm.py`.
+На Windows Godot можно вызывать полным путём, если его нет в PATH.
 ```bash
 python tools/blender/build.py
 python tools/blender/build.py marta sheep

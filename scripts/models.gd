@@ -789,7 +789,7 @@ static func butterfly(color: Color) -> Node3D:
 
 # ============================================================== Постройки
 static func building(id: String) -> Node3D:
-	var names := {"fruit_tree": "sapling"}
+	var names := {"fruit_tree": "sapling", "boat": "stepa_boat"}
 	var g := glb(names.get(id, id))
 	if g:
 		match id:

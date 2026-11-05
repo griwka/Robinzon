@@ -20,7 +20,7 @@ func _ready() -> void:
 		var a := Animal.new()
 		a.kind = cfg["animal"]
 		a.home = global_position
-		a.radius = 1.2 if id == "coop" else 1.4
+		a.radius = 1.2 if id == "coop" else (1.0 if id == "goose_house" else 1.4)
 		a.position = position + Vector3(randf_range(-1, 1), 0, randf_range(-1, 1))
 		get_parent().add_child.call_deferred(a)
 		animals.append(a)
@@ -34,13 +34,25 @@ func _exit_tree() -> void:
 
 
 func marker_height() -> float:
-	return {"coop": 2.6, "beehive": 2.1, "sheep_pen": 1.9, "pig_sty": 1.9}.get(id, 1.8)
+	return {"coop": 2.6, "beehive": 2.1, "sheep_pen": 1.9, "pig_sty": 1.9, "goose_house": 2.2, "lightning_rod": 4.4}.get(id, 1.8)
+
+
+## Доля времени, когда идёт гроза (для «пропущенного» времени — сон, далёкий остров).
+const STORM_SHARE := 0.15
 
 
 func _process(delta: float) -> void:
 	super(delta)
 	var dt := world_dt()
 	if fed and not product_ready:
+		if Data.PENS[id].get("storm", false):
+			# громоотвод заряжает только в грозу; если время «пролетело» (сон) — за прошедшие грозы
+			if Game.storm_active():
+				pass
+			elif dt > 5.0:
+				dt *= STORM_SHARE
+			else:
+				dt = 0.0
 		progress += dt / Data.PENS[id]["time"]
 		if progress >= 1.0:
 			product_ready = true
@@ -68,6 +80,12 @@ func get_hint() -> String:
 	var cfg: Dictionary = Data.PENS[id]
 	if product_ready:
 		return "Собрать: %s ×%d" % [Game.item_name(cfg["product"]), cfg["amount"]]
+	if id == "lightning_rod":
+		if not fed:
+			return "Громоотвод — повесить пустой аккумулятор (есть: %d)" % Game.count("battery")
+		if not Game.storm_active():
+			return "Аккумулятор висит. Заряжается только в грозу (%d%%)" % int(progress * 100.0)
+		return "Гроза! Аккумулятор заряжается: %d%%" % int(progress * 100.0)
 	if not fed:
 		return "%s голодны — покормить: %s" % [cfg["animal_name"], _cost_text(cfg["feed"])]
 	return "%s сыты. %s через ~%d c" % [cfg["animal_name"], Game.item_name(cfg["product"]),
@@ -88,13 +106,13 @@ func interact(_player: Node) -> void:
 			fed = true
 			progress = 0.0
 			Game.bump("fed", id)
-			Audio.play({"coop": "cluck", "beehive": "rustle", "pig_sty": "oink"}.get(id, "bleat"), -2.0, 0.1, global_position)
-			Game.notified.emit("%s накормлены!" % cfg["animal_name"], Color("ffe08a"))
+			Audio.play({"coop": "cluck", "beehive": "rustle", "pig_sty": "oink", "goose_house": "honk", "lightning_rod": "radio"}.get(id, "bleat"), -2.0, 0.1, global_position)
+			Game.notified.emit("Аккумулятор подключён. Ждём грозу!" if id == "lightning_rod" else "%s накормлены!" % cfg["animal_name"], Color("ffe08a"))
 			for a in animals:
 				if is_instance_valid(a):
 					a.happy()
 		else:
-			Game.notified.emit("Нужен корм: %s" % _cost_text(cfg["feed"]), Color("ff9d7a"))
+			Game.notified.emit("Нужен пустой аккумулятор" if id == "lightning_rod" else "Нужен корм: %s" % _cost_text(cfg["feed"]), Color("ff9d7a"))
 	else:
 		Game.notified.emit(get_hint(), Color("ffe08a"))
 	_refresh()

@@ -24,6 +24,8 @@ var post: ColorRect
 var island: Island
 var player: Node3D
 var rain := 0.0              # 0..1 — задаёт погода
+var flash := 0.0             # 0..1 — вспышка молнии (Грозовой остров)
+var indoor := false          # игрок в бункере: ни неба, ни солнца — только лампы и фонарь
 var pal: Dictionary = Palette.DAY
 var _sky_push := 0.0
 var _applied := ""
@@ -142,12 +144,17 @@ func _apply_quality() -> void:
 
 func update(delta: float) -> void:
 	_apply_quality()
+	if indoor and player and player.global_position.y >= -8.0:
+		_restore_outdoor()
 	var t := Game.time_of_day
 	var elev := sin((t - 0.25) * TAU)
 	var p := Palette.at_elevation(elev)
 	if rain > 0.001:
 		var wet := Palette.mix(Palette.RAIN, Palette.NIGHT, 1.0 - smoothstep(-0.2, 0.15, elev))
 		p = Palette.mix(p, wet, rain * 0.85)
+	if Game.storm > 0.0:
+		# грозовая туча: темно, как вечером, — молнии на этом фоне видно издалека
+		p = Palette.mix(p, Palette.NIGHT, 0.55 * Game.storm)
 	pal = p
 	# солнце идёт с востока на запад по дуге не выше MAX_SUN_ELEV; луна — с другой стороны неба
 	var el := asin(clampf(elev, -1.0, 1.0)) * MAX_SUN_ELEV / 90.0
@@ -163,7 +170,7 @@ func update(delta: float) -> void:
 	sun.shadow_opacity = clampf(elev * 9.0 + 0.15, 0.0, 1.0)   # длинные тени держатся до самого горизонта
 	moon.light_energy = clampf(-elev * 1.3, 0.0, 0.3) * (1.0 - rain * 0.6)
 	moon.visible = moon.light_energy > 0.01
-	env.ambient_light_energy = p["amb_e"] * (0.72 if _compat else 1.0)
+	env.ambient_light_energy = p["amb_e"] * (0.72 if _compat else 1.0) + flash * 1.6
 	env.fog_light_color = p["hor"]
 	env.fog_density = p["fog"]
 	env.glow_intensity = lerpf(0.85, 1.2, clampf(-elev * 3.0, 0.0, 1.0))
@@ -207,3 +214,25 @@ func update(delta: float) -> void:
 	var sharp := int(Game.settings.get("sharpen", 2))
 	pm.set_shader_parameter("sharpness", [0.0, 0.35, 0.65][clampi(sharp, 0, 2)])
 	pm.set_shader_parameter("vignette", lerpf(0.18, 0.28, clampf(-elev * 3.0, 0.0, 1.0)))
+	_apply_indoor()
+
+
+## Под землёй (бункер Грозового острова): солнце и луна не светят, туман и небо не видны,
+## заливка теней почти гаснет — видно только то, что освещают лампы и фонарь.
+func _apply_indoor() -> void:
+	indoor = player != null and player.global_position.y < -8.0
+	if not indoor:
+		return
+	sun.visible = false
+	moon.visible = false
+	env.ambient_light_energy = 0.1 + flash * 0.15
+	env.fog_density = 0.0
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color("0d0b0a")
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("6a6a80")
+
+
+func _restore_outdoor() -> void:
+	env.background_mode = Environment.BG_SKY
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY

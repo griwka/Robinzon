@@ -46,6 +46,38 @@ const PLACES := {
 		"loot": {}, "pages": 1, "fuel": {"wood": 10, "fiber": 6},
 		"lines": [["player", "Чёрный камень тёплый на ощупь, хотя солнце давно ушло за тучи. В чаше наверху — старый пепел."],
 			["parrot", "Маяк... Румба знает это слово. Лёва повторял его каждую ночь."]]},
+	# ---------------------------------------------------------------- глава 4
+	"stepa_boat": {"model": "stepa_boat_wreck", "name": "Бот Стёпы", "radius": 1.6,
+		"loot": {}, "pages": 0, "restore": {"plank": 10, "brick": 6, "copper_nails": 10, "wool_cloth": 2},
+		"restored_model": "stepa_boat", "restored_name": "Бот Стёпы",
+		"lines": [["stepa", "Вот он. Обшивка рассохлась, парус сгнил. Доски, гвозди, шерстяная ткань на парус. И кирпичи в трюм — для тяжести, чтобы волна не перевернула."]]},
+	"seaplane": {"model": "seaplane", "name": "Старый гидросамолёт", "radius": 2.4,
+		"loot": {"scrap": 3}, "pages": 0,
+		"lines": [["player", "Ржавое крыло торчит из воды. На борту едва видны буквы: «Ветер-3». Самолёт здесь очень давно."],
+			["parrot", "Железная птица. Мёртвая. Румба не любит мёртвых птиц."]]},
+	"graves": {"model": "graves", "name": "Четыре камня", "radius": 1.6,
+		"loot": {}, "pages": 0,
+		"lines": [["player", "Четыре камня, на каждом выбито имя и год — тысяча девятьсот пятьдесят восьмой. Метеорологи. Их было пятеро... а камней четыре."],
+			["parrot", "Пятого нет. Пятый ушёл. Румба... Румба не знает, почему так думает."]]},
+	"generator": {"model": "generator_broken", "name": "Генератор", "radius": 0.9,
+		"loot": {}, "pages": 0, "restore": {"battery_charged": 2, "copper_wire": 3, "fuse": 2},
+		"restored_model": "generator", "restored_name": "Генератор",
+		"lines": [["player", "Генератор метеорологов. Провода обгорели, предохранители выбиты. Тимур говорил: два заряда, проволока и два предохранителя."]]},
+	"station_logs": {"model": "station_desk", "name": "Стол метеорологов", "radius": 0.9,
+		"loot": {"radio_tube": 2}, "pages": 0, "journal": "journal_station", "journal_pages": 3,
+		"lines": [["narrator", "Железный стол, приборы под слоем пыли. В ящике — толстый журнал в клеёнке и две радиолампы, завёрнутые в вату."]]},
+	"radio": {"model": "radio_broken", "name": "Радиостанция", "radius": 0.9,
+		"loot": {}, "pages": 0, "restore": {"radio_tube": 2, "copper_wire": 4, "battery_charged": 2},
+		"restored_model": "radio", "restored_name": "Радиостанция",
+		"lines": [["player", "Радиостанция. Две лампы лопнули от молнии, провода сгорели. Нужно две радиолампы, проволока и заряд."]]},
+	"radio_record": {"model": "", "name": "Запись Лёвы", "radius": 0.0, "needs_flag": "restored_radio",
+		"locked_hint": "Запись Лёвы — сначала почини радиостанцию",
+		"loot": {}, "pages": 0, "journal": "journal_storm", "journal_pages": 3, "sound": "radio",
+		"lines": [["narrator", "Ты нажимаешь клавишу. Шипение, треск, далёкий гром... и голос, который ты узнал бы из тысячи. Рядом с рацией — три листка, исписанных рукой Лёвы."]]},
+	"storm_tower": {"model": "storm_tower_ruin", "name": "Башня громов", "radius": 2.0, "flag": "lit_storm_tower",
+		"loot": {}, "pages": 0, "restore": {"copper_wire": 6, "glass": 4, "scrap": 4}, "fuel": {}, "needs_storm": true,
+		"restored_model": "storm_tower", "restored_name": "Башня громов",
+		"lines": [["player", "Чёрная башня, а наверху — медный шпиль, позеленевший от времени. От шпиля к чаше когда-то шла медная жила. Теперь она оборвана."]]},
 }
 
 var id := "old_camp"
@@ -72,10 +104,10 @@ func _ready() -> void:
 	cs.shape = c
 	cs.position.y = c.height * 0.5
 	add_child(cs)
-	if cfg.has("fuel") and Game.flags.get(_lit_flag(), false):
-		light_fire(false)
 	if cfg.has("restore") and Game.flags.get("restored_" + id, false):
 		_swap_model(false)
+	if cfg.has("fuel") and Game.flags.get(_lit_flag(), false):
+		light_fire(false)
 
 
 func block_radius() -> float:
@@ -108,7 +140,7 @@ func _lit_flag() -> String:
 func get_hint() -> String:
 	var cfg: Dictionary = PLACES[id]
 	if cfg.has("needs_flag") and not Game.flags.get(cfg["needs_flag"], false):
-		return "%s — за водой, не подойти. Сначала спусти воду" % cfg["name"]
+		return cfg.get("locked_hint", "%s — за водой, не подойти. Сначала спусти воду" % cfg["name"])
 	if cfg.has("needs") and not Game.flags.get("poi_" + id, false) and not Game.has_tool(cfg["needs"]) and Game.count(cfg["needs"]) == 0:
 		return "%s — заперт (нужен: %s)" % [cfg["name"], Game.item_name(cfg["needs"])]
 	if cfg.has("restore") and not Game.flags.get("restored_" + id, false):
@@ -116,14 +148,17 @@ func get_hint() -> String:
 	if not Game.flags.get("poi_" + id, false):
 		return "Осмотреть: %s" % cfg["name"]
 	if cfg.has("fuel") and not Game.flags.get(_lit_flag(), false):
+		if cfg.get("needs_storm", false):
+			return "%s — зажечь может только молния. Жди грозу" % cfg.get("restored_name", cfg["name"]) if not Game.storm_active() \
+				else "Гроза! Молния бьёт в шпиль — зажечь Башню громов"
 		return "Зажечь огонь (нужно: %s)" % _cost_text(cfg["fuel"])
-	return cfg["name"]
+	return cfg.get("restored_name", cfg["name"]) if Game.flags.get("restored_" + id, false) else cfg["name"]
 
 
 func interact(_player: Node) -> void:
 	var cfg: Dictionary = PLACES[id]
 	if cfg.has("needs_flag") and not Game.flags.get(cfg["needs_flag"], false):
-		Game.notified.emit("Не подойти — мешает вода", Color("ff9d7a"))
+		Game.notified.emit(cfg.get("locked_hint", "Не подойти — мешает вода"), Color("ff9d7a"))
 		return
 	if cfg.has("needs") and Game.count(cfg["needs"]) == 0 and not Game.flags.get("poi_" + id, false):
 		Game.notified.emit("Заперто. Нужен: %s" % Game.item_name(cfg["needs"]), Color("ff9d7a"))
@@ -140,13 +175,14 @@ func interact(_player: Node) -> void:
 			FX.burst(self, Vector3(0, 1.5, 0), Color("ffe08a"), 24)
 			Game.notified.emit("Отстроено: %s" % cfg["restored_name"], Color("8affa0"))
 			Game.bump("restored", id)
-			remove_from_group("interactable")
+			if not cfg.has("fuel"):
+				remove_from_group("interactable")
 		else:
 			Game.notified.emit("Не хватает: %s" % _cost_text(cfg["restore"]), Color("ff9d7a"))
 		return
 	if not Game.flags.get("poi_" + id, false):
 		Game.flags["poi_" + id] = true
-		Audio.play("rare", -2.0)
+		Audio.play(cfg.get("sound", "rare"), -2.0)
 		FX.burst(self, Vector3(0, 1.0, 0), Color("ffe08a"), 18)
 		Game.dialogue_requested.emit(cfg["lines"], Callable())
 		for k in cfg["loot"]:
@@ -168,6 +204,9 @@ func interact(_player: Node) -> void:
 			remove_from_group("interactable")
 		return
 	if cfg.has("fuel") and not Game.flags.get(_lit_flag(), false):
+		if cfg.get("needs_storm", false) and not Game.storm_active():
+			Game.notified.emit("Огонь зажжёт только молния. Дождись грозы и подойди к башне", Color("ffe08a"))
+			return
 		if Game.pay(cfg["fuel"]):
 			Game.flags[_lit_flag()] = true
 			light_fire(true)
@@ -195,6 +234,13 @@ func light_fire(animate: bool) -> void:
 	var point := visual.find_child("FirePoint", true, false) as Node3D
 	var at: Vector3 = point.position if point else Vector3(0, 5.5, 0)
 	fire = Models.flame(visual, at, 2.0, 4.0, 30.0)
+	if id == "storm_tower":
+		# огонь, зажжённый молнией, — бело-голубой
+		var l := visual.get_node_or_null("Light") as OmniLight3D
+		if l:
+			l.light_color = Color("cfe4ff")
+		if animate:
+			get_tree().call_group("weather", "strike_at", global_position + Vector3(0, 13.0, 0))
 	if animate:
 		fire.scale = Vector3(0.05, 0.05, 0.05)
 		create_tween().tween_property(fire, "scale", Vector3.ONE, 1.5).set_trans(Tween.TRANS_BACK)
