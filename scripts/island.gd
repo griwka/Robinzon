@@ -14,6 +14,7 @@ var radius := 52.0
 var peak_h := 10.0
 var loc := "home"
 var mix := "home"
+var flat := []      # [центр Vector2, радиус, высота] — плато под постройки (форт)
 var shape_noise := FastNoiseLite.new()
 var hill_noise := FastNoiseLite.new()
 var detail_noise := FastNoiseLite.new()
@@ -35,6 +36,7 @@ func configure(location: String) -> void:
 	peak_center = cfg["peak"]
 	peak_h = cfg["peak_h"]
 	mix = cfg["mix"]
+	flat = cfg.get("flat", [])
 	_init()
 
 
@@ -80,6 +82,10 @@ func height_at(x: float, z: float) -> float:
 	var pd := p.distance_to(peak_center)
 	h += peak_h * exp(-pd * pd / (2.0 * 12.0 * 12.0)) * inland
 	h += detail_noise.get_noise_2d(x, z) * 0.15 * inland
+	# плато (под форт)
+	if not flat.is_empty():
+		var fd := p.distance_to(flat[0])
+		h = lerpf(h, flat[2], smoothstep(flat[1] + 7.0, flat[1], fd))
 	# пологая поляна под лагерь
 	if camp_center != Vector3.ZERO:
 		var cd := Vector2(x - camp_center.x, z - camp_center.z).length()
@@ -261,6 +267,11 @@ var _uid := 0
 
 
 func _place_pois() -> void:
+	if mix == "fort":
+		var f := Vector3(flat[0].x, 0, flat[0].y)
+		f.y = height_at(f.x, f.z)
+		poi["fort"] = f
+		return
 	if mix == "banyan":
 		var c := Vector3(0, 0, 0)
 		c.y = height_at(0, 0)
@@ -302,6 +313,12 @@ func _spawn_resources() -> void:
 			tree.position = poi[id]
 			holder.add_child(tree)
 			continue
+		if id == "fort":
+			var fort := FortRuin.new()
+			fort.island = self
+			fort.position = poi[id]
+			holder.add_child(fort)
+			continue
 		var sp := StoryPlace.new()
 		sp.id = id
 		sp.position = poi[id]
@@ -327,7 +344,7 @@ func _spawn_resources() -> void:
 			var p2 := Vector2(x, z)
 			var dc := p2.distance_to(camp2)
 			var dw := p2.distance_to(wreck2)
-			if _near_poi(p2, 10.0 if mix == "banyan" else 5.0):
+			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5}.get(mix, 5.0)):
 				continue
 			var kind := ""
 			if dc < 9.5 or dw < 7.0:
@@ -386,6 +403,94 @@ func _spawn_resources() -> void:
 				continue
 			_spawn(holder, kind, Vector3(x, h - 0.05, z), seed_v, ("j%d" if loc == "home" else loc + ":j%d") % _uid, -100.0)
 	_barrier_rings(holder)
+	_spawn_fishing_spots(holder)
+	if mix == "fort":
+		_spawn_stepa(holder)
+		_spawn_clay(holder)
+
+
+## Глиняные ямы — ровно 6 штук на песке недалеко от лагеря (глина восстанавливается).
+func _spawn_clay(holder: Node3D) -> void:
+	var c := Vector2(camp_center.x, camp_center.z)
+	var placed: Array[Vector2] = []
+	var a0 := atan2(wreck_point.z, wreck_point.x)
+	for k in 400:
+		if placed.size() >= 6:
+			break
+		var a := a0 + (k % 40 - 20) * 0.05
+		var r := 8.0 + (k / 40) * 2.5
+		var p := c + Vector2(cos(a), sin(a)) * r
+		var h := height_at(p.x, p.y)
+		if h < 0.3 or h > 1.0 or p.distance_to(Vector2(wreck_point.x, wreck_point.z)) < 5.0:
+			continue
+		var ok := true
+		for q in placed:
+			ok = ok and q.distance_to(p) > 3.5
+		if not ok:
+			continue
+		placed.append(p)
+		_spawn(holder, "clay", Vector3(p.x, h - 0.03, p.y), 4000 + k, "fort:clay_%d" % placed.size(), -100.0)
+
+
+## Места для рыбалки — бурлящая вода у берега недалеко от лагеря.
+func _spawn_fishing_spots(holder: Node3D) -> void:
+	var want: int = {"fort": 4, "home": 2, "banyan": 2}.get(mix, 2)
+	var c := Vector2(camp_center.x, camp_center.z)
+	var placed: Array[Vector2] = []
+	var a0 := atan2(wreck_point.z, wreck_point.x)
+	for k in 160:
+		if placed.size() >= want:
+			break
+		var a := a0 + (k * 0.037) * (1 if k % 2 == 0 else -1)
+		var r := 20.0
+		while r < radius * 1.6 and height_at(cos(a) * r, sin(a) * r) > -0.35:
+			r += 0.4
+		var p := Vector2(cos(a) * r, sin(a) * r)
+		if p.distance_to(c) > 40.0:
+			continue
+		var ok := true
+		for q in placed:
+			if q.distance_to(p) < 7.0:
+				ok = false
+		if not ok:
+			continue
+		placed.append(p)
+		var fs := FishingSpot.new()
+		fs.position = Vector3(p.x, 0.0, p.y)
+		holder.add_child(fs)
+
+
+## Хижина боцмана Стёпы — на берегу недалеко от места высадки.
+func _spawn_stepa(holder: Node3D) -> void:
+	var to_camp := (camp_center - wreck_point)
+	to_camp.y = 0
+	var side := Vector3(-to_camp.z, 0, to_camp.x).normalized()
+	var hp := wreck_point + side * 9.0 + to_camp.normalized() * 3.0
+	hp.y = height_at(hp.x, hp.z)
+	var hut := Models.glb("fisher_hut")
+	if hut:
+		hut.position = hp
+		hut.rotation.y = atan2(-to_camp.x, -to_camp.z) + PI
+		holder.add_child(hut)
+		var body := StaticBody3D.new()
+		body.collision_layer = 4
+		var cs := CollisionShape3D.new()
+		var b := BoxShape3D.new()
+		b.size = Vector3(2.9, 2.6, 2.5)
+		cs.shape = b
+		cs.position.y = 1.3
+		body.add_child(cs)
+		hut.add_child(body)
+	var st := NPCPerson.new()
+	st.npc_id = "stepa"
+	var sp := hp + to_camp.normalized() * 2.6
+	sp.y = height_at(sp.x, sp.z)
+	st.position = sp
+	holder.add_child(st)
+	poi_extra["stepa"] = sp
+
+
+var poi_extra: Dictionary = {}
 
 
 func _near_poi(p2: Vector2, r: float) -> bool:

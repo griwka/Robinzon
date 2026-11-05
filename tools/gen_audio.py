@@ -529,6 +529,17 @@ def sfx_bleat():
     return normalize(x, 0.6)
 
 
+def sfx_oink():
+    x = np.zeros(int(0.5 * SR))
+    for i, (f, d) in enumerate(((150, 0.12), (180, 0.16))):
+        tt = t_axis(d)
+        freq = f * (1 + 0.3 * np.sin(np.pi * tt / d))
+        pulse = signal.square(2 * np.pi * np.cumsum(freq) / SR, 0.25)
+        s = bandpass(pulse, 200, 1400) * np.sin(np.pi * tt / d) + 0.3 * bandpass(rng.standard_normal(len(tt)), 300, 900) * np.sin(np.pi * tt / d)
+        place(x, s, i * 0.17)
+    return normalize(x, 0.6)
+
+
 def sfx_squawk():
     d = 0.32
     tt = t_axis(d)
@@ -562,7 +573,7 @@ def main():
         "harvest": sfx_harvest(), "plant": sfx_plant(), "water": sfx_water(), "build": sfx_build(),
         "craft": sfx_craft(), "quest": sfx_quest(), "rare": sfx_rare(), "click": sfx_click(),
         "open": sfx_open(), "blip": sfx_blip(), "step_sand": sfx_step("sand"), "step_grass": sfx_step("grass"),
-        "cluck": sfx_cluck(), "bleat": sfx_bleat(), "squawk": sfx_squawk(), "sleep": sfx_sleep(),
+        "cluck": sfx_cluck(), "bleat": sfx_bleat(), "squawk": sfx_squawk(), "oink": sfx_oink(), "sleep": sfx_sleep(),
         "shake": sfx_shake(),
     }
     for i in range(4):

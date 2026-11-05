@@ -346,7 +346,7 @@ func reserved(id: String) -> int:
 
 # Разовые события считаем с нуля (сделал раньше — тоже засчитано), повторяемые — от начала задания.
 # cleared — тоже с нуля: преграды конечны, игрок мог расчистить их заранее.
-const ZERO_BASE_KINDS := ["talk", "built", "sailed", "collection", "found", "lit", "reached", "bought", "restored", "delivered", "cleared"]
+const ZERO_BASE_KINDS := ["talk", "built", "sailed", "collection", "found", "lit", "reached", "bought", "restored", "delivered", "cleared", "solved"]
 
 
 func _task_target(task: Dictionary) -> String:
@@ -423,6 +423,8 @@ func _grant(reward: Dictionary) -> void:
 			for r in Data.RECIPES:
 				if r["id"] == id:
 					notified.emit("Новый рецепт: %s" % item_name(r["out"].keys()[0]), Color("bfe3ff"))
+	for f in reward.get("flags", []):
+		flags[f] = true
 	for i in int(reward.get("pages", 0)):
 		add_collectible("journal")
 	var items: Dictionary = reward.get("items", {})
@@ -488,6 +490,8 @@ func load_game() -> Dictionary:
 	day = int(data.get("day", 1))
 	world_time = float(data.get("world_time", 0.0))
 	location = data.get("location", "home")
+	if stat("built", "canoe") > 0:
+		flags["fort_route"] = true   # сохранения до v0.7: каноэ уже есть — путь к форту открыт
 	loc_data = data.get("locations", {})
 	if loc_data.is_empty() and data.has("buildings"):
 		loc_data["home"] = {"buildings": data["buildings"], "player": data.get("player", [])}

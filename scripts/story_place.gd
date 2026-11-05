@@ -4,6 +4,19 @@ extends StaticBody3D
 ## Добраться можно, только расчистив путь нужными инструментами. Осмотр даёт находки и страницу журнала.
 
 const PLACES := {
+	"fort_gate": {"model": "", "name": "Ворота форта", "radius": 0.0, "needs": "fort_key",
+		"loot": {}, "pages": 0,
+		"lines": [["narrator", "Ключ проворачивается туго, с хрустом ржавчины. Створки расходятся, и в лицо пахнет сыростью и старым камнем."]]},
+	"gatehouse": {"model": "gatehouse", "name": "Караулка", "radius": 1.5,
+		"loot": {"rope": 2, "coins": 8}, "pages": 0, "journal": "journal_fort", "journal_pages": 1,
+		"lines": [["player", "Стол, обрывки карт, огарок свечи. И страница, исписанная знакомым почерком."]]},
+	"frescoes": {"model": "", "name": "Древние рисунки", "radius": 0.0, "needs_flag": "cellar_drained",
+		"loot": {}, "pages": 0, "journal": "journal_fort", "journal_pages": 2,
+		"lines": [["narrator", "Охра на камне: люди у башен с огнём. Над ними шторм — и он отступает кругами. Рядом — карта пяти островов и шестого, в центре, обведённого красным."],
+			["narrator", "Под рисунками, на сухой плите, — две страницы Лёвы, придавленные камнем."]]},
+	"fort_tower": {"model": "lighthouse_ruin", "name": "Башня форта", "radius": 1.9, "flag": "lit_fort_tower",
+		"loot": {}, "pages": 0, "fuel": {"wood": 10, "lamp_oil": 2},
+		"lines": [["player", "Ещё один маяк — чёрный камень, чаша наверху. Пепел свежий: огонь погасили недавно. Нарочно."]]},
 	"treehouse": {"model": "treehouse_ruin", "name": "Развалины дома Лёвы", "radius": 1.3,
 		"loot": {}, "pages": 0, "restore": {"plank": 10, "rope": 4, "copper_nails": 10, "leaf": 8},
 		"restored_model": "treehouse", "restored_name": "Дом Лёвы",
@@ -42,7 +55,7 @@ var fire: Node3D
 
 func _ready() -> void:
 	var cfg0: Dictionary = PLACES[id]
-	if id == "lighthouse" or not Game.flags.get("poi_" + id, false) or (cfg0.has("restore") and not Game.flags.get("restored_" + id, false)):
+	if cfg0.has("fuel") or not Game.flags.get("poi_" + id, false) or (cfg0.has("restore") and not Game.flags.get("restored_" + id, false)):
 		add_to_group("interactable")
 	add_to_group("obstacle")
 	collision_layer = 4
@@ -55,11 +68,11 @@ func _ready() -> void:
 	var cs := CollisionShape3D.new()
 	var c := CylinderShape3D.new()
 	c.radius = cfg["radius"]
-	c.height = 2.5 if id != "lighthouse" else 5.0
+	c.height = 5.0 if cfg.has("fuel") else 2.5
 	cs.shape = c
 	cs.position.y = c.height * 0.5
 	add_child(cs)
-	if id == "lighthouse" and Game.flags.get("lighthouse_lit", false):
+	if cfg.has("fuel") and Game.flags.get(_lit_flag(), false):
 		light_fire(false)
 	if cfg.has("restore") and Game.flags.get("restored_" + id, false):
 		_swap_model(false)
@@ -88,21 +101,30 @@ func _cost_text(cost: Dictionary) -> String:
 	return ", ".join(parts)
 
 
+func _lit_flag() -> String:
+	return PLACES[id].get("flag", "lighthouse_lit" if id == "lighthouse" else "lit_" + id)
+
+
 func get_hint() -> String:
 	var cfg: Dictionary = PLACES[id]
+	if cfg.has("needs_flag") and not Game.flags.get(cfg["needs_flag"], false):
+		return "%s — за водой, не подойти. Сначала спусти воду" % cfg["name"]
 	if cfg.has("needs") and not Game.flags.get("poi_" + id, false) and not Game.has_tool(cfg["needs"]) and Game.count(cfg["needs"]) == 0:
 		return "%s — заперт (нужен: %s)" % [cfg["name"], Game.item_name(cfg["needs"])]
 	if cfg.has("restore") and not Game.flags.get("restored_" + id, false):
 		return "Отстроить: %s (нужно: %s)" % [cfg["name"], _cost_text(cfg["restore"])]
 	if not Game.flags.get("poi_" + id, false):
 		return "Осмотреть: %s" % cfg["name"]
-	if id == "lighthouse" and not Game.flags.get("lighthouse_lit", false):
-		return "Зажечь маяк (нужно: %s)" % _cost_text(cfg["fuel"])
+	if cfg.has("fuel") and not Game.flags.get(_lit_flag(), false):
+		return "Зажечь огонь (нужно: %s)" % _cost_text(cfg["fuel"])
 	return cfg["name"]
 
 
 func interact(_player: Node) -> void:
 	var cfg: Dictionary = PLACES[id]
+	if cfg.has("needs_flag") and not Game.flags.get(cfg["needs_flag"], false):
+		Game.notified.emit("Не подойти — мешает вода", Color("ff9d7a"))
+		return
 	if cfg.has("needs") and Game.count(cfg["needs"]) == 0 and not Game.flags.get("poi_" + id, false):
 		Game.notified.emit("Заперто. Нужен: %s" % Game.item_name(cfg["needs"]), Color("ff9d7a"))
 		return
@@ -138,14 +160,18 @@ func interact(_player: Node) -> void:
 			if lid:
 				create_tween().tween_property(lid, "rotation:x", -1.6, 0.4)
 		Game.bump("found", id)
-		if id != "lighthouse" and not cfg.has("restore"):
+		if id == "fort_gate":
+			var fort := get_parent() as FortRuin
+			if fort:
+				fort.open_gate(true)
+		if not cfg.has("fuel") and not cfg.has("restore"):
 			remove_from_group("interactable")
 		return
-	if id == "lighthouse" and not Game.flags.get("lighthouse_lit", false):
+	if cfg.has("fuel") and not Game.flags.get(_lit_flag(), false):
 		if Game.pay(cfg["fuel"]):
-			Game.flags["lighthouse_lit"] = true
+			Game.flags[_lit_flag()] = true
 			light_fire(true)
-			Game.bump("lit", "lighthouse")
+			Game.bump("lit", id)
 		else:
 			Game.notified.emit("Нужно топливо: %s" % _cost_text(cfg["fuel"]), Color("ff9d7a"))
 

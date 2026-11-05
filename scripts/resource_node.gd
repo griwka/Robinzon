@@ -32,12 +32,14 @@ const KINDS := {
 		"verb": "Разрубить поваленный ствол", "radius": 0.8, "height": 0.8, "long": 1.6},
 	"cliff": {"hp": 6, "tool": "pickaxe", "drops": {"stone": 8}, "respawn": 0.0,
 		"verb": "Разбить каменную гряду", "radius": 1.0, "height": 2.2, "long": 1.9},
+	"clay": {"hp": 1, "tool": "shovel", "drops": {"clay": 2}, "respawn": 60.0,
+		"verb": "Накопать глины", "radius": 0.7, "height": 0.2},
 	"liana_curtain": {"hp": 2, "tool": "machete", "drops": {"liana": 2, "fiber": 1}, "respawn": 0.0,
 		"verb": "Разрубить завесу лиан", "radius": 0.5, "height": 2.6, "long": 1.35},
 }
 const MODEL_NAMES := {"tall_grass": ["tall_grass"], "fern": ["fern_a", "fern_b"], "thicket": ["thicket"],
 	"bamboo": ["bamboo_clump"], "jungle_tree": ["jungle_tree_a", "jungle_tree_b"], "fallen_log": ["fallen_log"],
-	"cliff": ["cliff_a", "cliff_b"], "liana_curtain": ["liana_curtain"]}
+	"cliff": ["cliff_a", "cliff_b"], "liana_curtain": ["liana_curtain"], "clay": ["clay_pit"]}
 const BUSH_SEEDS := ["seed_carrot", "seed_carrot", "seed_potato", "seed_corn", "seed_cabbage"]
 
 @export var kind := "bush"
@@ -61,7 +63,7 @@ func _ready() -> void:
 	var cfg: Dictionary = KINDS[kind]
 	hp = cfg["hp"]
 	match kind:
-		"tall_grass", "fern", "thicket", "bamboo", "jungle_tree", "fallen_log", "cliff", "liana_curtain":
+		"tall_grass", "fern", "thicket", "bamboo", "jungle_tree", "fallen_log", "cliff", "liana_curtain", "clay":
 			var names: Array = MODEL_NAMES[kind]
 			visual = Models.glb(names[rng.randi() % names.size()])
 			if visual == null:
@@ -90,7 +92,7 @@ func _ready() -> void:
 		cs.shape = shape
 	cs.position.y = cfg["height"] * 0.5
 	add_child(cs)
-	if kind in ["pebble", "shell", "driftwood"]:
+	if kind in ["pebble", "shell", "driftwood", "clay"]:
 		collision_layer = 8  # мелочь не мешает ходить
 
 
@@ -183,7 +185,7 @@ func _shake_palm() -> void:
 
 
 const HIT_SOUND := {"palm": "chop", "driftwood": "chop", "rock": "rock", "pebble": "rock", "bush": "rustle", "shell": "pickup",
-	"jungle_tree": "chop", "fallen_log": "chop", "bamboo": "chop", "cliff": "rock", "thicket": "rustle", "fern": "rustle", "tall_grass": "rustle", "liana_curtain": "rustle"}
+	"jungle_tree": "chop", "fallen_log": "chop", "bamboo": "chop", "cliff": "rock", "thicket": "rustle", "fern": "rustle", "tall_grass": "rustle", "liana_curtain": "rustle", "clay": "plant"}
 
 
 func _hit_fx(_player: Node) -> void:

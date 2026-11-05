@@ -37,6 +37,28 @@ func _process(_delta: float) -> void:
 					p.global_position = n.to_global(n._deck_center(int(args["deck"]) - 1)) + Vector3(1.2, 0.3, 0.6)
 					p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
 			_flush()
+		if args.has("fortview"):
+			var f := _fort()
+			if f:
+				var mode: String = args["fortview"]
+				if mode == "open":
+					Game.flags["poi_fort_gate"] = true
+					f.open_gate(false)
+				if mode == "cellar":
+					Game.flags["cellar_drained"] = true
+					f._drain(false)
+					p.global_position = f.global_position - f.side_dir * 5.0 + Vector3(0, 0.5, 0)
+					p.camera_yaw = atan2(f.side_dir.x, f.side_dir.z)
+				else:
+					p.global_position = f.global_position + f.gate_dir * 16.0 + Vector3(0, 0.5, 0)
+					p.camera_yaw = atan2(f.gate_dir.x, f.gate_dir.z)
+				p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+			_flush()
+		if args.has("near") and main.island.poi_extra.has(args["near"]):
+			var np_: Vector3 = main.island.poi_extra[args["near"]]
+			p.global_position = np_ + Vector3(2.5, 0.5, 2.5)
+			p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+			_flush()
 		if args.has("at"):
 			var v: PackedStringArray = args["at"].split(",")
 			p.global_position = Vector3(float(v[0]), float(v[1]), float(v[2]))
@@ -250,6 +272,58 @@ func _validate_only() -> void:
 	_validate()
 	print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
 	get_tree().quit(0 if fails.is_empty() else 1)
+
+
+# ------------------------------------------------------------------ Форт
+func _fort() -> FortRuin:
+	for n in get_tree().get_nodes_in_group("obstacle"):
+		if n is FortRuin:
+			return n
+	return null
+
+
+func _test_fort() -> void:
+	var fort := _fort()
+	_check(fort != null, "на острове стоит форт")
+	if fort == null:
+		return
+	var walls := 0
+	for c in fort._body.get_children():
+		if c is CollisionShape3D and not c.disabled:
+			walls += 1
+	_check(walls >= 15 + 2 + 1, "стены форта замкнуты, ворота закрыты (%d препятствий)" % walls)
+	# сквозь стену не пройти: луч от лагеря к центру форта упирается в стену или ворота
+	var space := fort.get_world_3d().direct_space_state
+	var blocked := 0
+	for k in 16:
+		var a := TAU * k / 16.0 + 0.1
+		var from := fort.global_position + Vector3(cos(a), 0, sin(a)) * 14.0 + Vector3(0, 1.0, 0)
+		var q := PhysicsRayQueryParameters3D.create(from, fort.global_position + Vector3(0, 1.0, 0), 4)
+		if not space.intersect_ray(q).is_empty():
+			blocked += 1
+	_check(blocked == 16, "со всех 16 сторон внутрь не пройти, пока ворота заперты (%d/16)" % blocked)
+	# рычаги: неверный порядок — вода возвращается, верный — уходит
+	Game.flags.erase("cellar_drained")
+	fort.pull("star")
+	_check(not Game.flags.get("cellar_drained", false) and fort._pulled.is_empty(), "неверный порядок рычагов сбрасывается")
+	# рыбалка: дёрнуть раньше поклёвки — без рыбы
+	var spot: FishingSpot = null
+	for c in get_tree().get_nodes_in_group("interactable"):
+		if c is FishingSpot:
+			spot = c
+	_check(spot != null, "у берега есть места для рыбалки")
+	if spot:
+		Game.inventory["fishing_rod"] = 1
+		var before := Game.count("fish")
+		spot.interact(main.player)
+		spot.interact(main.player)
+		_check(Game.count("fish") == before and spot.state == FishingSpot.IDLE, "подсечь раньше поклёвки — рыба уходит")
+		Game.inventory.erase("fishing_rod")
+	var clay := 0
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode and n.kind == "clay":
+			clay += 1
+	_check(clay >= 3, "на берегу есть глиняные ямы (%d)" % clay)
 
 
 # ------------------------------------------------------------------ Лазание
@@ -495,8 +569,28 @@ func _do_task(t: Dictionary) -> void:
 				_give(StoryPlace.PLACES[target]["fuel"])
 			for c in get_tree().get_nodes_in_group("interactable"):
 				if c is StoryPlace and c.id == target:
-					c.interact(main.player)
+					c.interact(main.player)          # осмотр
+					if t["kind"] == "lit":
+						_flush()
+						c.interact(main.player)      # зажечь
 					break
+		"fished":
+			if not Game.has_tool("fishing_rod"):
+				_give({"fishing_rod": 1})
+			var spot: FishingSpot = null
+			for c in get_tree().get_nodes_in_group("interactable"):
+				if c is FishingSpot:
+					spot = c
+			for i in need:
+				spot.interact(main.player)     # закинуть
+				spot.state = FishingSpot.BITE  # поклёвка
+				spot.interact(main.player)     # подсечь
+		"solved":
+			var fort := _fort()
+			for sym in ["moon", "star", "sun"]:
+				for lv in fort.levers:
+					if lv.symbol == sym:
+						lv.interact(main.player)
 		"sold":
 			var shop := "rumba" if target == "any" else target
 			_give({"carrot": need})
@@ -573,6 +667,8 @@ func _autotest() -> void:
 	_check(get_tree().get_nodes_in_group("interactable").size() > 150, "на острове есть ресурсы и живность")
 	_check(Game.quest_started and Game.current_quest()["id"] == "wake", "первое задание началось")
 	for poi_id in main.island.poi.keys():
+		if poi_id == "fort":
+			continue   # форт закрыт стенами, а не зарослями — проверяется отдельно (_test_fort)
 		_check(not _reachable(poi_id), "к месту «%s» не пройти без инструментов" % poi_id)
 
 	var ch := int(args.get("chapter", "1")) - 1
@@ -583,6 +679,8 @@ func _autotest() -> void:
 		_flush()
 	if ch == 1:
 		_test_climb()
+	if ch == 2:
+		_test_fort()
 	if ch > 0:
 		Game.chapter = ch
 		Game.quest_index = 0

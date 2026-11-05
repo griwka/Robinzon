@@ -63,7 +63,7 @@ func _make_collision() -> void:
 			_add_box(Vector3(2.2, 0.4, 3.0), Vector3(0, 0.2, 0), 0.0)
 		"canoe":
 			_add_box(Vector3(1.0, 0.4, 3.0), Vector3(0, 0.2, 0), 0.0)
-		"goat_pen", "sheep_pen", "garden_bed", "torch", "flowerbed", "shell_path":
+		"goat_pen", "sheep_pen", "pig_sty", "garden_bed", "torch", "flowerbed", "shell_path":
 			_add_cyl(r * 0.6, 0.6)
 			collision_layer = 8  # не мешают ходить
 		"coop":
