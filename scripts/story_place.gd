@@ -111,6 +111,37 @@ const PLACES := {
 		"restored_model": "volcano_tower", "restored_name": "Огонь кратера",
 		"lines": [["player", "Башня из красного камня на самом краю. От озера лавы к её чаше шёл каменный жёлоб — он прогорел и обвалился. Заслонка заржавела."],
 			["parrot", "Тут Лёва обжёгся. Румба чует. Пахнет Лёвой и горелым."]]},
+	# ---------------------------------------------------------------- глава 7
+	# «Альбатрос»: части корабля чинят с мостков у борта; сам корабль (и что на нём уже починено) рисует StiltCamp
+	"albatros": {"model": "", "name": "Палуба «Альбатроса»", "radius": 0.0,
+		"loot": {"ship_rope": 1}, "pages": 0,
+		"lines": [["narrator", "По сходням — на палубу. Доски скрипят и пружинят. Всё поросло мхом, на реях дремлют светлячки."]]},
+	"albatros_hull": {"model": "", "name": "Корпус «Альбатроса»", "radius": 0.0,
+		"loot": {}, "pages": 0, "restore": {"mangrove_plank": 20, "resin": 6, "iron_nails": 20, "copper_nails": 20},
+		"restored_name": "Корпус «Альбатроса» (починен)",
+		"lines": [["gosha", "Пробоины. Гниль. Борт держится на честном слове. Моём."]]},
+	"albatros_mast": {"model": "", "name": "Мачта «Альбатроса»", "radius": 0.0,
+		"loot": {}, "pages": 0, "restore": {"wood": 4, "ship_rope": 6, "ship_sail": 3},
+		"restored_name": "Мачта и паруса",
+		"lines": [["stepa", "Мачту сломало в ту ночь, когда его сорвало с якоря. Обломок я узнаю из тысячи."]]},
+	"albatros_helm": {"model": "", "name": "Руль «Альбатроса»", "radius": 0.0,
+		"loot": {}, "pages": 0, "restore": {"iron_ingot": 2, "plank": 4},
+		"restored_name": "Руль",
+		"lines": [["gosha", "Штурвал цел. Перо руля сгнило. Нужны оковка и доски."]]},
+	"albatros_lights": {"model": "", "name": "Ходовые огни", "radius": 0.0,
+		"loot": {}, "pages": 0, "restore": {"glass": 4, "copper_wire": 2, "firefly_lantern": 1},
+		"restored_name": "Ходовые огни",
+		"lines": [["misha", "Фонари побились. Но если в них посадить светлячков... Красиво же будет!"]]},
+	"albatros_radio": {"model": "", "name": "Корабельная рация", "radius": 0.0,
+		"loot": {}, "pages": 0, "restore": {"radio_tube": 2, "battery_charged": 2},
+		"restored_name": "Корабельная рация",
+		"lines": [["misha", "Это моя рация. Я по ней стучал «живы, туман». Ей нужны лампы. Мои давно сели."]]},
+	"fog_tower": {"model": "fog_tower_ruin", "name": "Потерянный маяк", "radius": 2.0, "flag": "lit_fog_tower",
+		"needs_flag": "shadows_solved", "locked_hint": "Потерянный маяк — проход закрыт гладкой скалой",
+		"loot": {}, "pages": 0, "restore": {"iron_ingot": 4, "obsidian": 2, "brick": 6}, "fuel": {"lamp_oil": 4, "firefly": 10},
+		"restored_model": "fog_tower", "restored_name": "Потерянный маяк",
+		"lines": [["narrator", "Башня из серого камня, заросшая мхом до самого верха. Чаши нет: её сняли, аккуратно, давным-давно."],
+			["parrot", "Седьмой. Румба знает. Румба всегда знал, что их семь."]]},
 }
 
 var id := "old_camp"
@@ -283,6 +314,8 @@ func interact(_player: Node) -> void:
 
 func _swap_model(animate: bool) -> void:
 	var cfg: Dictionary = PLACES[id]
+	if not cfg.has("restored_model"):
+		return   # своей модели нет (части «Альбатроса» — их рисует сам корабль)
 	var m := Models.glb(cfg["restored_model"])
 	if m == null:
 		return
@@ -332,6 +365,8 @@ func light_fire(animate: bool) -> void:
 		var l := visual.get_node_or_null("Light") as OmniLight3D
 		if l:
 			l.light_color = Color("ff6a2a")
+	if id == "fog_tower":
+		Game.flags["fog_cleared"] = true
 	if id == "ice_tower":
 		Game.flags["ice_thawed"] = true
 		if animate:   # при загрузке остров и так строится уже оттаявшим

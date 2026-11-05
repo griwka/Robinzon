@@ -91,7 +91,8 @@ func _process(_delta: float) -> void:
 	var snap_rot := ghost_rot
 	if cfg.get("spot", false):
 		# мосток — только на отмеченном месте: призрак прилипает к ближайшим колышкам
-		var sp := free_spot(pos, 4.0)
+		var groups: Array = cfg["spot"] if cfg["spot"] is Array else ["bridge_spot"]
+		var sp := free_spot(pos, 4.0, groups)
 		valid = sp != null and sp.global_position.distance_to(player.global_position) < 12.0
 		if sp:
 			pos = sp.global_position
@@ -107,9 +108,12 @@ func _process(_delta: float) -> void:
 
 
 ## Свободное место под мосток рядом с точкой (или null).
-func free_spot(pos: Vector3, within: float) -> Node3D:
+func free_spot(pos: Vector3, within: float, groups: Array = ["bridge_spot"]) -> Node3D:
 	var best: Node3D = null
-	for s in get_tree().get_nodes_in_group("bridge_spot"):
+	var all: Array = []
+	for g in groups:
+		all.append_array(get_tree().get_nodes_in_group(g))
+	for s in all:
 		var sp := s as Node3D
 		if sp.get("used"):
 			continue

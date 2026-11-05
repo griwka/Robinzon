@@ -28,7 +28,7 @@
   Новых жителей, головоломки и ярусы добавляй в `NPCS`, `PUZZLES`, `DECKS`.
 - **`scripts/dev_tools.gd`** — автотесты и скриншоты. Каждой новой главе нужен свой автотест.
 - **Острова:** один генератор `scripts/island.gd`; особые места — `fort_ruin.gd`, `banyan_tree.gd`, `storm_station.gd`, `ice_glacier.gd`,
-  `volcano_crater.gd`, `volcano_temple.gd`, `hot_springs.gd`
+  `volcano_crater.gd`, `volcano_temple.gd`, `hot_springs.gd`, `stilt_camp.gd`, `signal_rock.gd`, `fog_shrine.gd`
   (бункер), `story_place.gd`. Кольца преград вокруг мест — `Island.RINGS`.
 - **Гроза** — `scripts/weather.gd` (только на Грозовом): `Game.storm_active()`; громоотвод — загон `lightning_rod`
   с `"storm": true` в `Data.PENS`. Ярусы бункера `bunker1..7` — свет от генератора (1–3) или фонарь.
@@ -37,7 +37,11 @@
   Оттепель — `Island.thaw()`; одежда на герое — `Player.update_clothes()` (модели `wear_*` с кусками Torso/Sleeve*/Boot*/Mitten*).
 - **Жар** — `scripts/heat.gd` (только на Вулкане): `Game.heat`, `Game.salve_t`; источники — узлы в группе `lava`
   с `heat_at(p)` и `push_dir(p)` (`scripts/lava.gd`: `Lava.Arc`, `Lava.Pool`), остужают узлы в группе `cool_spot`.
-  Постройка только на отмеченных местах — `"spot": true` в `Data.BUILDINGS` + узлы в группе `bridge_spot`.
+  Постройка только на отмеченных местах — `"spot": [группы]` в `Data.BUILDINGS` (`bridge_spot`, `lantern_spot`,
+  `shadow_spot`), метки — `LanternSpot` / `VolcanoTemple.BridgeSpot` с `set_bridged()`.
+- **Туман** — `scripts/fog_system.gd` (Туманный остров до флага `fog_cleared`): объёмный туман + `FogVolume`
+  с отрицательной плотностью у огня (группы `station_*` из `FogSystem.RADIUS` и узлы `fog_light` с `fog_radius`).
+  Плыть туда — только `Game.fog_hours()`; пассажир — флаг `stepa_aboard` → `Game.arrive()`.
 - **Ассеты собираются скриптами, руками не правятся:**
   - модели: `tools/blender/*.py` → `assets/models/*.glb`;
   - иконки: `tools/gen_icons.py` → `assets/icons/`;
@@ -81,6 +85,9 @@ godot --headless --path . -- --autotest --location=storm --chapter=4 --from=1
 godot --headless --path . -- --autotest --location=storm --chapter=5 --upto=1
 godot --headless --path . -- --autotest --location=ice --chapter=5 --from=1
 godot --headless --path . -- --autotest --location=volcano --chapter=6
+godot --headless --path . -- --autotest --location=fog --chapter=7 --upto=13
+godot --headless --path . -- --autotest --location=home --chapter=7 --from=13 --upto=1
+godot --headless --path . -- --autotest --location=fog --chapter=7 --from=14
 godot --path . --resolution 1600x900 -- --shot=shot.png --frames=90 --location=fort
 ```
 
@@ -109,12 +116,14 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 - `--thaw=1` — Ледяной остров уже оттаял; `--wear=sweater|jacket|fire` — герой в тёплой одежде / огнеупорных рукавицах;
 - `--near=vera|springs|temple_gate|crater_top|volcano_tower` — места на Вулкане; `--view=temple` — вид на вход в храм;
   `--solved=1` — мостки построены и монолит решён;
+- `--near=stilt_camp|signal_rock|fog_shrine|fog_tower|misha|renata` — места на Туманном; `--view=albatros` — вид на корабль;
+  `--fogdone=1` — туман ушёл, «Альбатрос» починен;
 - автотест: `--from=K` — начать с K-го задания главы, `--upto=K` — пройти только K заданий;
 - `--fxtest` — все эффекты перед кадром;
 - `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO.
 
 Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для музыки и фона — ffmpeg в PATH;
-`python tools/gen_audio.py thunder0 radio` — только указанные эффекты, без ffmpeg). Иконки главы 4 — в `tools/icons_storm.py`, главы 5 — в `tools/icons_ice.py`, главы 6 — в `tools/icons_volcano.py`.
+`python tools/gen_audio.py thunder0 radio` — только указанные эффекты, без ffmpeg). Иконки главы 4 — в `tools/icons_storm.py`, главы 5 — в `tools/icons_ice.py`, главы 6 — в `tools/icons_volcano.py`, главы 7 — в `tools/icons_fog.py`.
 На Windows Godot можно вызывать полным путём, если его нет в PATH.
 ```bash
 python tools/blender/build.py

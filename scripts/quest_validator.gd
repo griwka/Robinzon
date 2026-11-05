@@ -8,10 +8,12 @@ class_name QuestValidator
 const KNOWN_KINDS := ["talk", "collected", "crafted", "built", "planted", "harvested", "watered", "fed", "product",
 	"caught", "sailed", "cleared", "found", "lit", "reached", "collection", "delivered", "sold", "bought", "restored",
 	"fished", "solved"]
-const NPCS := ["parrot", "marta", "kesha", "stepa", "timur", "ingrid", "walrus", "penguins", "vera"]
-const PUZZLES := ["cellar", "stars", "monolith"]
+const NPCS := ["parrot", "marta", "kesha", "stepa", "timur", "ingrid", "walrus", "penguins", "vera",
+	"misha", "renata", "gosha", "petya", "pasha"]
+const PUZZLES := ["cellar", "stars", "monolith", "shadows"]
+const ALBATROS_PARTS := ["albatros_hull", "albatros_mast", "albatros_helm", "albatros_lights", "albatros_radio"]
 const DECKS := ["deck1", "deck2", "deck3",
-	"bunker1", "bunker2", "bunker3", "bunker4", "bunker5", "bunker6", "bunker7", "glacier_top", "temple_gate", "crater_top"]
+	"bunker1", "bunker2", "bunker3", "bunker4", "bunker5", "bunker6", "bunker7", "glacier_top", "temple_gate", "crater_top", "stilt_camp"]
 ## Ледяные ларцы: задание «found ice_chest ×3» — это три места ice_chest_1..3.
 const ICE_CHESTS := ["ice_chest_1", "ice_chest_2", "ice_chest_3"]
 
@@ -144,6 +146,8 @@ func can_get(id: String, depth := 0) -> bool:
 		return true   # пальму можно трясти без инструментов
 	if id == "fish" and can_get("fishing_rod", depth + 1):
 		return true
+	if id == "firefly" and can_get("net", depth + 1):
+		return true   # светлячков ловят сачком на Туманном острове
 	for t in Data.TREES.values():
 		if t["fruit"] == id:
 			return true   # дикие деревья
@@ -153,7 +157,7 @@ func can_get(id: String, depth := 0) -> bool:
 		return true
 	for b in Data.PENS:
 		var pen: Dictionary = Data.PENS[b]
-		if pen["product"] == id and _building_ok(b, depth + 1):
+		if (pen["product"] == id or pen.get("bonus", {}).has(id)) and _building_ok(b, depth + 1):
 			var feed_ok := true
 			for f in pen["feed"]:
 				feed_ok = feed_ok and can_get(f, depth + 1)
@@ -269,6 +273,10 @@ func _check_task(t: Dictionary) -> void:
 		"sailed":
 			if not (_building_ok("raft") or _building_ok("canoe")):
 				_err("не на чем плыть")
+			if tgt == "albatros":
+				for part in ALBATROS_PARTS:
+					if not restored_seen.has(part):
+						_err("«Альбатрос» не выйти в море: не починено «%s»" % part)
 			if Data.LOCATIONS.has(tgt):
 				var flag: String = Data.LOCATIONS[tgt].get("unlock_flag", "")
 				if flag.begins_with("restored_") and not restored_seen.has(flag.substr(9)):
@@ -302,6 +310,8 @@ func _check_task(t: Dictionary) -> void:
 						_err("для «%s» не достать «%s»" % [tgt, i])
 			if cfg.has("needs") and not can_get(cfg["needs"]):
 				_err("«%s» заперт, а ключа не достать" % tgt)
+			if cfg.has("needs_flag") and cfg["needs_flag"] == "shadows_solved" and not solved_seen.has("shadows"):
+				_err("«%s» за скалой, а головоломку теней ещё не решали" % tgt)
 			if cfg.has("needs_flag") and cfg["needs_flag"] == "monolith_solved" and not solved_seen.has("monolith"):
 				_err("«%s» за каменной дверью, а головоломку монолита ещё не решали" % tgt)
 			if cfg.has("needs_flag") and cfg["needs_flag"] == "cellar_drained" and not solved_seen.has("cellar"):
@@ -320,6 +330,8 @@ func _check_task(t: Dictionary) -> void:
 					_err("к храму не пройти: базальт ломает только железная кирка")
 				if not _building_ok("stone_bridge"):
 					_err("через лаву не перейти: каменные мостки не открыты")
+			elif tgt == "stilt_camp":
+				pass   # лагерь на сваях открыт: к нему ведут мостки
 			elif tgt == "crater_top":
 				if not can_get("climbing_gloves"):
 					_err("на стену кратера не залезть без перчаток")

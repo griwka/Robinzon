@@ -99,6 +99,10 @@ func interact(_player: Node) -> void:
 	if product_ready:
 		Game.add_item(cfg["product"], cfg["amount"])
 		Game.bump("product", cfg["product"], cfg["amount"])
+		var bonus: Dictionary = cfg.get("bonus", {})
+		for b in bonus:
+			Game.add_item(b, bonus[b])
+			Game.bump("product", b, bonus[b])
 		product_ready = false
 		fed = false
 		progress = 0.0

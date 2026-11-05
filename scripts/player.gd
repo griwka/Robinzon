@@ -316,7 +316,7 @@ func _physics_process(delta: float) -> void:
 	var isl := get_tree().get_first_node_in_group("island")
 	if isl:
 		var ahead := global_position + Vector3(velocity.x, 0, velocity.z) * 0.25
-		if isl.height_at(ahead.x, ahead.z) < -0.9:
+		if isl.height_at(ahead.x, ahead.z) < -0.9 and global_position.y < 0.2:   # на мостках над водой — можно
 			velocity.x = 0.0
 			velocity.z = 0.0
 	# в воде — медленнее и всплываем
@@ -553,7 +553,7 @@ func _find_target() -> void:
 			reach = 3.2
 		if n is NPCPerson and n.npc_id == "walrus":
 			reach = 3.4
-		if n is ResourceNode and n.kind in ["charred_tree", "basalt", "obsidian_rock", "ore_vein"]:
+		if n is ResourceNode and n.kind in ["charred_tree", "basalt", "obsidian_rock", "ore_vein", "mangrove"]:
 			reach = 3.4
 		if n is ResourceNode and n.kind in ["rock", "jungle_tree", "cliff", "fallen_log", "thicket", "bamboo", "crooked_tree", "rockfall", "ice_wall", "pine"]:
 			reach = 3.4

@@ -37,6 +37,20 @@ const IDLE := {
 		"Тимур звонит каждый вечер и спрашивает про кофе. Я ему не отвечаю. Пусть помучается.",
 		"Лава — она как люди: пока остывшая корка, кажется спокойной.",
 	],
+	"misha": [
+		"Я научился готовить рыбу семью способами. Седьмой — сырая. Это не считается.",
+		"Ночью я стучал в рацию. Тук-тук-тук. Живы, туман. Два года. Пальцы помнят.",
+		"А ты правда брат капитана? Похож. Нос похож. И упрямый, наверное, тоже.",
+		"Есть хочется. Всегда. Рената говорит, это потому что расту.",
+	],
+	"renata": [
+		"Подъём в шесть. Отбой в десять. Без дисциплины в тумане сходят с ума.",
+		"Я каждый день думаю, правильно ли сделала. Каждый день отвечаю: нет. И иду работать.",
+		"Гоша не болтает. Зато всё, что он говорит, — правда.",
+	],
+	"gosha": ["Чиню.", "...Железо бы.", "Корабль хороший. Терпеливый. Как я."],
+	"petya": ["Рыба сегодня...", "Мы с Пашей не спорим. Мы обсуждаем. Громко.", "Часы? Какие часы? Ничего я не писал."],
+	"pasha": ["...клюёт хорошо!", "Петя опять заканчивает за меня фразы. А я за него.", "Письмо? Какое письмо? Ничего я не писал."],
 	"walrus": [
 		"Морж приоткрывает один глаз, вздыхает и снова засыпает.",
 		"Хр-р-р... Фр-р-р... Усы шевелятся в такт храпу.",
@@ -49,7 +63,8 @@ const IDLE := {
 	],
 }
 const MODELS := {"marta": "marta", "kesha": "monkey", "stepa": "stepa", "timur": "timur", "ingrid": "ingrid",
-	"walrus": "walrus", "penguins": "penguin_feeder", "vera": "vera"}
+	"walrus": "walrus", "penguins": "penguin_feeder", "vera": "vera", "misha": "misha", "renata": "renata", "gosha": "gosha",
+	"petya": "petya", "pasha": "pasha"}
 const SHOP := {"marta": "marta", "stepa": "stepa", "timur": "timur", "ingrid": "ingrid", "vera": "vera"}
 ## Звери: говорит рассказчик, к игроку не поворачиваются, подсказка — своя.
 const BEASTS := ["walrus", "penguins"]
@@ -136,10 +151,20 @@ func _wants(who: String) -> bool:
 
 func interact(_player: Node) -> void:
 	var q := Game.current_quest()
+	# Миша прячется, пока тропа к его камню не освещена
+	if npc_id == "misha" and not Game.flags.get("trail_lit", false):
+		Game.dialogue_requested.emit([["narrator", "Огонь на камне вздрагивает, и кто-то пригибается за ним. Отсюда, из тумана, тебя не разглядеть. Нужно больше света на тропе."]], Callable())
+		return
 	if not q.is_empty() and Game.quest_started:
+		if npc_id == "renata" and q["id"] == "stepa_comes" and not Game.flags.get("stepa_at_fog", false):
+			Game.dialogue_requested.emit([["renata", "Боцман? Пусть сам приплывёт и скажет. В глаза."]], Callable())
+			return
 		for t in q["tasks"]:
 			if t["kind"] == "talk" and t["target"] == npc_id and Game.task_progress(t) < t["count"]:
 				Game.bump("talk", npc_id)
+				if npc_id == "stepa" and q["id"] == "stepa_comes":
+					Game.flags["stepa_aboard"] = true
+					Game.dialogue_requested.emit([["stepa", "Поплыли. Только ночью. И не гони — я старый, меня укачивает."]], Callable())
 				return
 	if Game.deliver_for_quest(npc_id):
 		return
@@ -152,6 +177,13 @@ func interact(_player: Node) -> void:
 		Game.notified.emit("Нужна рыба: пингвинам — шесть штук", Color("ff9d7a"))
 		return
 	var say := func(): Game.dialogue_requested.emit([[who, lines[randi() % lines.size()]]], Callable())
+	if npc_id == "misha" and Game.location == "home" and Game.flags.get("village_moved", false):
+		# Миша — паромщик на старой шлюпке «Альбатроса»
+		Game.choice_requested.emit("Юнга Миша, паромщик", [
+			{"text": "Паром — плыть на другой остров", "icon": "sym_star", "callback": func():
+				get_tree().call_group("main", "choose_destination")},
+			{"text": "Поговорить", "icon": "portrait_misha", "callback": say}])
+		return
 	if SHOP.has(npc_id) and Game.shop_open(SHOP[npc_id]):
 		Game.choice_requested.emit(Data.SPEAKERS[npc_id]["name"], [
 			{"text": "Торговать", "icon": "coins", "callback": func(): Game.shop_requested.emit(SHOP[npc_id])},

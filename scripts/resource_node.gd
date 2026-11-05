@@ -73,6 +73,9 @@ const KINDS := {
 		"verb": "Отколоть обсидиан", "radius": 0.7, "height": 1.1},
 	"basalt": {"hp": 5, "tool": "iron_pickaxe", "drops": {"stone": 4}, "respawn": 0.0,
 		"verb": "Разбить базальтовые столбы", "radius": 0.9, "height": 2.6, "long": 1.5},
+	# --- Туманный остров
+	"mangrove": {"hp": 3, "tool": "stone_axe", "drops": {"mangrove_wood": 2}, "respawn": 150.0,
+		"verb": "Срубить мангр (доски не гниют)", "radius": 0.7, "height": 4.5},
 }
 const MODEL_NAMES := {"tall_grass": ["tall_grass"], "fern": ["fern_a", "fern_b"], "thicket": ["thicket"],
 	"bamboo": ["bamboo_clump"], "jungle_tree": ["jungle_tree_a", "jungle_tree_b"], "fallen_log": ["fallen_log"],
@@ -82,7 +85,8 @@ const MODEL_NAMES := {"tall_grass": ["tall_grass"], "fern": ["fern_a", "fern_b"]
 	"moss": ["moss_a", "moss_b"], "lingonberry": ["lingonberry_bush"], "pine": ["pine_a", "pine_b"],
 	"ice_block": ["ice_block"], "ice_wall": ["ice_wall_a", "ice_wall_b"],
 	"aloe": ["aloe_plant"], "coffee_bush": ["coffee_bush"], "charred_tree": ["charred_tree_a", "charred_tree_b"],
-	"ore_vein": ["ore_vein"], "obsidian_rock": ["obsidian_rock"], "basalt": ["basalt_a", "basalt_b"]}
+	"ore_vein": ["ore_vein"], "obsidian_rock": ["obsidian_rock"], "basalt": ["basalt_a", "basalt_b"],
+	"mangrove": ["mangrove_a", "mangrove_b"]}
 const BUSH_SEEDS := ["seed_carrot", "seed_carrot", "seed_potato", "seed_corn", "seed_cabbage"]
 
 @export var kind := "bush"
@@ -110,7 +114,7 @@ func _ready() -> void:
 		"tall_grass", "fern", "thicket", "bamboo", "jungle_tree", "fallen_log", "cliff", "liana_curtain", "clay", \
 				"heather", "blueberry", "crooked_tree", "scrap_pile", "sand", "rockfall", \
 				"moss", "lingonberry", "pine", "ice_block", "ice_wall", \
-				"aloe", "coffee_bush", "charred_tree", "ore_vein", "obsidian_rock", "basalt":
+				"aloe", "coffee_bush", "charred_tree", "ore_vein", "obsidian_rock", "basalt", "mangrove":
 			var names: Array = MODEL_NAMES[kind]
 			visual = Models.glb(names[rng.randi() % names.size()])
 			if visual == null:
@@ -146,7 +150,7 @@ func _ready() -> void:
 
 func _setup_visibility() -> void:
 	# дальние мелкие объекты не рисуем и не даём им тени — так тысяча растений не тормозит
-	var far := 90.0 if kind in ["jungle_tree", "palm", "cliff", "bamboo", "crooked_tree", "rockfall", "pine", "ice_wall", "charred_tree", "basalt"] else 55.0
+	var far := 90.0 if kind in ["jungle_tree", "palm", "cliff", "bamboo", "crooked_tree", "rockfall", "pine", "ice_wall", "charred_tree", "basalt", "mangrove"] else 55.0
 	for mi in visual.find_children("*", "GeometryInstance3D", true, false):
 		var gi := mi as GeometryInstance3D
 		gi.visibility_range_end = far
@@ -242,7 +246,8 @@ const HIT_SOUND := {"palm": "chop", "driftwood": "chop", "rock": "rock", "pebble
 	"jungle_tree": "chop", "fallen_log": "chop", "bamboo": "chop", "cliff": "rock", "thicket": "rustle", "fern": "rustle", "tall_grass": "rustle", "liana_curtain": "rustle", "clay": "plant",
 	"heather": "rustle", "blueberry": "rustle", "crooked_tree": "chop", "scrap_pile": "metal", "sand": "plant", "rockfall": "rock",
 	"moss": "rustle", "lingonberry": "rustle", "pine": "chop", "ice_block": "ice", "ice_wall": "ice",
-	"aloe": "rustle", "coffee_bush": "rustle", "charred_tree": "chop", "ore_vein": "metal", "obsidian_rock": "ice", "basalt": "rock"}
+	"aloe": "rustle", "coffee_bush": "rustle", "charred_tree": "chop", "ore_vein": "metal", "obsidian_rock": "ice", "basalt": "rock",
+	"mangrove": "chop"}
 
 
 const COLORS := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color("a0a4a8"), "cliff": Color("a0a4a8"),
@@ -253,9 +258,9 @@ const COLORS := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color
 	"sand": Color("ecd29a"), "rockfall": Color("8a8a90"),
 	"moss": Color("8fa060"), "lingonberry": Color("d8343a"), "pine": Color("8a6a4a"), "ice_block": Color("cfeefa"), "ice_wall": Color("cfeefa"),
 	"aloe": Color("6fbf7a"), "coffee_bush": Color("c8302a"), "charred_tree": Color("3a3634"), "ore_vein": Color("a0624a"),
-	"obsidian_rock": Color("3a2a5a"), "basalt": Color("5a5658")}
+	"obsidian_rock": Color("3a2a5a"), "basalt": Color("5a5658"), "mangrove": Color("7a5a3a")}
 const STONE := ["rock", "cliff", "pebble", "rockfall", "scrap_pile", "ice_block", "ice_wall", "ore_vein", "obsidian_rock", "basalt"]
-const WOOD := ["palm", "jungle_tree", "fallen_log", "bamboo", "driftwood", "crooked_tree", "pine", "charred_tree"]
+const WOOD := ["palm", "jungle_tree", "fallen_log", "bamboo", "driftwood", "crooked_tree", "pine", "charred_tree", "mangrove"]
 const HEAVY := ["rock", "cliff", "jungle_tree", "palm", "fallen_log", "bamboo", "crooked_tree", "rockfall", "pine", "ice_wall",
 	"charred_tree", "basalt", "obsidian_rock"]
 var _hit_tw: Tween
@@ -311,7 +316,7 @@ func _deplete() -> void:
 	var col: Color = COLORS.get(kind, Color("e9d8b0"))
 	var big := kind in HEAVY or kind in ["thicket", "liana_curtain"]
 	var tw := create_tween()
-	if kind in ["palm", "jungle_tree", "crooked_tree", "pine", "charred_tree"]:
+	if kind in ["palm", "jungle_tree", "crooked_tree", "pine", "charred_tree", "mangrove"]:
 		# дерево валится от игрока, бьётся о землю: пыль кольцом, глухой удар, тряска
 		var away := Vector3.FORWARD
 		if _hitter is Node3D:

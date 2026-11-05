@@ -141,6 +141,12 @@ func _build_terrain() -> void:
 			["grass_light", Palette.GRASS_LIGHT], ["grass_dark", Palette.GRASS_DARK], ["grass_warm", Palette.GRASS_WARM],
 			["rock", Palette.ROCK], ["rock_dark", Palette.ROCK_DARK], ["dirt", Palette.DIRT], ["dirt_dark", Palette.DIRT_DARK]]:
 		m.set_shader_parameter(pair[0], pair[1])
+	if mix == "fog":
+		# Туманный остров: илистый берег, болотная трава
+		for pair in [["sand", Color("b0a382")], ["sand_dark", Color("948666")], ["sand_light", Color("c6b994")],
+				["wet_sand", Color("6e624a")], ["seabed", Color("4f7f70")], ["grass", Color("6a9658")], ["grass_light", Color("80a868")],
+				["grass_dark", Color("4e7848")], ["grass_warm", Color("8a9c5c")]]:
+			m.set_shader_parameter(pair[0], pair[1])
 	if mix == "volcano":
 		# Остров Вулкана: чёрный песок, сочная трава, тёмный базальт
 		for pair in [["sand", Color("4c4648")], ["sand_dark", Color("3a3537")], ["sand_light", Color("625b5c")],
@@ -189,6 +195,11 @@ func _build_water() -> void:
 	water_mat.set_shader_parameter("map_size", SIZE)
 	water_mat.set_shader_parameter("height_min", H_MIN)
 	water_mat.set_shader_parameter("height_max", H_MAX)
+	if mix == "fog":
+		# тихая вода лагуны: тёмная, зеленоватая
+		water_mat.set_shader_parameter("shallow_color", Color("8cc2a8"))
+		water_mat.set_shader_parameter("mid_color", Color("3f8a86"))
+		water_mat.set_shader_parameter("deep_color", Color("1f4a68"))
 	if mix == "ice":
 		# северное море: холоднее и темнее, у берега — бледная ледяная бирюза
 		water_mat.set_shader_parameter("shallow_color", Color("9ad8e2"))
@@ -271,6 +282,8 @@ func _build_grass() -> void:
 	var palette := [Color("ff6fa5"), Color("ffd84a"), Color("ffffff"), Color("b28cff"), Color("ff8a3d"), Color("6fc3ff")]
 	if mix == "ice":
 		palette = [Color("ffffff"), Color("fff4c0"), Color("ffd84a"), Color("ffffff")]   # северные цветы: белые и жёлтые
+	if mix == "fog":
+		palette = [Color("f4f6f2"), Color("d8d0f0"), Color("cfe8f0"), Color("f4f6f2")]   # бледные цветы болота
 	attempts = 0
 	while ft.size() < 900 and attempts < 30000:
 		attempts += 1
@@ -384,6 +397,19 @@ func _place_pois() -> void:
 		gv.y = height_at(gv.x, gv.z)
 		poi["graves"] = gv
 		for k in ["storm_tower", "seaplane", "graves"]:
+			poi_extra[k] = poi[k]
+		return
+	if mix == "fog":
+		# лагерь на сваях — в лагуне на востоке; сигнальный камень Миши — в болоте, к нему тропа от места высадки;
+		# на скалистом холме — стоячие камни, скала-экран и Потерянный маяк
+		poi["stilt_camp"] = _shore_point(0.25, 0.0)
+		var rock := Vector3(-radius * 0.22, 0, radius * 0.08)
+		rock.y = height_at(rock.x, rock.z)
+		poi["signal_rock"] = rock
+		var sh := Vector3(peak_center.x, 0, peak_center.y + 6.5)
+		sh.y = height_at(sh.x, sh.z)
+		poi["fog_shrine"] = sh
+		for k in ["stilt_camp", "signal_rock", "fog_shrine"]:
 			poi_extra[k] = poi[k]
 		return
 	if mix == "volcano":
@@ -500,6 +526,26 @@ func _spawn_resources() -> void:
 		if id == "temple_gate":
 			_pending_temple = poi[id]
 			continue
+		if id == "stilt_camp":
+			var sc := StiltCamp.new()
+			sc.island = self
+			sc.position = poi[id]
+			holder.add_child(sc)
+			continue
+		if id == "signal_rock":
+			var sr := SignalRock.new()
+			sr.island = self
+			sr.trail_from = camp_center
+			sr.position = poi[id]
+			holder.add_child(sr)
+			continue
+		if id == "fog_shrine":
+			var fs := FogShrine.new()
+			fs.island = self
+			fs.back = Vector3(peak_center.x - poi[id].x, 0, peak_center.y - poi[id].z).normalized()
+			fs.position = poi[id]
+			holder.add_child(fs)
+			continue
 		if id == "springs":
 			var hs := HotSprings.new()
 			hs.island = self
@@ -549,15 +595,25 @@ func _spawn_resources() -> void:
 			var roll := rng.randf()
 			var seed_v := rng.randi()
 			var h := height_at(x, z)
+			if mix == "fog" and h > -0.5 and h < 0.15 and roll < 0.22 and not _near_poi(Vector2(x, z), 10.0) \
+					and Vector2(x - poi["stilt_camp"].x, z - poi["stilt_camp"].z).length() > 21.0:
+				# мангры стоят прямо в мелкой воде, на корнях-ходулях
+				_uid += 1
+				_spawn(holder, "mangrove", Vector3(x, h - 0.05, z), seed_v, loc + ":m%d" % _uid, -100.0)
+				continue
 			if h < 0.15:
 				continue
 			var p2 := Vector2(x, z)
 			var dc := p2.distance_to(camp2)
 			var dw := p2.distance_to(wreck2)
-			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5, "storm": 10.5, "ice": 11.0, "volcano": 11.0}.get(mix, 5.0)):
+			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5, "storm": 10.5, "ice": 11.0, "volcano": 11.0, "fog": 10.0}.get(mix, 5.0)):
+				continue
+			if mix == "fog" and _near_trail(p2):
 				continue
 			var kind := ""
-			if mix == "volcano" and dc >= 9.5 and dw >= 7.0:
+			if mix == "fog" and dc >= 9.5 and dw >= 7.0:
+				kind = _fog_kind(h, dc, roll, seed_v)
+			elif mix == "volcano" and dc >= 9.5 and dw >= 7.0:
 				kind = _volcano_kind(h, dc, roll, seed_v)
 			elif mix == "ice" and dc >= 9.5 and dw >= 7.0:
 				kind = _ice_kind(h, dc, roll, seed_v, p2)
@@ -630,6 +686,10 @@ func _spawn_resources() -> void:
 		_spawn_pits(holder, "sand", 6, "storm:sand_%d")
 	if mix == "ice":
 		_spawn_floes(decor)
+	if mix == "fog":
+		var life := FogLife.new()
+		life.island = self
+		holder.add_child(life)
 	if mix == "volcano":
 		_spawn_obsidian(holder)
 	if mix == "volcano" and crater_node:
@@ -676,6 +736,45 @@ func _ice_kind(h: float, dc: float, roll: float, seed_v: int, p2: Vector2) -> St
 	if roll < 0.5: return "ice_block"
 	if roll < 0.55 and h > 3.0: return "ice_wall"
 	if roll < 0.58: return "fallen_log"
+	return ""
+
+
+## Туманный остров: тропа от места высадки к сигнальному камню — без зарослей.
+func _near_trail(p: Vector2) -> bool:
+	if not poi.has("signal_rock"):
+		return false
+	var a := Vector2(camp_center.x, camp_center.z)
+	var b := Vector2(poi["signal_rock"].x, poi["signal_rock"].z)
+	var ab := b - a
+	var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.001), 0.0, 1.0)
+	return p.distance_to(a + ab * t) < 2.8
+
+
+## Туманный остров: на берегу — мангры, плавник; в болоте — трава, папоротник, кусты, мангры, редкие деревья;
+## на холме — камни.
+func _fog_kind(h: float, dc: float, roll: float, seed_v: int) -> String:
+	if h < 1.05:
+		if roll < 0.18: return "mangrove"
+		if roll < 0.26: return "tall_grass"
+		if roll < 0.31: return ["shell", "driftwood"][seed_v % 2]
+		return ""
+	if h > 4.5:
+		if roll < 0.18: return "rock"
+		if roll < 0.36: return "tall_grass"
+		if roll < 0.42: return "fern"
+		return ""
+	if dc < 17.0:
+		if roll < 0.28: return "tall_grass"
+		if roll < 0.42: return "fern"
+		if roll < 0.5: return "bush"
+		return ""
+	if roll < 0.2: return "tall_grass"
+	if roll < 0.36: return "fern"
+	if roll < 0.44: return "mangrove"
+	if roll < 0.52: return "bush"
+	if roll < 0.57: return "jungle_tree"
+	if roll < 0.62: return "fallen_log"
+	if roll < 0.65: return "rock"
 	return ""
 
 
@@ -907,13 +1006,14 @@ func _spawn_stepa(holder: Node3D) -> void:
 		cs.position.y = 1.3
 		body.add_child(cs)
 		hut.add_child(body)
-	var st := NPCPerson.new()
-	st.npc_id = "stepa"
 	var sp := hp + to_camp.normalized() * 2.6
 	sp.y = height_at(sp.x, sp.z)
-	st.position = sp
-	holder.add_child(st)
 	poi_extra["stepa"] = sp
+	if not Game.flags.get("stepa_at_fog", false):   # глава 7: Стёпа уплыл к своим на Туманный
+		var st := NPCPerson.new()
+		st.npc_id = "stepa"
+		st.position = sp
+		holder.add_child(st)
 	# бот боцмана лежит на берегу у хижины, кормой к воде (глава 4)
 	var bp := hp - side * 4.5 - to_camp.normalized() * 2.0
 	bp.y = maxf(height_at(bp.x, bp.z), 0.05)
