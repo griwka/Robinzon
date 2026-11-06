@@ -286,7 +286,10 @@ var _hitter: Node
 
 func _hit_fx(player: Node) -> void:
 	_hitter = player
-	Audio.play(HIT_SOUND.get(kind, "pickup"), -2.0, 0.12, global_position)
+	var snd: String = HIT_SOUND.get(kind, "pickup")
+	if snd == "chop":
+		snd = "chop%d" % randi_range(0, 3)   # у топора четыре разных удара — не звучит одним и тем же
+	Audio.play(snd, -2.0, 0.08, global_position)
 	# отклик: предмет сплющивается и пружинит обратно, качается и коротко вспыхивает
 	if _hit_tw and _hit_tw.is_valid():
 		_hit_tw.kill()

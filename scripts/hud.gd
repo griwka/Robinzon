@@ -317,10 +317,25 @@ func _build_quest() -> void:
 	p.add_child(quest_box)
 
 
+var pointer_label: Label   # куда идти по заданию (QuestPointer)
+
+
+## Строка-указатель под заданием: «➜ Старый лагерь Лёвы — 34 м, на западе» ("" — спрятать).
+func set_pointer(text: String) -> void:
+	if pointer_label == null:
+		pointer_label = _label("", 16, Color("bfe8ff"))
+		pointer_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		pointer_label.custom_minimum_size = Vector2(330, 0)
+		quest_box.add_child(pointer_label)
+	pointer_label.text = text
+	pointer_label.visible = text != ""
+
+
 func _update_quest() -> void:
 	for c in quest_box.get_children():
 		quest_box.remove_child(c)
-		c.queue_free()
+		if c != pointer_label:
+			c.queue_free()
 	var ch := Game.current_chapter()
 	quest_box.add_child(_label(ch["title"], 14, Color("f3e2bd")))
 	var q := Game.current_quest()
@@ -339,6 +354,8 @@ func _update_quest() -> void:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.custom_minimum_size = Vector2(330, 0)
 		quest_box.add_child(l)
+	if pointer_label:
+		quest_box.add_child(pointer_label)
 
 
 # ================================================================== Панель предметов
