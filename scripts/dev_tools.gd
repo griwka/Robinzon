@@ -33,6 +33,8 @@ func _ready() -> void:
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	if args.has("autotest"):
 		_autotest.call_deferred()
+	if args.has("walktest"):
+		_walktest.call_deferred()
 	if args.has("validate"):
 		_validate_only.call_deferred()
 
@@ -995,6 +997,120 @@ func _test_ending() -> void:
 	_check(not OrderBoard.fulfil(ids[0]), "один заказ — один раз")
 	_flush()
 	Game.delete_save()   # после титров игра сохранилась — следующему автотесту это не нужно
+
+
+# ------------------------------------------------------------------ Прохождение ногами
+## Пройти героем к точке по-настоящему: нажата «вперёд», камера развёрнута к цели, работает физика.
+## Заросли на пути (их в игре вырубают инструментом) убираем; застрять можно только на рельефе и стенах.
+## Возвращает "" — дошёл, иначе — где застрял.
+func _walk_to(goal: Vector3, max_t := 40.0, near := 1.6) -> String:
+	var p: Player = main.player
+	p.controls_enabled = true
+	var t := 0.0
+	var last := p.global_position
+	var still := 0.0
+	while t < max_t:
+		var d := Vector3(goal.x - p.global_position.x, 0, goal.z - p.global_position.z)
+		if d.length() < near:
+			Input.action_release("move_forward")
+			return ""
+		p.camera_yaw = atan2(-d.x, -d.z)
+		Input.action_press("move_forward")
+		await get_tree().physics_frame
+		var dt := get_physics_process_delta_time()
+		t += dt
+		if p.global_position.distance_to(last) < 0.6 * dt:
+			still += dt
+		else:
+			still = 0.0
+		last = p.global_position
+		if still > 0.6:
+			# упёрлись: если это заросли или камень — в игре их расчищают; убираем ближайшие
+			var cleared := false
+			for n in get_tree().get_nodes_in_group("obstacle"):
+				if n is ResourceNode and n.active and (n as Node3D).global_position.distance_to(p.global_position) < 2.6:
+					n._deplete()
+					cleared = true
+			if not cleared and still > 2.5:
+				Input.action_release("move_forward")
+				return "застрял в %s (высота земли %.1f, до цели %.1f м)" % [str(p.global_position.snapped(Vector3.ONE * 0.1)),
+					main.island.height_at(p.global_position.x, p.global_position.z), d.length()]
+	Input.action_release("move_forward")
+	return "не дошёл за %d с, остановился в %s" % [int(max_t), str(p.global_position.snapped(Vector3.ONE * 0.1))]
+
+
+## Маршрут ногами: из одной точки через несколько — без телепортов. Печатает и проверяет каждый отрезок.
+func _walk_route(name_: String, start: Vector3, points: Array) -> void:
+	var p: Player = main.player
+	p.global_position = start + Vector3(0, 0.6, 0)
+	p.velocity = Vector3.ZERO
+	for i in 10:
+		await get_tree().physics_frame
+	for i in points.size():
+		var why := await _walk_to(points[i])
+		_check(why == "", "%s: отрезок %d из %d%s" % [name_, i + 1, points.size(), "" if why == "" else " — " + why])
+		if why != "":
+			return
+
+
+func _walktest() -> void:
+	print("=== WALKTEST ===")
+	if Game.save_path == Game.SAVE_PATH:
+		get_tree().quit(1)   # ни в коем случае не трогать сохранение игрока
+		return
+	Game.delete_save()
+	await get_tree().process_frame
+	_flush()
+	var isl: Island = main.island
+	var camp := isl.camp_center
+	# у причала стоит лодка (дома — обломки «Чайки»): идём не в неё, а к берегу перед ней
+	var dock := isl.wreck_point + (camp - isl.wreck_point).normalized() * 3.0
+	Game.location = isl.loc   # старое тестовое сохранение могло подменить остров — верим тому, что построено
+	match isl.loc:
+		"fort":
+			var f := _fort()
+			Game.flags["poi_fort_gate"] = true
+			f.open_gate(false)
+			var yard := f.global_position
+			var gate_in := f.global_position + f.gate_dir * (FortRuin.R - 2.5)
+			var gate_out := f.global_position + f.gate_dir * (FortRuin.R + 3.0)
+			var cellar := f.global_position - f.side_dir * 4.0
+			await _walk_route("из двора форта к причалу", yard, [gate_in, gate_out, camp, dock])
+			await _walk_route("от причала в форт и в подвал", dock, [camp, gate_out, gate_in, yard, cellar])
+			await _walk_route("из подвала обратно к воротам", cellar, [yard, gate_in, gate_out])
+		"storm":
+			# бункер под землёй и ниже уровня моря: на каждом ярусе герой стоит на полу, а не «всплывает»
+			var stn := _station()
+			Game.flags["restored_generator"] = true
+			for k in range(1, StormStation.DECKS + 1):
+				var dp := stn.deck_point("bunker%d" % k)
+				var p: Player = main.player
+				p.global_position = dp
+				p.velocity = Vector3.ZERO
+				for i in 90:
+					await get_tree().physics_frame
+				var dy := p.global_position.y - dp.y
+				_check(absf(dy) < 0.8 and not p.in_water(), "ярус %d бункера (высота %.1f): герой стоит на полу (сдвиг %.2f м)" % [k, dp.y, dy])
+			await _walk_route("от причала к лагерю и обратно", dock, [camp, dock])
+		_:
+			await _walk_route("от причала к лагерю и обратно", dock, [camp, dock])
+	if args.has("scan"):
+		# из разных мест острова — к лагерю: находим ямы и тупики, откуда не выбраться ногами
+		var g := RandomNumberGenerator.new()
+		g.seed = 4321
+		var n := int(args["scan"])
+		var tried := 0
+		while tried < n:
+			var a := g.randf() * TAU
+			var r := g.randf_range(4.0, isl.radius * 1.05)
+			var q := Vector3(cos(a) * r, 0, sin(a) * r)
+			q.y = isl.height_at(q.x, q.z)
+			if q.y < 0.3:
+				continue
+			tried += 1
+			await _walk_route("из точки %s к лагерю" % str(q.snapped(Vector3.ONE)), q, [camp])
+	print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
+	get_tree().quit(0 if fails.is_empty() else 1)
 
 
 # ------------------------------------------------------------------ Форт
