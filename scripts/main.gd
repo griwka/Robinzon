@@ -348,7 +348,7 @@ func _process(delta: float) -> void:
 			c.position.x = -340
 	if not hud.any_open():
 		if build.is_active():
-			hud.set_hint("ЛКМ — поставить «%s»,  R — повернуть,  ПКМ — отмена" % Data.BUILDINGS[build.active_id]["name"])
+			hud.set_hint(build.reason if build.reason != "" else "ЛКМ — поставить «%s»,  R — повернуть,  ПКМ — отмена" % Data.BUILDINGS[build.active_id]["name"])
 		else:
 			hud.set_hint(player.get_hint())
 	else:

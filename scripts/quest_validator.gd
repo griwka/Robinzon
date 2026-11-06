@@ -259,6 +259,8 @@ func _check_task(t: Dictionary) -> void:
 					_err("нечего посадить: нет саженцев или дерево не открыто")
 			elif not _building_ok(tgt):
 				_err("постройку «%s» нельзя построить: не открыта или не хватает материалов" % tgt)
+			if t.has("near") and t["near"] != "camp" and not Data.BUILDINGS.has(t["near"]):
+				_err("«рядом с %s» — такой постройки нет" % t["near"])
 		"planted", "harvested":
 			if not can_get("seed_" + tgt):
 				_err("нет семян «%s»" % tgt)
