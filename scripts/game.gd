@@ -268,7 +268,25 @@ func recipe_unlocked(r: Dictionary) -> bool:
 	return is_unlocked(r["id"], r)
 
 
+## Вещь нужна в одном экземпляре: инструменты и одежда не ломаются, особые приборы тоже.
+## Вторую такую не делают и не покупают (пока первая не потрачена — например, фонарь на огни «Альбатроса»).
+const UNIQUE_EXTRA := ["direction_finder", "obsidian_lens", "sea_chart", "crucible", "radio_set"]
+
+
+func unique(id: String) -> bool:
+	return item(id).get("cat", "") in ["tool", "clothes"] or id in UNIQUE_EXTRA
+
+
+## Такая вещь уже есть, а вторая не нужна.
+func owned_unique(id: String) -> bool:
+	return unique(id) and count(id) > 0
+
+
 func craft(recipe: Dictionary) -> bool:
+	var out_id: String = recipe["out"].keys()[0]
+	if owned_unique(out_id) and not recipe["in"].has(out_id):
+		notified.emit("%s уже есть — инструменты не ломаются" % item_name(out_id), Color("ffe08a"))
+		return false
 	if not recipe_unlocked(recipe) or not pay(recipe["in"]):
 		return false
 	Audio.play("hammer" if recipe["station"] == "forge" else "craft", -3.0)
@@ -296,13 +314,16 @@ func shop_items(shop_id: String) -> Array:
 
 
 func buy(shop_id: String, id: String, price: int) -> bool:
+	if owned_unique(id):
+		notified.emit("%s уже есть" % item_name(id), Color("ffe08a"))
+		return false
 	if count("coins") < price:
 		notified.emit("Не хватает монет: нужно %d" % price, Color("ff9d7a"))
 		return false
 	pay({"coins": price})
 	add_item(id, 1, false, true)
 	notified.emit("Куплено: %s" % item_name(id), Color("ffe08a"))
-	Audio.play("pickup", -3.0)
+	Audio.play("coins", -3.0)
 	bump("bought", id)
 	bump("bought", "any")
 	return true
@@ -321,7 +342,7 @@ func sell(shop_id: String, id: String, n := 1) -> void:
 	var got := int(round(Data.SELL_PRICES[id] * n * sell_mult()))
 	add_item("coins", got, false, true)
 	notified.emit("Продано: %s ×%d  +%d мон." % [item_name(id), n, got], Color("f3e2b8"))
-	Audio.play("pickup", -3.0, 0.1)
+	Audio.play("coins", -3.0, 0.1)
 	bump("sold", shop_id, n)
 	bump("sold", "any", n)
 
@@ -618,9 +639,30 @@ func load_game() -> Dictionary:
 	loc_data = data.get("locations", {})
 	if loc_data.is_empty() and data.has("buildings"):
 		loc_data["home"] = {"buildings": data["buildings"], "player": data.get("player", [])}
+	_merge_duplicate_tools()
 	inventory_changed.emit()
 	quest_changed.emit()
 	return data
+
+
+## Сохранения, где успели сделать по две-три одинаковых вещи: лишние разбираем обратно на материалы.
+func _merge_duplicate_tools() -> void:
+	var back := {}
+	for id in inventory.keys():
+		var extra: int = count(id) - 1
+		if not unique(id) or extra <= 0:
+			continue
+		inventory[id] = 1
+		for r in Data.RECIPES:
+			if r["out"].has(id):
+				for m in r["in"]:
+					if m != id and not unique(m):
+						back[m] = int(back.get(m, 0)) + int(r["in"][m]) * extra
+				break
+	for m in back:
+		inventory[m] = count(m) + int(back[m])
+	if not back.is_empty():
+		notified.emit("Лишние одинаковые инструменты разобраны обратно на материалы", Color("ffe08a"))
 
 
 func reset_state() -> void:

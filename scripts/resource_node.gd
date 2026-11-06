@@ -260,9 +260,9 @@ func _shake_palm() -> void:
 
 
 const HIT_SOUND := {"palm": "chop", "driftwood": "chop", "rock": "rock", "pebble": "rock", "bush": "rustle", "shell": "pickup",
-	"jungle_tree": "chop", "fallen_log": "chop", "bamboo": "chop", "cliff": "rock", "thicket": "rustle", "fern": "rustle", "tall_grass": "rustle", "liana_curtain": "rustle", "clay": "plant",
-	"heather": "rustle", "blueberry": "rustle", "crooked_tree": "chop", "scrap_pile": "metal", "sand": "plant", "rockfall": "rock",
-	"moss": "rustle", "lingonberry": "rustle", "pine": "chop", "ice_block": "ice", "ice_wall": "ice",
+	"jungle_tree": "chop", "fallen_log": "chop", "bamboo": "chop", "cliff": "rock", "thicket": "rustle", "fern": "pull", "tall_grass": "pull", "liana_curtain": "rustle", "clay": "plant",
+	"heather": "pull", "blueberry": "rustle", "crooked_tree": "chop", "scrap_pile": "metal", "sand": "plant", "rockfall": "rock",
+	"moss": "pull", "lingonberry": "rustle", "pine": "chop", "ice_block": "ice", "ice_wall": "ice",
 	"aloe": "rustle", "coffee_bush": "rustle", "charred_tree": "chop", "ore_vein": "metal", "obsidian_rock": "ice", "basalt": "rock",
 	"mangrove": "chop"}
 
@@ -277,6 +277,8 @@ const COLORS := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color
 	"aloe": Color("6fbf7a"), "coffee_bush": Color("c8302a"), "charred_tree": Color("3a3634"), "ore_vein": Color("a0624a"),
 	"obsidian_rock": Color("3a2a5a"), "basalt": Color("5a5658"), "mangrove": Color("7a5a3a")}
 const STONE := ["rock", "cliff", "pebble", "rockfall", "scrap_pile", "ice_block", "ice_wall", "ore_vein", "obsidian_rock", "basalt"]
+## Что выдёргивают руками с корнем (своя анимация и звук).
+const PULLED := ["tall_grass", "fern", "heather", "moss"]
 const WOOD := ["palm", "jungle_tree", "fallen_log", "bamboo", "driftwood", "crooked_tree", "pine", "charred_tree", "mangrove"]
 const HEAVY := ["rock", "cliff", "jungle_tree", "palm", "fallen_log", "bamboo", "crooked_tree", "rockfall", "pine", "ice_wall",
 	"charred_tree", "basalt", "obsidian_rock"]
@@ -286,10 +288,7 @@ var _hitter: Node
 
 func _hit_fx(player: Node) -> void:
 	_hitter = player
-	var snd: String = HIT_SOUND.get(kind, "pickup")
-	if snd == "chop":
-		snd = "chop%d" % randi_range(0, 3)   # у топора четыре разных удара — не звучит одним и тем же
-	Audio.play(snd, -2.0, 0.08, global_position)
+	Audio.play(HIT_SOUND.get(kind, "pickup"), -2.0, 0.08, global_position)   # у звуков по нескольку вариантов
 	# отклик: предмет сплющивается и пружинит обратно, качается и коротко вспыхивает
 	if _hit_tw and _hit_tw.is_valid():
 		_hit_tw.kill()
@@ -353,6 +352,24 @@ func _deplete() -> void:
 				_hitter.add_trauma(0.35))
 		tw.tween_interval(0.15)
 		tw.tween_property(visual, "scale", Vector3(0.01, 0.01, 0.01), 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	elif kind in PULLED:
+		# траву выдёргивают: пучок тянется вверх к герою, отрывается с комьями земли и улетает, уменьшаясь
+		var toward := Vector3.ZERO
+		if _hitter is Node3D:
+			toward = (_hitter as Node3D).global_position - global_position
+			toward.y = 0.0
+			toward = toward.normalized() if toward.length() > 0.01 else Vector3.ZERO
+		var tilt_axis := Vector3.UP.cross(toward).normalized() if toward != Vector3.ZERO else Vector3.RIGHT
+		var bent := Basis(tilt_axis, 0.35) * Basis.from_scale(_base_scale * Vector3(0.88, 1.28, 0.88))
+		tw.tween_property(visual, "transform:basis", bent, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_callback(func():
+			FX.burst(self, Vector3(0, 0.08, 0), Color("7a5232"), 9)                 # комья земли
+			FX.dust(self, Vector3(0, 0.04, 0), Color("b89a6a"), 5, 0.3)
+			FX.leaves(self, Vector3(0, float(cfg["height"]) * 0.5, 0), col, 6))
+		var flown := visual.position + toward * 0.45 + Vector3(0, 0.75, 0)
+		tw.tween_property(visual, "position", flown, 0.32).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(visual, "transform:basis", Basis(tilt_axis, 1.2) * Basis.from_scale(_base_scale * 0.5), 0.32)
+		tw.tween_property(visual, "scale", Vector3(0.01, 0.01, 0.01), 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	else:
 		# «пуф»: чуть раздувается и схлопывается в облачко
 		tw.tween_property(visual, "scale", _base_scale * 1.12, 0.07).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)

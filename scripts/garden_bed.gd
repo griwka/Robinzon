@@ -160,7 +160,7 @@ func _harvest() -> void:
 	Game.bump("harvested", crop, n)
 	Audio.play("harvest", -2.0, 0.1, global_position)
 	if randf() < cfg["seed_back"]:
-		Game.add_item(_seed_for(crop), randi_range(1, 2), false)
+		Game.add_item(_seed_for(crop), 1, false)   # иногда одно семечко назад — остальные покупают в лавке
 	FX.burst(self, Vector3(0, 0.5, 0), Data.ITEMS[crop]["color"], 14)
 	crop = ""
 	progress = 0.0

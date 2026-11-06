@@ -581,6 +581,32 @@ func set_crosshair(v: bool) -> void:
 	crosshair.visible = v
 
 
+var target_dot: Control
+
+
+## Точка на предмете, с которым будет действие (screen — его место на экране; visible = false — спрятать).
+func set_target_dot(screen: Vector2, visible_: bool) -> void:
+	if target_dot == null:
+		target_dot = Control.new()
+		target_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var ring := PanelContainer.new()
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(1.0, 0.95, 0.75, 0.95)
+		sb.border_color = Color(0.35, 0.2, 0.08, 0.9)
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(9)
+		ring.add_theme_stylebox_override("panel", sb)
+		ring.custom_minimum_size = Vector2(18, 18)
+		ring.size = Vector2(18, 18)
+		ring.position = Vector2(-9, -9)
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		target_dot.add_child(ring)
+		root.add_child(target_dot)
+	target_dot.visible = visible_
+	if visible_:
+		target_dot.position = screen
+
+
 # ================================================================== Сообщения
 func _build_toasts() -> void:
 	toasts = VBoxContainer.new()
@@ -769,10 +795,11 @@ func _fill_craft() -> void:
 		info.add_child(_label("%s ×%d   (%s)" % [Game.item_name(out_id), r["out"][out_id], names.get(station, station)], 20))
 		info.add_child(_label(_cost_text(r["in"]), 15, Color("c9f59b") if Game.can_afford(r["in"]) else Color("ffb199")))
 		var b := Button.new()
-		b.text = "Создать" if near else "Далеко"
+		var have_it: bool = Game.owned_unique(out_id) and not r["in"].has(out_id)
+		b.text = "Есть ✓" if have_it else ("Создать" if near else "Далеко")
 		b.custom_minimum_size = Vector2(120, 44)
 		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		b.disabled = not near or not Game.can_afford(r["in"])
+		b.disabled = have_it or not near or not Game.can_afford(r["in"])
 		b.pressed.connect(func(): Game.craft(r))
 		h.add_child(b)
 		body.add_child(rh[0])
@@ -908,9 +935,9 @@ func _fill_shop() -> void:
 			h.add_child(_label("%d" % e["price"], 20, Color("f3e2b8")))
 			h.add_child(_item_icon("coins", 26))
 			var b := Button.new()
-			b.text = "Купить"
+			b.text = "Есть ✓" if Game.owned_unique(e["item"]) else "Купить"
 			b.custom_minimum_size = Vector2(110, 42)
-			b.disabled = Game.count("coins") < e["price"]
+			b.disabled = Game.owned_unique(e["item"]) or Game.count("coins") < e["price"]
 			var item_id: String = e["item"]
 			var price: int = e["price"]
 			b.pressed.connect(func(): Game.buy(_shop_id, item_id, price))
@@ -958,7 +985,7 @@ func _buy_note(id: String) -> String:
 		var y: Array = Data.CROPS[crop]["yield"]
 		var price: float = Data.SELL_PRICES.get(crop, 0) * Game.sell_mult()
 		var money := ("  ≈ %d–%d мон." % [int(round(price * int(y[0]))), int(round(price * int(y[1])))]) if price > 0.0 else ""
-		return "1 пакетик = 1 грядка · урожай %d–%d шт.%s%s" % [int(y[0]), int(y[1]), money, tail]
+		return "1 пакетик = 1 грядка · урожай %d–%d шт.%s · иногда семечко назад%s" % [int(y[0]), int(y[1]), money, tail]
 	if it.get("cat", "") == "sapling" and Data.TREES.has(it.get("tree", "")):
 		var t: Dictionary = Data.TREES[it["tree"]]
 		return "дерево плодоносит снова и снова: по %d–%d шт.%s" % [int(t["yield"][0]), int(t["yield"][1]), tail]

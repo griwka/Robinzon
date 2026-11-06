@@ -278,18 +278,21 @@ const BUILDINGS := {
 }
 
 # ======================================================================= ГРЯДКИ
-# time — секунды игрового времени до созревания (полив ускоряет вдвое)
+# time — секунды игрового времени до созревания (полив ускоряет вдвое).
+# seed_back — шанс, что с грядки выпадет одно семечко назад. Он меньше единицы: семена всё равно покупают в лавке.
+# Выгода грядки (продажа урожая минус пакетик) растёт с «уровнем» культуры: морковь и кукуруза ≈ 4 мон/мин,
+# картофель ≈ 5, томат ≈ 6, капуста и тыква ≈ 6.5, перец ≈ 7, арбуз ≈ 7.5, морошка ≈ 8 (без полива).
 const CROPS := {
-	"carrot": {"name": "Морковь", "time": 45.0, "yield": [2, 3], "seed_back": 0.8},
-	"potato": {"name": "Картофель", "time": 70.0, "yield": [2, 4], "seed_back": 0.8},
-	"corn": {"name": "Кукуруза", "time": 80.0, "yield": [2, 3], "seed_back": 0.9},
-	"tomato": {"name": "Томат", "time": 100.0, "yield": [3, 4], "seed_back": 0.7},
-	"cabbage": {"name": "Капуста", "time": 120.0, "yield": [1, 2], "seed_back": 0.8},
-	"watermelon": {"name": "Арбуз", "time": 180.0, "yield": [1, 2], "seed_back": 0.7},
-	"pumpkin": {"name": "Тыква", "time": 150.0, "yield": [1, 2], "seed_back": 0.8},
+	"carrot": {"name": "Морковь", "time": 45.0, "yield": [2, 3], "seed_back": 0.4},
+	"potato": {"name": "Картофель", "time": 70.0, "yield": [2, 4], "seed_back": 0.4},
+	"corn": {"name": "Кукуруза", "time": 80.0, "yield": [2, 3], "seed_back": 0.4},
+	"tomato": {"name": "Томат", "time": 100.0, "yield": [3, 4], "seed_back": 0.35},
+	"cabbage": {"name": "Капуста", "time": 120.0, "yield": [2, 3], "seed_back": 0.35},
+	"watermelon": {"name": "Арбуз", "time": 180.0, "yield": [2, 4], "seed_back": 0.25},
+	"pumpkin": {"name": "Тыква", "time": 150.0, "yield": [2, 3], "seed_back": 0.35},
 	# морошка — северная ягода: растёт на холоде (в тундре Ледяного острова), а в тропиках — только в теплице
-	"cloudberry": {"name": "Морошка", "time": 90.0, "yield": [2, 3], "seed_back": 0.8, "cold": true},
-	"pepper": {"name": "Перец", "time": 80.0, "yield": [2, 3], "seed_back": 0.8},
+	"cloudberry": {"name": "Морошка", "time": 90.0, "yield": [2, 3], "seed_back": 0.3, "cold": true},
+	"pepper": {"name": "Перец", "time": 80.0, "yield": [2, 3], "seed_back": 0.35},
 }
 
 # ======================================================================= ФРУКТОВЫЕ ДЕРЕВЬЯ
@@ -325,11 +328,11 @@ const PENS := {
 # продаётся то, без чего не пройти дальше по сюжету (гвозди, рамка улья, овца). Поэтому сюжет
 # идёт в темпе хозяйства: чем лучше ферма, тем быстрее копятся монеты.
 const SELL_PRICES := {
-	"carrot": 2, "potato": 3, "corn": 3, "tomato": 4, "cabbage": 6, "watermelon": 10,
+	"carrot": 2, "potato": 3, "corn": 3, "tomato": 4, "cabbage": 7, "watermelon": 10,
 	"coconut": 1, "banana": 2, "mango": 3, "lemon": 2,
 	"egg": 3, "milk": 5, "honey": 8, "wool": 6, "fish": 3, "truffle": 12,
 	"fried_egg": 6, "baked_potato": 6, "cheese": 14, "fruit_salad": 12, "fish_soup": 9,
-	"battery_charged": 8, "pumpkin": 5, "pumpkin_porridge": 14, "feather": 3, "blueberry": 1,
+	"battery_charged": 8, "pumpkin": 7, "pumpkin_porridge": 14, "feather": 3, "blueberry": 1,
 	"cloudberry": 6, "cloudberry_jam": 18, "ice_cream": 14, "sweater": 20, "lingonberry": 1, "honey_tea": 6, "resin": 2,
 	"coffee": 3, "roasted_coffee": 11, "pepper": 5, "spicy_soup": 20, "iron_ingot": 12, "obsidian": 8, "fertilizer": 4,
 	"aloe": 1, "charcoal": 2, "ore": 3,
