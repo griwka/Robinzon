@@ -51,6 +51,17 @@
 3. Первый запуск импортирует ресурсы (несколько секунд).
 4. Нажми **F5** (или ▶ в правом верхнем углу) — игра запустится.
 
+## Как собрать exe (Windows)
+
+1. Один раз поставь шаблоны экспорта Godot той же версии: в редакторе **Editor → Manage Export Templates → Download**
+   (или распакуй `Godot_v4.7.2-stable_export_templates.tpz` с GitHub-релизов Godot в
+   `%APPDATA%\Godot\export_templates.7.2.stable`).
+2. В редакторе: **Project → Export → Add… → Windows Desktop**, путь — `build/Затерянный остров.exe`,
+   галочка **Embed PCK** (всё в одном файле). Или из консоли, если настройка уже есть:
+   `godot --headless --path . --export-release "Windows" "build/Затерянный остров.exe"`
+3. Готовый файл — в папке `build/` (≈ 140 МБ). Её можно скопировать на любой ПК с Windows и запускать без Godot.
+   Сохранения лежат в `%APPDATA%\Godotpp_userdata\Затерянный остров`.
+
 ## Управление
 
 | Клавиша | Действие |
