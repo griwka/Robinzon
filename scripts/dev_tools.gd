@@ -329,6 +329,37 @@ func _test_quest_places() -> void:
 	Game.quest_started = false
 
 
+## Пальма: с топором E трясёт (кокосы), ЛКМ рубит; без топора трясут любой кнопкой.
+func _test_palm() -> void:
+	var p: Player = main.player
+	var palm: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode and n.kind == "palm" and n.active and n.coconut_ready:
+			palm = n
+			break
+	if palm == null:
+		_check(false, "на острове есть пальма с кокосами")
+		return
+	var had := Game.count("stone_axe")
+	Game.inventory["stone_axe"] = 1
+	var hp0 := palm.hp
+	var leaf0 := Game.count("leaf")
+	p.use_key = true
+	palm.interact(p)
+	_check(not palm.coconut_ready and palm.hp == hp0 and Game.count("leaf") == leaf0 + 1, "с топором пальму можно потрясти (E): кокосы падают, пальма цела")
+	p.use_key = false
+	palm.interact(p)
+	_check(palm.hp == hp0 - 1, "с топором ЛКМ рубит пальму")
+	palm.hp = hp0
+	palm.coconut_ready = true
+	if had == 0:
+		Game.inventory.erase("stone_axe")
+	Game.inventory.erase("leaf")
+	Game.inventory.erase("coconut")
+	if leaf0 > 0:
+		Game.inventory["leaf"] = leaf0
+
+
 func _test_mistakes() -> void:
 	var start_q := func(task: Dictionary) -> int:
 		var key: String = task["kind"] + ":" + Game._task_target(task)
@@ -1426,6 +1457,7 @@ func _autotest() -> void:
 	if ch == 0:
 		_validate()
 		_test_quest_places()
+		_test_palm()
 		_test_mistakes()
 		Game.start_current_quest()
 		_flush()
