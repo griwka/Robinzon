@@ -15,6 +15,7 @@ var pause_box: Control
 var settings_box: PanelContainer
 var confirm_box: PanelContainer
 var continue_btn: Button
+var ending_label: Label
 var _settings_back: Callable
 
 
@@ -77,6 +78,10 @@ func _build_main() -> void:
 	var sub := hud._label("Уютная жизнь на необитаемом острове", 24, Color("fff6dc"))
 	sub.add_theme_constant_override("outline_size", 10)
 	v.add_child(sub)
+	# отметка о пройденных финалах (хранится в настройках — переживает новую игру)
+	ending_label = hud._label("", 22, Color("bfe8ff"))
+	ending_label.add_theme_constant_override("outline_size", 9)
+	v.add_child(ending_label)
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0, 24)
 	v.add_child(gap)
@@ -85,7 +90,7 @@ func _build_main() -> void:
 	v.add_child(_button("Новая игра", _on_new_game, Color("e0a23a")))
 	v.add_child(_button("Настройки", func(): open_settings(show_main.bind(continue_btn.visible)), HUD.WOOD_LIGHT))
 	v.add_child(_button("Выход", func(): get_tree().quit(), Color("b9573b")))
-	var ver := hud._label("v0.7.1 · главы 1–3", 16, Color("fff6dc"))
+	var ver := hud._label("v1.0 · все восемь глав", 16, Color("fff6dc"))
 	ver.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	ver.position = Vector2(-190, -40)
 	main_box.add_child(ver)
@@ -101,6 +106,13 @@ func _on_new_game() -> void:
 func show_main(has_save: bool) -> void:
 	hide_all()
 	continue_btn.visible = has_save
+	var names := {"sea": "«Открытое море»", "keeper": "«Хранитель огня»"}
+	var seen: Array[String] = []
+	for e in str(Game.settings.get("endings", "")).split(",", false):
+		if names.has(e):
+			seen.append(names[e])
+	ending_label.text = ("★ Пройдено: финал " if seen.size() == 1 else "★ Пройдены финалы: ") + " и ".join(seen) if not seen.is_empty() else ""
+	ending_label.visible = not seen.is_empty()
 	main_box.visible = true
 
 

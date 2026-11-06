@@ -154,6 +154,8 @@ func plant(c: String) -> void:
 func _harvest() -> void:
 	var cfg: Dictionary = Data.CROPS[crop]
 	var n := randi_range(cfg["yield"][0], cfg["yield"][1])
+	if Game.bounty_today():
+		n *= 2   # день щедрости: Хранитель зажёг лучи
 	Game.add_item(crop, n)
 	Game.bump("harvested", crop, n)
 	Audio.play("harvest", -2.0, 0.1, global_position)

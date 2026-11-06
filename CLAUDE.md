@@ -28,8 +28,14 @@
   Новых жителей, головоломки и ярусы добавляй в `NPCS`, `PUZZLES`, `DECKS`.
 - **`scripts/dev_tools.gd`** — автотесты и скриншоты. Каждой новой главе нужен свой автотест.
 - **Острова:** один генератор `scripts/island.gd`; особые места — `fort_ruin.gd`, `banyan_tree.gd`, `storm_station.gd`, `ice_glacier.gd`,
-  `volcano_crater.gd`, `volcano_temple.gd`, `hot_springs.gd`, `stilt_camp.gd`, `signal_rock.gd`, `fog_shrine.gd`
-  (бункер), `story_place.gd`. Кольца преград вокруг мест — `Island.RINGS`.
+  `volcano_crater.gd`, `volcano_temple.gd`, `hot_springs.gd`, `stilt_camp.gd`, `signal_rock.gd`, `fog_shrine.gd`,
+  `great_lighthouse.gd`, `eye_island.gd`, `eye_storm.gd` (бункер — в `storm_station.gd`), `story_place.gd`. Кольца преград вокруг мест — `Island.RINGS`.
+- **Око шторма (глава 8)** — `GreatLighthouse` (три яруса `eye_deck1..3`, ветер порывами: `GreatLighthouse.gust`,
+  `Climbable.wind`, `Player.ext_push`), `GreatFire` (выбор, ритуалы Хранителя), `EyeStorm` (стена и лучи),
+  `EyeIsland` (сад, команда на берегу). Разговор по заданию — `NPCPerson.quest_talk()`: в пункте `say` — реплики,
+  `give` — подарок, `"radio": true` — по рации (T). Финал: `Game.ended()`, флаги `ending_open_sea` / `ending_keeper`;
+  после финала — `OrderBoard`, лавка `lyova`, `Game.sell_mult()`, `bounty_today()`, `window_open()`.
+  Темы музыки — `Audio.play_theme()` (`music_eye`, `music_meeting`, `music_sea`, `music_keeper`).
 - **Гроза** — `scripts/weather.gd` (только на Грозовом): `Game.storm_active()`; громоотвод — загон `lightning_rod`
   с `"storm": true` в `Data.PENS`. Ярусы бункера `bunker1..7` — свет от генератора (1–3) или фонарь.
 - **Холод** — `scripts/warmth.gd` (только на Ледяном до флага `ice_thawed`): `Game.cold_active()`, `Game.warmth`,
@@ -88,6 +94,8 @@ godot --headless --path . -- --autotest --location=volcano --chapter=6
 godot --headless --path . -- --autotest --location=fog --chapter=7 --upto=13
 godot --headless --path . -- --autotest --location=home --chapter=7 --from=13 --upto=1
 godot --headless --path . -- --autotest --location=fog --chapter=7 --from=14
+godot --headless --path . -- --autotest --location=eye --chapter=8
+godot --headless --path . -- --autotest --location=eye --chapter=8 --from=9 --ending=keeper
 godot --path . --resolution 1600x900 -- --shot=shot.png --frames=90 --location=fort
 ```
 
@@ -118,12 +126,15 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
   `--solved=1` — мостки построены и монолит решён;
 - `--near=stilt_camp|signal_rock|fog_shrine|fog_tower|misha|renata` — места на Туманном; `--view=albatros` — вид на корабль;
   `--fogdone=1` — туман ушёл, «Альбатрос» починен;
+- `--near=eye_tower|eye_top|grandfather_house|great_lighthouse` — места на Оке; `--eyedeck=1..3` — герой на балконе маяка;
+  `--lens=1` — Великий огонь золотой; `--ending=sea|keeper` — финал (для скриншотов и автотеста главы 8);
 - автотест: `--from=K` — начать с K-го задания главы, `--upto=K` — пройти только K заданий;
 - `--fxtest` — все эффекты перед кадром;
 - `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO.
 
 Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для музыки и фона — ffmpeg в PATH;
-`python tools/gen_audio.py thunder0 radio` — только указанные эффекты, без ffmpeg). Иконки главы 4 — в `tools/icons_storm.py`, главы 5 — в `tools/icons_ice.py`, главы 6 — в `tools/icons_volcano.py`, главы 7 — в `tools/icons_fog.py`.
+`python tools/gen_audio.py thunder0 radio` — только указанные эффекты, без ffmpeg). Иконки главы 4 — в `tools/icons_storm.py`, главы 5 — в `tools/icons_ice.py`, главы 6 — в `tools/icons_volcano.py`, главы 7 — в `tools/icons_fog.py`, главы 8 — в `tools/icons_eye.py`.
+Без ffmpeg `.ogg` пишется через `pip install soundfile`; музыка главы 8: `python tools/gen_audio.py music_eye music_meeting music_sea music_keeper`.
 На Windows Godot можно вызывать полным путём, если его нет в PATH.
 ```bash
 python tools/blender/build.py

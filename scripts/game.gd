@@ -17,7 +17,7 @@ const SAVE_PATH := "user://save.json"
 const SAVE_VERSION := 4
 const SETTINGS_PATH := "user://settings.cfg"
 const DEFAULT_SETTINGS := {"music": 0.6, "sfx": 0.8, "ambience": 0.7, "mouse": 1.0,
-	"shadows": 2, "msaa": 2, "fullscreen": false, "vsync": true, "sharpen": 1, "effects": 2, "shake": true}
+	"shadows": 2, "msaa": 2, "fullscreen": false, "vsync": true, "sharpen": 1, "effects": 2, "shake": true, "endings": ""}
 const DAY_LENGTH := 600.0  # секунд на сутки (ночь идёт вдвое быстрее)
 
 var inventory: Dictionary = {}
@@ -87,6 +87,26 @@ func wait_until_night(target := 0.82) -> void:
 		return
 	world_time += delta_days * DAY_LENGTH
 	time_of_day = target
+
+
+## Финал уже выбран (глава 8): дальше — «вечная игра».
+func ended() -> bool:
+	return flags.get("ending_open_sea", false) or flags.get("ending_keeper", false)
+
+
+## После финала «Открытое море» приходят торговые корабли: урожай и продукты стоят дороже.
+func sell_mult() -> float:
+	return 1.5 if flags.get("ending_open_sea", false) else 1.0
+
+
+## «День щедрости» (финал «Хранитель огня»): сегодня Хранитель зажёг лучи — урожай вдвое больше.
+func bounty_today() -> bool:
+	return flags.get("ending_keeper", false) and int(flags.get("bounty_day", -1)) == day
+
+
+## Окно в шторме открыто сегодня: у причала дома стоит корабль Лёвы.
+func window_open() -> bool:
+	return flags.get("ending_keeper", false) and int(flags.get("window_day", -1)) == day
 
 
 ## Идёт ли сейчас гроза (молнии бьют, громоотводы заряжаются, лазать нельзя).
@@ -265,8 +285,9 @@ func sell(shop_id: String, id: String, n := 1) -> void:
 	if n <= 0 or not Data.SELL_PRICES.has(id):
 		return
 	pay({id: n})
-	add_item("coins", Data.SELL_PRICES[id] * n, false, true)
-	notified.emit("Продано: %s ×%d  +%d мон." % [item_name(id), n, Data.SELL_PRICES[id] * n], Color("f3e2b8"))
+	var got := int(round(Data.SELL_PRICES[id] * n * sell_mult()))
+	add_item("coins", got, false, true)
+	notified.emit("Продано: %s ×%d  +%d мон." % [item_name(id), n, got], Color("f3e2b8"))
 	Audio.play("pickup", -3.0, 0.1)
 	bump("sold", shop_id, n)
 	bump("sold", "any", n)
@@ -405,7 +426,7 @@ func reserved(id: String) -> int:
 
 # Разовые события считаем с нуля (сделал раньше — тоже засчитано), повторяемые — от начала задания.
 # cleared — тоже с нуля: преграды конечны, игрок мог расчистить их заранее.
-const ZERO_BASE_KINDS := ["talk", "built", "sailed", "collection", "found", "lit", "reached", "bought", "restored", "delivered", "cleared", "solved"]
+const ZERO_BASE_KINDS := ["talk", "built", "sailed", "collection", "found", "lit", "reached", "bought", "restored", "delivered", "cleared", "solved", "chose"]
 
 
 func _task_target(task: Dictionary) -> String:
@@ -553,6 +574,11 @@ func load_game() -> Dictionary:
 	day = int(data.get("day", 1))
 	world_time = float(data.get("world_time", 0.0))
 	location = data.get("location", "home")
+	# глава дописана после того, как игрок её закончил: открываем следующую
+	if quest_index >= Data.CHAPTERS[mini(chapter, Data.CHAPTERS.size() - 1)]["quests"].size() and chapter + 1 < Data.CHAPTERS.size():
+		chapter += 1
+		quest_index = 0
+		quest_started = false
 	if stat("built", "canoe") > 0:
 		flags["fort_route"] = true   # сохранения до v0.7: каноэ уже есть — путь к форту открыт
 	loc_data = data.get("locations", {})

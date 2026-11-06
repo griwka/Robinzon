@@ -147,6 +147,12 @@ func _build_terrain() -> void:
 				["wet_sand", Color("6e624a")], ["seabed", Color("4f7f70")], ["grass", Color("6a9658")], ["grass_light", Color("80a868")],
 				["grass_dark", Color("4e7848")], ["grass_warm", Color("8a9c5c")]]:
 			m.set_shader_parameter(pair[0], pair[1])
+	if mix == "eye":
+		# Око шторма: чёрный каменный берег, тёмные скалы, сочная трава сада
+		for pair in [["sand", Color("5a5456")], ["sand_dark", Color("444042")], ["sand_light", Color("706a6a")],
+				["wet_sand", Color("343032")], ["seabed", Color("4f9aa8")], ["rock", Color("4e4a4e")], ["rock_dark", Color("3a363a")],
+				["grass", Color("5aa04a")], ["grass_light", Color("74b45a")], ["grass_dark", Color("427a3a")]]:
+			m.set_shader_parameter(pair[0], pair[1])
 	if mix == "volcano":
 		# Остров Вулкана: чёрный песок, сочная трава, тёмный базальт
 		for pair in [["sand", Color("4c4648")], ["sand_dark", Color("3a3537")], ["sand_light", Color("625b5c")],
@@ -219,6 +225,9 @@ const SNOW_LINE := 2.1   # Ледяной остров до оттепели: в
 
 ## Лавовое поле перед храмом на Вулкане: там не растёт трава.
 func _lava_field(x: float, z: float) -> bool:
+	if poi.has("great_lighthouse"):   # Око: внутри Великого маяка трава не растёт
+		var t: Vector3 = poi["great_lighthouse"]
+		return Vector2(x - t.x, z - t.z).length() < 6.8
 	if not poi.has("temple_gate"):
 		return false
 	var g: Vector3 = poi["temple_gate"]
@@ -412,6 +421,17 @@ func _place_pois() -> void:
 		for k in ["stilt_camp", "signal_rock", "fog_shrine"]:
 			poi_extra[k] = poi[k]
 		return
+	if mix == "eye":
+		# Великий маяк — на плато на севере, сад деда — к западу от лагеря, в кольце зарослей
+		var t := Vector3(flat[0].x, 0, flat[0].y)
+		t.y = height_at(t.x, t.z)
+		poi["great_lighthouse"] = t
+		var gd := Vector3(-radius * 0.36, 0, 3.0)
+		gd.y = height_at(gd.x, gd.z)
+		poi["eye_garden"] = gd
+		for k in ["great_lighthouse", "eye_garden"]:
+			poi_extra[k] = poi[k]
+		return
 	if mix == "volcano":
 		# кратер — столовая гора; подъём — со стороны лагеря; храм — в стене кратера сбоку;
 		# горячие источники с лечебницей Веры — недалеко от лагеря
@@ -546,6 +566,22 @@ func _spawn_resources() -> void:
 			fs.position = poi[id]
 			holder.add_child(fs)
 			continue
+		if id == "great_lighthouse":
+			var gl8 := GreatLighthouse.new()
+			gl8.island = self
+			var tc := Vector3(camp_center.x - poi[id].x, 0, camp_center.z - poi[id].z)
+			gl8.toward = tc.normalized() if tc.length() > 0.1 else Vector3.BACK
+			gl8.position = poi[id]
+			holder.add_child(gl8)
+			continue
+		if id == "eye_garden":
+			var eg := EyeIsland.new()
+			eg.island = self
+			var fc := Vector3(camp_center.x - poi[id].x, 0, camp_center.z - poi[id].z)
+			eg.front = fc.normalized() if fc.length() > 0.1 else Vector3.BACK
+			eg.position = poi[id]
+			holder.add_child(eg)
+			continue
 		if id == "springs":
 			var hs := HotSprings.new()
 			hs.island = self
@@ -606,12 +642,14 @@ func _spawn_resources() -> void:
 			var p2 := Vector2(x, z)
 			var dc := p2.distance_to(camp2)
 			var dw := p2.distance_to(wreck2)
-			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5, "storm": 10.5, "ice": 11.0, "volcano": 11.0, "fog": 10.0}.get(mix, 5.0)):
+			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5, "storm": 10.5, "ice": 11.0, "volcano": 11.0, "fog": 10.0, "eye": 9.0}.get(mix, 5.0)):
 				continue
 			if mix == "fog" and _near_trail(p2):
 				continue
 			var kind := ""
-			if mix == "fog" and dc >= 9.5 and dw >= 7.0:
+			if mix == "eye" and dc >= 9.5 and dw >= 7.0:
+				kind = _eye_kind(h, roll, seed_v)
+			elif mix == "fog" and dc >= 9.5 and dw >= 7.0:
 				kind = _fog_kind(h, dc, roll, seed_v)
 			elif mix == "volcano" and dc >= 9.5 and dw >= 7.0:
 				kind = _volcano_kind(h, dc, roll, seed_v)
@@ -699,6 +737,21 @@ func _spawn_resources() -> void:
 		tp.crater = crater_node
 		tp.position = _pending_temple
 		holder.add_child(tp)
+
+
+## Око шторма: чёрные камни на берегу, выше — трава, кусты и валуны; деревьев мало (остров каменный).
+func _eye_kind(h: float, roll: float, seed_v: int) -> String:
+	if h < 1.05:
+		if roll < 0.09: return ["pebble", "shell", "driftwood"][seed_v % 3]
+		if roll < 0.14: return "rock"
+		return ""
+	if roll < 0.2: return "tall_grass"
+	if roll < 0.3: return "fern"
+	if roll < 0.37: return "bush"
+	if roll < 0.43: return "rock"
+	if roll < 0.46: return "palm"
+	if roll < 0.48: return "pebble"
+	return ""
 
 
 ## Ледяной остров: на берегу — галька и льдины, в тундре — мох, брусника и сосны (у западного бора — гуще),
@@ -1048,7 +1101,9 @@ const RINGS := {"old_camp": [["thicket", 5.4, 18], ["jungle_tree", 7.6, 17]],
 	"glacier_foot": [["ice_wall", 4.6, 14]],
 	"ice_tower": [["ice_wall", 5.4, 14]],
 	# Вулкан: лавовое поле перед храмом закрыто полукольцом базальтовых столбов (вторую половину — стена кратера)
-	"temple_gate": [["basalt", 10.9, 28]]}
+	"temple_gate": [["basalt", 10.9, 28]],
+	# Око: сад деда зарос колючим кустарником — только мачете
+	"eye_garden": [["thicket", 7.6, 26]]}
 
 
 func _barrier_rings(holder: Node3D) -> void:
@@ -1136,6 +1191,13 @@ var banyan: Node3D   # остров Великого Баньяна на гор�
 
 
 func spawn_distant_scenery(parent: Node3D) -> void:
+	if mix == "eye":
+		# вокруг Ока — стена шторма, семь лучей и острова архипелага (их строит EyeStorm)
+		var es := EyeStorm.new()
+		var t: Vector3 = poi.get("great_lighthouse", Vector3.ZERO)
+		es.top = t + Vector3(0, GreatLighthouse.H[2] + 5.0, 0)
+		parent.add_child(es)
+		return
 	var g := RandomNumberGenerator.new()
 	g.seed = seed_value + 99
 	for i in 5:

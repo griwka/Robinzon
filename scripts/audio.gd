@@ -18,6 +18,9 @@ var _bird_t := 3.0
 var _last_play: Dictionary = {}
 var _night_mix := 0.0
 var listener: Node3D   # игрок — для затухания звуков с расстоянием
+var theme: AudioStreamPlayer   # своя тема: музыка острова (Око шторма) или разовая (встреча, финалы)
+var _theme_on := false
+var _theme_loop := ""          # тема острова — к ней возвращаемся после разовой
 var island: Node
 
 
@@ -39,6 +42,14 @@ func _ready() -> void:
 	ocean = _loop_player("amb_ocean", "Ambience")
 	crickets = _loop_player("amb_night", "Ambience")
 	rain_loop = _loop_player("amb_rain", "Ambience")
+	theme = AudioStreamPlayer.new()
+	theme.bus = "Music"
+	theme.volume_db = -80.0
+	add_child(theme)
+	theme.finished.connect(func():
+		_theme_on = false
+		if _theme_loop != "":
+			play_theme(_theme_loop, true))
 	# щелчок у всех кнопок интерфейса
 	get_tree().node_added.connect(func(n):
 		if n is BaseButton:
@@ -101,11 +112,40 @@ func play(name_: String, volume_db := 0.0, pitch_var := 0.08, pos = null) -> voi
 	p.play()
 
 
+## Своя музыкальная тема вместо дневной и ночной. loop — тема острова (играет, пока ты там);
+## без loop — разовая (встреча с братом, финал): доиграет — и вернётся музыка острова.
+func play_theme(name_: String, loop := false) -> void:
+	var s := _stream("music_" + name_)
+	if s == null:
+		return
+	if loop:
+		_theme_loop = name_
+	if s is AudioStreamOggVorbis:
+		(s as AudioStreamOggVorbis).loop = loop
+	theme.stream = s
+	theme.volume_db = -30.0
+	theme.play()
+	_theme_on = true
+
+
+func stop_theme() -> void:
+	_theme_loop = ""
+	_theme_on = false
+
+
+var _theme_mix := 0.0
+
+
 func _process(delta: float) -> void:
 	var night := 0.0 if Game.is_day() else 1.0
 	_night_mix = move_toward(_night_mix, night, delta / 6.0)  # плавная смена за ~6 секунд
-	music_day.volume_db = linear_to_db(maxf(1.0 - _night_mix, 0.0001)) - 6.0
-	music_night.volume_db = linear_to_db(maxf(_night_mix, 0.0001)) - 6.0
+	_theme_mix = move_toward(_theme_mix, 1.0 if _theme_on else 0.0, delta / 3.0)
+	var base := maxf(1.0 - _theme_mix, 0.0001)
+	music_day.volume_db = linear_to_db(maxf(1.0 - _night_mix, 0.0001) * base) - 6.0
+	music_night.volume_db = linear_to_db(maxf(_night_mix, 0.0001) * base) - 6.0
+	theme.volume_db = linear_to_db(maxf(_theme_mix, 0.0001)) - 5.0
+	if not _theme_on and _theme_mix <= 0.0001 and theme.playing:
+		theme.stop()
 	crickets.volume_db = linear_to_db(maxf(_night_mix, 0.0001)) - 4.0
 	# прибой громче у берега
 	var shore := 0.6
