@@ -554,12 +554,45 @@ def bird(seed):
 
 
 # ============================================================ звуковые эффекты
-def sfx_chop():
-    n = int(0.35 * SR)
+def sfx_chop(seed=0):
+    """Удар топора по дереву: щелчок лезвия, глухой «тук» ствола, звон древесины (несколько собственных
+    частот, как у полена) и треск щепок. seed — вариант: другой ствол, другая сила удара."""
+    r = np.random.default_rng(500 + seed)
+    d = 0.42
+    n = int(d * SR)
     t = np.arange(n) / SR
-    thud = np.sin(2 * np.pi * (180 * np.exp(-t * 18) + 90) * t) * np.exp(-t / 0.06)
-    crack = bandpass(rng.standard_normal(n), 800, 4000) * np.exp(-t / 0.025)
-    return normalize(thud * 0.8 + crack * 0.6)
+    k = r.uniform(0.9, 1.12)                                  # «размер» ствола — сдвигает все частоты
+    blade = bandpass(r.standard_normal(n), 1800, 7000) * np.exp(-t / 0.004) * 0.9
+    f0 = 105 * k
+    thump = np.sin(2 * np.pi * np.cumsum(f0 + 120 * np.exp(-t * 40)) / SR) * np.exp(-t / 0.045) * 1.1
+    body = np.zeros(n)
+    for f, dec, a in ((230, 0.11, 0.55), (410, 0.07, 0.4), (690, 0.045, 0.28), (1180, 0.025, 0.18), (1720, 0.015, 0.1)):
+        ff = f * k * r.uniform(0.96, 1.04)
+        body += a * np.sin(2 * np.pi * ff * t + r.uniform(0, 6.28)) * np.exp(-t / (dec * r.uniform(0.85, 1.15)))
+    body *= np.clip(t / 0.0015, 0, 1)
+    x = blade + thump + body
+    for _ in range(int(r.integers(4, 9))):                    # щепки
+        at = r.uniform(0.008, 0.07)
+        m = int(r.integers(60, 200))
+        c = bandpass(r.standard_normal(m), 2500, 8000) * np.exp(-np.arange(m) / (m / 5))
+        place(x, c * r.uniform(0.15, 0.35), at)
+    x = lowpass(x, 9000)
+    x *= np.clip((d - t) / 0.05, 0, 1)
+    return normalize(x, 0.85)
+
+
+def sfx_whoosh():
+    """Свист замаха: воздух рассекается — шум, который нарастает и уходит вверх по высоте."""
+    r = np.random.default_rng(171)
+    d = 0.3
+    n = int(d * SR)
+    t = np.arange(n) / SR
+    env = np.sin(np.pi * np.clip(t / d, 0, 1)) ** 3
+    lo = bandpass(r.standard_normal(n), 300, 1100)
+    hi = bandpass(r.standard_normal(n), 1100, 3200)
+    mixk = np.clip(t / d, 0, 1)
+    x = (lo * (1 - mixk) + hi * mixk) * env
+    return normalize(x, 0.5)
 
 
 def sfx_rock():
@@ -1059,6 +1092,9 @@ def main():
         for i in range(4):
             table["step_sand%d" % i] = (lambda k: lambda: sfx_step("sand", k))(i)
             table["step_grass%d" % i] = (lambda k: lambda: sfx_step("grass", k))(i)
+            table["chop%d" % i] = (lambda k: lambda: sfx_chop(k))(i)
+        table["chop"] = sfx_chop
+        table["whoosh"] = sfx_whoosh
         music = {"eye": music_eye, "meeting": music_meeting, "sea": music_sea, "keeper": music_keeper}
         for name in only:
             if name.startswith("music_"):
@@ -1079,12 +1115,13 @@ def main():
         "wind": sfx_wind(), "ice": sfx_ice(), "penguin": sfx_penguin(), "snore": sfx_snore(), "drip": sfx_drip(),
         "step_snow": sfx_step_snow(), "lava": sfx_lava(), "steam": sfx_steam(), "hammer": sfx_hammer(),
         "tortoise": sfx_tortoise(), "rumble": sfx_rumble(), "frog": sfx_frog(), "creak": sfx_creak(), "sail": sfx_sail(),
-        "cheer": sfx_cheer(), "gust": sfx_gust(), "fire_out": sfx_fire_out(),
+        "cheer": sfx_cheer(), "gust": sfx_gust(), "fire_out": sfx_fire_out(), "whoosh": sfx_whoosh(),
     }
     for i in range(4):
         sfx["bird%d" % i] = bird(100 + i)
         sfx["step_sand%d" % i] = sfx_step("sand", i)
         sfx["step_grass%d" % i] = sfx_step("grass", i)
+        sfx["chop%d" % i] = sfx_chop(i)
     for name, x in sfx.items():
         write_wav("sfx_" + name, x)
     amb_ocean()

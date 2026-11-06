@@ -38,6 +38,12 @@ var _hand_id := ""
 var _back_id := ""
 var _walk_phase := 0.0
 var _swing_t := 0.0
+var swing_kind := "hands"   # чем работаем сейчас: инструмент или "hands" (рвать, подбирать, говорить)
+var pose_hold := -1.0       # для скриншотов: застывшая фаза удара 0..1
+var _swing_lean := 0.0
+var _swing_twist := 0.0
+var _swing_crouch := 0.0
+var _whoosh_done := false
 var _head_lag := Vector3.ZERO
 var _lean := Vector2.ZERO
 var _was_on_floor := true
@@ -471,29 +477,35 @@ func _animate(delta: float, speed: float) -> void:
 	arm_l.rotation.x = -swing * 0.8
 	arm_l.rotation.z = -0.12 - (0.6 if not is_on_floor() else 0.0)
 
-	# удар правой рукой
-	if _swing_t > 0.0:
-		var t := 1.0 - _swing_t / SWING_TIME
-		arm_r.rotation.x = lerpf(-2.6, 0.6, smoothstep(0.0, 0.55, t)) if t < 0.7 else lerpf(0.6, 0.0, (t - 0.7) / 0.3)
-	elif _hand_id != "":
-		arm_r.rotation.x = -0.3 + swing * 0.25   # несём инструмент: рука чуть вперёд, рукоять вверх
+	# работа руками и инструментом: у каждого инструмента свой замах (см. _work_pose)
+	_swing_lean = 0.0
+	_swing_twist = 0.0
+	_swing_crouch = 0.0
+	var working := _swing_t > 0.0 or pose_hold >= 0.0
+	if working:
+		var t := pose_hold if pose_hold >= 0.0 else 1.0 - _swing_t / SWING_TIME
+		_work_pose(swing_kind, t)
 	else:
-		arm_r.rotation.x = swing * 0.8
-	arm_r.rotation.z = 0.12 + (0.6 if not is_on_floor() else 0.0)
-	# во время удара инструмент — по руке, вперёд; когда его несут — стоймя (наклон задаём от корпуса,
-	# а не от кисти: так рукоять всегда смотрит вверх и не цепляет землю)
-	if hand_tool:
-		if _swing_t > 0.0 or _hand_id == "":
-			hand_tool.rotation = Vector3(PI / 2, 0, 0)
+		_whoosh_done = false
+		if _hand_id != "":
+			arm_r.rotation.x = -0.3 + swing * 0.25   # несём инструмент: рука чуть вперёд, рукоять вверх
 		else:
-			hand_tool.global_basis = model.global_basis.orthonormalized() * Basis.from_euler(Vector3(CARRY_ANGLE, 0.0, -0.25))
+			arm_r.rotation.x = swing * 0.8
+		arm_r.rotation.y = 0.0
+		arm_r.rotation.z = 0.12 + (0.6 if not is_on_floor() else 0.0)
+		arm_l.rotation.y = 0.0
+		# когда инструмент несут — он стоймя (наклон задаём от корпуса, а не от кисти: рукоять вверх, землю не цепляет)
+		if hand_tool and _hand_id != "":
+			hand_tool.global_basis = model.global_basis.orthonormalized() * Basis.from_euler(Vector3(_carry_pitch(_hand_id), 0.0, -0.25 if _hand_id != "watering_can" else 0.0))
 
 	# покачивание тела и "резиновая" голова с запаздыванием
 	body_pivot.position.y = _body_y + abs(sin(_walk_phase)) * 0.06 * moving
 	var local_vel := model.global_transform.basis.inverse() * velocity
 	_lean = _lean.lerp(Vector2(local_vel.z, local_vel.x) * 0.04, 6.0 * delta)
-	body_pivot.rotation.x = _lean.x   # наклон вперёд при беге
+	body_pivot.rotation.x = _lean.x + _swing_lean   # наклон вперёд при беге и при ударе
 	body_pivot.rotation.z = -_lean.y  # крен в сторону движения
+	body_pivot.rotation.y = _swing_twist
+	body_pivot.position.y -= _swing_crouch
 	_head_lag = _head_lag.lerp(Vector3(-local_vel.z * 0.03, 0, local_vel.x * 0.03), 4.0 * delta)
 	head.rotation.x = _head_lag.x + sin(_walk_phase * 2.0) * 0.04 * moving
 	head.rotation.z = -_head_lag.z
@@ -505,6 +517,117 @@ func _animate(delta: float, speed: float) -> void:
 	if Game.cold_active() and Game.warmth < 25.0:
 		shiver = 0.012 if Game.warmth <= 0.0 else 0.005
 	model.position.x = sin(_walk_phase * 9.0 + Time.get_ticks_msec() * 0.06) * shiver
+
+
+## Значение по ключевым кадрам [[t, v], ...] с мягкими переходами.
+static func _keys(t: float, k: Array) -> float:
+	if t <= float(k[0][0]):
+		return float(k[0][1])
+	for i in range(1, k.size()):
+		var t1: float = k[i][0]
+		if t <= t1:
+			var t0: float = k[i - 1][0]
+			var f := smoothstep(0.0, 1.0, (t - t0) / maxf(t1 - t0, 0.0001))
+			return lerpf(float(k[i - 1][1]), float(k[i][1]), f)
+	return float(k[k.size() - 1][1])
+
+
+## Поза работы в фазе t (0 — начало, 1 — конец). Удар (момент, когда предмет откликается) — около t = 0.45–0.55.
+## arm.x < 0 — рука вперёд/вверх, arm.z > 0 у правой — в сторону; наклон корпуса < 0 — вперёд, поворот > 0 — влево.
+## Инструмент направляем от корпуса: pitch — куда смотрит головка (0 — вниз, PI/2 — вперёд, PI — вверх,
+## больше PI — за спину), yaw — поворот вбок (> 0 — влево), spin — вращение вокруг своей оси.
+func _work_pose(kind: String, t: float) -> void:
+	var c := _carry_pitch(_hand_id)
+	var pitch := c
+	var yaw := 0.0
+	var spin := 0.0
+	match kind:
+		"stone_axe":
+			# рубка: замах из-за правого плеча, удар сверху вниз двумя руками, корпус подаётся вперёд
+			arm_r.rotation.x = _keys(t, [[0.0, -0.3], [0.32, -2.95], [0.5, -0.6], [0.7, -0.45], [1.0, -0.3]])
+			arm_r.rotation.z = _keys(t, [[0.0, 0.12], [0.32, 0.4], [0.5, 0.0], [1.0, 0.12]])
+			arm_l.rotation.x = _keys(t, [[0.0, 0.0], [0.32, -2.5], [0.5, -0.7], [1.0, 0.0]])
+			arm_l.rotation.z = _keys(t, [[0.0, -0.12], [0.32, 0.25], [0.5, 0.3], [1.0, -0.12]])
+			pitch = _keys(t, [[0.0, c], [0.32, PI * 1.28], [0.5, PI * 0.42], [0.7, PI * 0.36], [1.0, c]])
+			yaw = _keys(t, [[0.0, 0.0], [0.32, -0.35], [0.5, 0.05], [1.0, 0.0]])
+			_swing_lean = _keys(t, [[0.0, 0.0], [0.32, 0.16], [0.5, -0.3], [0.7, -0.22], [1.0, 0.0]])
+			_swing_twist = _keys(t, [[0.0, 0.0], [0.32, -0.3], [0.5, 0.12], [1.0, 0.0]])
+			_swing_crouch = _keys(t, [[0.0, 0.0], [0.5, 0.06], [1.0, 0.0]])
+		"pickaxe", "iron_pickaxe", "ice_pick":
+			# кирка тяжелее: долгий прямой замах над головой, удар отвесно вниз, глубокий наклон
+			arm_r.rotation.x = _keys(t, [[0.0, -0.3], [0.38, -3.05], [0.52, -0.45], [0.75, -0.35], [1.0, -0.3]])
+			arm_l.rotation.x = _keys(t, [[0.0, 0.0], [0.38, -2.8], [0.52, -0.55], [1.0, 0.0]])
+			arm_l.rotation.z = _keys(t, [[0.0, -0.12], [0.38, 0.15], [0.52, 0.3], [1.0, -0.12]])
+			pitch = _keys(t, [[0.0, c], [0.38, PI * 1.35], [0.52, PI * 0.36], [0.75, PI * 0.3], [1.0, c]])
+			_swing_lean = _keys(t, [[0.0, 0.0], [0.38, 0.22], [0.52, -0.4], [0.75, -0.32], [1.0, 0.0]])
+			_swing_crouch = _keys(t, [[0.0, 0.0], [0.52, 0.1], [1.0, 0.0]])
+		"machete":
+			# мачете: рука отводится вправо на уровне груди, клинок рубит поперёк справа налево
+			arm_r.rotation.x = _keys(t, [[0.0, -0.3], [0.3, -1.45], [0.5, -1.35], [0.75, -0.9], [1.0, -0.3]])
+			arm_r.rotation.z = _keys(t, [[0.0, 0.12], [0.3, 1.2], [0.5, -0.5], [0.75, -0.4], [1.0, 0.12]])
+			arm_l.rotation.x = _keys(t, [[0.0, 0.0], [0.3, -0.5], [0.5, -0.2], [1.0, 0.0]])
+			pitch = _keys(t, [[0.0, c], [0.3, PI * 0.55], [0.5, PI * 0.5], [0.75, PI * 0.45], [1.0, c]])
+			yaw = _keys(t, [[0.0, 0.0], [0.3, -1.35], [0.5, 0.95], [0.75, 0.8], [1.0, 0.0]])
+			_swing_twist = _keys(t, [[0.0, 0.0], [0.3, -0.45], [0.5, 0.4], [0.75, 0.3], [1.0, 0.0]])
+			_swing_lean = _keys(t, [[0.0, 0.0], [0.5, -0.12], [1.0, 0.0]])
+		"shovel":
+			# лопата: вонзить вниз, нажать, поддеть и откинуть землю
+			arm_r.rotation.x = _keys(t, [[0.0, -0.3], [0.25, -1.1], [0.45, -0.5], [0.7, -1.25], [1.0, -0.3]])
+			arm_l.rotation.x = _keys(t, [[0.0, 0.0], [0.25, -1.3], [0.45, -0.7], [0.7, -1.4], [1.0, 0.0]])
+			arm_l.rotation.z = _keys(t, [[0.0, -0.12], [0.25, 0.3], [1.0, -0.12]])
+			pitch = _keys(t, [[0.0, c], [0.25, PI * 0.3], [0.45, PI * 0.12], [0.7, PI * 0.55], [1.0, c]])
+			_swing_lean = _keys(t, [[0.0, 0.0], [0.25, -0.15], [0.45, -0.38], [0.7, -0.05], [1.0, 0.0]])
+			_swing_crouch = _keys(t, [[0.0, 0.0], [0.45, 0.12], [0.7, 0.03], [1.0, 0.0]])
+		"watering_can":
+			# лейка: поднять перед собой, наклонить носиком вниз, подержать, вернуть
+			arm_r.rotation.x = _keys(t, [[0.0, -0.3], [0.25, -1.25], [0.85, -1.2], [1.0, -0.3]])
+			arm_r.rotation.z = _keys(t, [[0.0, 0.12], [0.25, -0.1], [1.0, 0.12]])
+			pitch = _keys(t, [[0.0, c], [0.25, 0.0], [0.42, -0.85], [0.8, -0.85], [0.95, 0.0], [1.0, c]])
+			_swing_lean = _keys(t, [[0.0, 0.0], [0.4, -0.12], [1.0, 0.0]])
+			if t > 0.42 and not _whoosh_done:
+				_whoosh_done = true
+				FX.burst(self, -model.global_basis.z * 0.9 + Vector3(0, 0.45, 0), Color("7fc8f0"), 12)   # брызги из носика
+		"net":
+			# сачок: широкий взмах дугой справа сверху вниз — «накрыть»
+			arm_r.rotation.x = _keys(t, [[0.0, -0.3], [0.3, -2.7], [0.55, -1.05], [0.8, -0.8], [1.0, -0.3]])
+			arm_r.rotation.z = _keys(t, [[0.0, 0.12], [0.3, 0.9], [0.55, -0.3], [1.0, 0.12]])
+			pitch = _keys(t, [[0.0, c], [0.3, PI * 1.12], [0.55, PI * 0.42], [0.8, PI * 0.36], [1.0, c]])
+			yaw = _keys(t, [[0.0, 0.0], [0.3, -0.6], [0.55, 0.45], [1.0, 0.0]])
+			_swing_twist = _keys(t, [[0.0, 0.0], [0.3, -0.3], [0.55, 0.3], [1.0, 0.0]])
+			_swing_lean = _keys(t, [[0.0, 0.0], [0.55, -0.2], [1.0, 0.0]])
+		"fishing_rod":
+			# заброс: удилище назад за плечо и резко вперёд
+			arm_r.rotation.x = _keys(t, [[0.0, -0.3], [0.35, -2.9], [0.5, -1.2], [0.7, -1.0], [1.0, -0.3]])
+			pitch = _keys(t, [[0.0, c], [0.35, PI * 1.22], [0.5, PI * 0.62], [0.75, PI * 0.58], [1.0, c]])
+			_swing_lean = _keys(t, [[0.0, 0.0], [0.35, 0.15], [0.5, -0.15], [1.0, 0.0]])
+		"ice_drill":
+			# бур: обе руки на рукояти, бур отвесно вниз и крутится, корпус налегает сверху
+			arm_r.rotation.x = _keys(t, [[0.0, -0.3], [0.15, -0.95], [0.85, -0.95], [1.0, -0.3]])
+			arm_l.rotation.x = _keys(t, [[0.0, 0.0], [0.15, -0.95], [0.85, -0.95], [1.0, 0.0]])
+			arm_l.rotation.z = _keys(t, [[0.0, -0.12], [0.15, 0.35], [0.85, 0.35], [1.0, -0.12]])
+			pitch = _keys(t, [[0.0, c], [0.15, 0.0], [0.85, 0.0], [1.0, c]])
+			spin = t * TAU * 3.0
+			_swing_lean = _keys(t, [[0.0, 0.0], [0.15, -0.3], [0.85, -0.3], [1.0, 0.0]])
+			_swing_crouch = _keys(t, [[0.0, 0.0], [0.2, 0.08], [0.8, 0.08], [1.0, 0.0]])
+		_:
+			# руками: наклониться, взять и потянуть на себя (инструмент в руке остаётся как был)
+			arm_r.rotation.x = _keys(t, [[0.0, 0.0], [0.35, -1.15], [0.6, -0.55], [1.0, 0.0]])
+			arm_l.rotation.x = _keys(t, [[0.0, 0.0], [0.38, -1.05], [0.62, -0.5], [1.0, 0.0]])
+			arm_r.rotation.z = 0.12
+			arm_l.rotation.z = -0.12
+			_swing_lean = _keys(t, [[0.0, 0.0], [0.35, -0.4], [0.6, -0.12], [1.0, 0.0]])
+			_swing_crouch = _keys(t, [[0.0, 0.0], [0.35, 0.1], [0.7, 0.0]])
+	# свист замаха у рубящих инструментов — перед самым ударом
+	if kind in ["stone_axe", "pickaxe", "iron_pickaxe", "ice_pick", "machete", "net", "fishing_rod"] and t > 0.34 and not _whoosh_done:
+		_whoosh_done = true
+		Audio.play("whoosh", -9.0, 0.12)
+	if hand_tool and _hand_id != "":
+		hand_tool.global_basis = model.global_basis.orthonormalized() * Basis.from_euler(Vector3(pitch, yaw, 0.0)) * Basis(Vector3.UP, spin)
+
+
+## Как инструмент держат, когда его несут: рукоять вниз, головка вверх у плеча; лейку — за ручку, носиком вперёд.
+static func _carry_pitch(id: String) -> float:
+	return 0.0 if id == "watering_can" else CARRY_ANGLE
 
 
 # ------------------------------------------------------------------ Лазание
@@ -623,10 +746,16 @@ func try_interact() -> void:
 		return
 	# умный выбор: нужный инструмент есть в сумке — герой сам берёт его в руку (подсветка ячейки переходит).
 	# Пальму не трогаем: с пустыми руками её трясут, с топором — рубят, это решает игрок.
-	if target.has_method("tool_hint") and not (target is ResourceNode and (target as ResourceNode).kind == "palm"):
-		var need: String = target.tool_hint()
-		if need in Game.HOLD_TOOLS and Game.has_tool(need):
-			Game.hold(need)
+	var need := ""
+	if target.has_method("tool_hint"):
+		need = target.tool_hint()
+	if need in Game.HOLD_TOOLS and Game.has_tool(need) and not (target is ResourceNode and (target as ResourceNode).kind == "palm"):
+		Game.hold(need)
+	# чем работаем: нужным инструментом (он уже в руке), топором по пальме — если он в руке, иначе руками
+	swing_kind = "hands"
+	if need != "" and Game.held_tool() == need:
+		swing_kind = need
+	_whoosh_done = false
 	_swing_t = SWING_TIME
 	var t := target
 	# эффект удара — в середине замаха

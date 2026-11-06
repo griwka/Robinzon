@@ -52,6 +52,16 @@ func _process(_delta: float) -> void:
 			for id in ["down_jacket", "felt_boots", "mittens"]:
 				Game.inventory[id] = 1
 		p.update_clothes()
+	if _frames == 1 and args.has("quest"):   # для скриншотов: текущее задание по id (--quest=old_camp)
+		for ci in Data.CHAPTERS.size():
+			var qs: Array = Data.CHAPTERS[ci]["quests"]
+			for qi in qs.size():
+				if qs[qi]["id"] == args["quest"]:
+					Game.chapter = ci
+					Game.quest_index = qi
+					Game.quest_started = false
+					Game.start_current_quest()
+					_flush()
 	if _frames == 1 and args.get("lens", "") == "1":
 		Game.flags["eye_lens"] = true
 		get_tree().call_group("great_fire", "refresh", false)
@@ -67,6 +77,12 @@ func _process(_delta: float) -> void:
 		Game.inventory_changed.emit()
 	if _frames == 2 and args.has("hold"):
 		Game.hold(str(args["hold"]))
+	if _frames >= 2 and args.has("pose"):   # для скриншотов: застывшая поза работы (--pose=stone_axe:0.32)
+		var pp: PackedStringArray = str(args["pose"]).split(":")
+		p.swing_kind = pp[0]
+		p.pose_hold = float(pp[1]) if pp.size() > 1 else 0.5
+		if args.has("face"):
+			p.model.rotation.y = float(args["face"])
 	if _frames == 2 and args.has("eyedeck"):
 		var gl := _tower()
 		if gl:

@@ -104,6 +104,10 @@ func _ready() -> void:
 	hud.panels_changed.connect(_on_panels_changed)
 	Audio.listener = player
 	Audio.island = island
+	var qp := QuestPointer.new()   # метка «!» над целью задания и «куда идти» в панели задания
+	qp.main = self
+	qp.hud = hud
+	add_child(qp)
 	if Game.location == "eye":
 		Audio.play_theme("eye", true)   # своя тема Ока: тихая, с ветром
 	else:

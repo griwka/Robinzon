@@ -81,6 +81,9 @@
 ## Команды
 Godot должен быть в PATH как `godot`; на Windows — консольная версия `Godot_v4.7.x-stable_win64_console.exe`.
 
+Окно игры для тестов и скриншотов — на втором мониторе и без звука: `--screen 1 --audio-driver Dummy`.
+Автотесты и проверка пишут в своё сохранение (`user://save_dev.json`) и не трогают сохранение игрока.
+
 ```bash
 godot --headless --path . -- --validate
 godot --headless --path . -- --autotest
@@ -129,6 +132,8 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 - `--near=eye_tower|eye_top|grandfather_house|great_lighthouse` — места на Оке; `--eyedeck=1..3` — герой на балконе маяка;
   `--lens=1` — Великий огонь золотой; `--ending=sea|keeper` — финал (для скриншотов и автотеста главы 8);
 - автотест: `--from=K` — начать с K-го задания главы, `--upto=K` — пройти только K заданий;
+- `--quest=old_camp` — текущее задание по id; `--give=stone_axe,machete` — выдать предметы; `--hold=stone_axe` — инструмент в руке;
+- `--pose=stone_axe:0.32` — застывшая поза работы (фаза 0..1), `--face=0` — куда смотрит герой (с `--yaw=1.57` — вид сбоку);
 - `--fxtest` — все эффекты перед кадром;
 - `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO.
 
