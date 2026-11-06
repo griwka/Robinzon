@@ -146,7 +146,7 @@ func storm_active() -> bool:
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
-		if a in ["--autotest", "--validate", "--gallery"] or a.begins_with("--shot=") or a.begins_with("--gallery="):
+		if a in ["--autotest", "--validate", "--gallery", "--walktest"] or a.begins_with("--shot=") or a.begins_with("--gallery="):
 			save_path = "user://save_dev.json"
 	_setup_input()
 	reset_state()

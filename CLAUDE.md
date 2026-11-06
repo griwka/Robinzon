@@ -83,6 +83,8 @@ Godot должен быть в PATH как `godot`; на Windows — консо�
 
 Окно игры для тестов и скриншотов — на втором мониторе и без звука: `--screen 1 --audio-driver Dummy`.
 Автотесты и проверка пишут в своё сохранение (`user://save_dev.json`) и не трогают сохранение игрока.
+`--walktest` — проверка ногами, с настоящей физикой: маршруты по острову (форт — через ворота и подвал), ярусы бункера
+(герой стоит на полу). Автотест переносит героя напрямую и такие ошибки не видит. `--scan=N` — грубый поиск тупиков.
 
 ```bash
 godot --headless --path . -- --validate
@@ -99,6 +101,8 @@ godot --headless --path . -- --autotest --location=home --chapter=7 --from=13 --
 godot --headless --path . -- --autotest --location=fog --chapter=7 --from=14
 godot --headless --path . -- --autotest --location=eye --chapter=8
 godot --headless --path . -- --autotest --location=eye --chapter=8 --from=9 --ending=keeper
+godot --headless --path . -- --walktest --location=fort
+godot --headless --path . -- --walktest --location=storm
 godot --path . --resolution 1600x900 -- --shot=shot.png --frames=90 --location=fort
 ```
 

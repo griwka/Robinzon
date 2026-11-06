@@ -356,8 +356,9 @@ func _physics_process(delta: float) -> void:
 		if isl.height_at(ahead.x, ahead.z) < -0.9 and global_position.y < 0.2:   # на мостках над водой — можно
 			velocity.x = 0.0
 			velocity.z = 0.0
-	# в воде — медленнее и всплываем
-	if global_position.y < -0.6:
+	# в воде — медленнее и всплываем. Вода — только над морским дном: под землёй (бункер на Грозовом острове
+	# уходит ниже уровня моря) никакой воды нет, иначе героя тянет к потолку
+	if in_water():
 		velocity.x *= 0.92
 		velocity.z *= 0.92
 		velocity.y = maxf(velocity.y, 1.5)
@@ -635,6 +636,16 @@ func _work_pose(kind: String, t: float) -> void:
 ## Как инструмент держат, когда его несут: рукоять вниз, головка вверх у плеча; лейку — за ручку, носиком вперёд.
 static func _carry_pitch(id: String) -> float:
 	return 0.0 if id == "watering_can" else CARRY_ANGLE
+
+
+## Герой в море: ниже уровня воды, но над дном (не под землёй, не в бункере).
+func in_water() -> bool:
+	if global_position.y >= -0.6:
+		return false
+	var isl := get_tree().get_first_node_in_group("island")
+	if isl == null:
+		return false
+	return isl.height_at(global_position.x, global_position.z) < global_position.y + 0.3
 
 
 # ------------------------------------------------------------------ Лазание
