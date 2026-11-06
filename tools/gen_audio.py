@@ -676,14 +676,36 @@ def sfx_blip():
     return normalize(marimba(note_hz("A5"), 0.12) * env_exp(int(0.12 * SR), 0.04), 0.35)
 
 
-def sfx_step(kind):
-    n = int(0.12 * SR)
+def sfx_step(kind, seed=0):
+    """Шаг. Песок: мягкий глухой удар пятки и тихий хруст отдельных песчинок (сначала пятка, через миг — носок).
+    Трава: тот же мягкий удар и шелест стеблей. Несколько вариантов (seed), чтобы шаги не звучали одинаково."""
+    r = np.random.default_rng(300 + seed + (50 if kind != "sand" else 0))
+    d = 0.24
+    n = int(d * SR)
     t = np.arange(n) / SR
+    x = np.zeros(n)
+    for at, g in ((0.0, 1.0), (r.uniform(0.05, 0.08), 0.6)):   # пятка, затем носок
+        m = int(0.09 * SR)
+        tt = np.arange(m) / SR
+        thud = lowpass(r.standard_normal(m), 220) * np.exp(-tt / 0.018) * np.clip(tt / 0.004, 0, 1) * 2.2
+        place(x, thud * g, at)
+        if kind == "sand":
+            # песчинки: короткие щелчки, густо в начале и реже к концу, приглушённые
+            k = int(r.integers(55, 80))
+            for _ in range(k):
+                at2 = at + r.exponential(0.025)
+                c = int(r.integers(30, 90))
+                click = r.standard_normal(c) * np.exp(-np.arange(c) / (c / 4))
+                place(x, click * r.uniform(0.05, 0.16) * g, at2)
+        else:
+            m2 = int(0.14 * SR)
+            tt2 = np.arange(m2) / SR
+            swish = bandpass(r.standard_normal(m2), 1500, 5000) * np.exp(-tt2 / 0.04) * np.clip(tt2 / 0.01, 0, 1) * 0.35
+            place(x, swish * g, at + 0.005)
     if kind == "sand":
-        x = bandpass(rng.standard_normal(n), 400, 2500) * adsr(n, 0.01, 0.03, 0.4, 0.06)
-    else:
-        x = bandpass(rng.standard_normal(n), 1200, 6000) * adsr(n, 0.005, 0.02, 0.3, 0.07) * (0.6 + 0.4 * np.sin(2 * np.pi * 40 * t))
-    return normalize(x, 0.35)
+        x = bandpass(x, 90, 4200)
+    x *= np.clip((d - t) / 0.03, 0, 1)   # без щелчка в конце
+    return normalize(x, 0.3)
 
 
 def sfx_cluck():
@@ -1034,6 +1056,9 @@ def main():
                  "step_snow": sfx_step_snow, "lava": sfx_lava, "steam": sfx_steam, "hammer": sfx_hammer,
                  "tortoise": sfx_tortoise, "rumble": sfx_rumble, "frog": sfx_frog, "creak": sfx_creak, "sail": sfx_sail,
                  "cheer": sfx_cheer, "gust": sfx_gust, "fire_out": sfx_fire_out}
+        for i in range(4):
+            table["step_sand%d" % i] = (lambda k: lambda: sfx_step("sand", k))(i)
+            table["step_grass%d" % i] = (lambda k: lambda: sfx_step("grass", k))(i)
         music = {"eye": music_eye, "meeting": music_meeting, "sea": music_sea, "keeper": music_keeper}
         for name in only:
             if name.startswith("music_"):
@@ -1046,7 +1071,7 @@ def main():
         "chop": sfx_chop(), "rock": sfx_rock(), "rustle": sfx_rustle(), "pickup": sfx_pickup(),
         "harvest": sfx_harvest(), "plant": sfx_plant(), "water": sfx_water(), "build": sfx_build(),
         "craft": sfx_craft(), "quest": sfx_quest(), "rare": sfx_rare(), "click": sfx_click(),
-        "open": sfx_open(), "blip": sfx_blip(), "step_sand": sfx_step("sand"), "step_grass": sfx_step("grass"),
+        "open": sfx_open(), "blip": sfx_blip(),
         "cluck": sfx_cluck(), "bleat": sfx_bleat(), "squawk": sfx_squawk(), "oink": sfx_oink(), "sleep": sfx_sleep(),
         "shake": sfx_shake(), "thud": sfx_thud(),
         "thunder0": sfx_thunder(0), "thunder1": sfx_thunder(1), "thunder2": sfx_thunder(2),
@@ -1058,6 +1083,8 @@ def main():
     }
     for i in range(4):
         sfx["bird%d" % i] = bird(100 + i)
+        sfx["step_sand%d" % i] = sfx_step("sand", i)
+        sfx["step_grass%d" % i] = sfx_step("grass", i)
     for name, x in sfx.items():
         write_wav("sfx_" + name, x)
     amb_ocean()
