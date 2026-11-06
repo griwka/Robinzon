@@ -91,6 +91,17 @@ func _process(_delta: float) -> void:
 				p.global_position = c.global_position + Vector3(1.4, 0.4, 0.6)
 				p.model.rotation.y = atan2(p.global_position.x - c.global_position.x, p.global_position.z - c.global_position.z)
 				p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+	if _frames == 4 and args.has("slots"):   # для скриншотов: список ячеек (--slots=load|new|save|pauseload)
+		Game.use_slot(2)
+		main._save()
+		Game.use_slot(1)
+		main._save()
+		var mode := str(args["slots"])
+		if mode == "save" or mode == "pauseload":
+			main._pause()
+			main.menu.open_slots("save" if mode == "save" else "load", main.menu.show_pause)
+		else:
+			main.menu.open_slots(mode, main.menu.show_main.bind(true))
 	if args.has("climb") and _frames >= 3:   # для скриншотов: герой на лиане N на высоте h (--climb=1:0.5)
 		var cp: PackedStringArray = str(args["climb"]).split(":")
 		var lianas := get_tree().get_nodes_in_group("climb")
@@ -423,6 +434,22 @@ func _test_palm() -> void:
 
 
 ## Инструменты не ломаются — вторую копию не сделать и не купить; лишние в старом сохранении разбираются.
+## Ячейки сохранения: игра пишется в выбранную ячейку, в списке видно главу и остров, ячейки не мешают друг другу.
+func _test_slots() -> void:
+	_check(Game.slot_path(1) == Game.save_path and Game.slot_path(1) != Game.SAVE_PATH, "автотест пишет в свою ячейку, не в ячейки игрока")
+	_check(not Game.slot_path(3).begins_with("user://save_3"), "ячейки автотеста — отдельные файлы")
+	Game.use_slot(3)
+	main._save()
+	var info := Game.slot_info(3)
+	_check(info.has("chapter") and str(info["chapter"]).begins_with("Глава 1") and info.has("island") and info.has("when"),
+		"в ячейке 3 видно главу, остров и время сохранения: %s" % str(info))
+	_check(Game.slot_info(4).is_empty(), "соседняя ячейка пуста")
+	Game.delete_slot(3)
+	_check(not Game.slot_used(3), "ячейку можно очистить")
+	Game.use_slot(1)
+	_check(Game.save_path == Game.slot_path(1), "вернулись в первую ячейку")
+
+
 func _test_unique() -> void:
 	var inv: Dictionary = Game.inventory.duplicate()
 	var unl: Dictionary = Game.unlocked.duplicate()
@@ -1108,6 +1135,24 @@ func _walktest() -> void:
 			await _walk_route("от причала к лагерю и обратно", dock, [camp, dock])
 		_:
 			await _walk_route("от причала к лагерю и обратно", dock, [camp, dock])
+	# прыгнул в воду на глубине — должен выплыть к берегу (раньше на глубине стояла «невидимая стена»)
+	for turn in [1.3, -1.3]:
+		var out := Vector3(dock.x, 0, dock.z).normalized().rotated(Vector3.UP, turn)
+		var deep := Vector3.INF
+		for k in 80:
+			var q := out * (isl.radius * 0.5 + k)
+			if isl.height_at(q.x, q.z) < -1.8:
+				deep = q
+				break
+		if deep == Vector3.INF:
+			continue
+		# ближайший берег по пути назад к острову
+		var shore := deep
+		while shore.length() > 1.0 and isl.height_at(shore.x, shore.z) < 0.4:
+			shore -= out * 0.5
+		shore -= out * 1.5
+		deep.y = -1.4
+		await _walk_route("из глубокой воды к берегу (%.1f)" % turn, deep, [Vector3(shore.x, 0, shore.z)])
 	if args.has("scan"):
 		# из разных мест острова — к лагерю: находим ямы и тупики, откуда не выбраться ногами
 		var g := RandomNumberGenerator.new()
@@ -1657,6 +1702,7 @@ func _autotest() -> void:
 		_test_quest_places()
 		_test_palm()
 		_test_unique()
+		_test_slots()
 		_test_mistakes()
 		Game.start_current_quest()
 		_flush()

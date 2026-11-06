@@ -118,6 +118,13 @@ func _ready() -> void:
 	add_child(menu)
 	menu.continue_pressed.connect(start_play)
 	menu.new_game_pressed.connect(_new_game)
+	menu.new_game_slot_pressed.connect(func(n: int):
+		Game.use_slot(n)
+		_new_game())
+	menu.load_slot_pressed.connect(_load_slot)
+	menu.save_slot_pressed.connect(func(n: int):
+		Game.use_slot(n)
+		_save())
 	menu.resume_pressed.connect(_resume)
 	menu.save_pressed.connect(_save)
 	menu.to_main_menu_pressed.connect(func():
@@ -660,6 +667,15 @@ func _spawn_postgame() -> void:
 		lv.rotation.y = atan2(lp.x - c.x, lp.z - c.z)
 		add_child(lv)
 		island.poi_extra["lyova"] = lp
+
+
+## Загрузить игру из другой ячейки: всё начинается с чистого листа и читается из её файла.
+func _load_slot(n: int) -> void:
+	Game.use_slot(n)
+	Game.reset_state()
+	Game.skip_menu = true
+	get_tree().paused = false
+	get_tree().reload_current_scene()
 
 
 func _new_game() -> void:

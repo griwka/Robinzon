@@ -18,10 +18,13 @@ const SAVE_PATH := "user://save.json"
 ## Куда сохраняется игра. Автотесты, проверка и скриншоты пишут в отдельный файл и никогда
 ## не трогают сохранение игрока (у exe и у проекта папка сохранений общая).
 var save_path := SAVE_PATH
+const SLOTS := 5                       # ячеек сохранения; первая — прежний save.json
+var slot := 1                          # в какую ячейку пишем сейчас
+var _dev_save := false                 # автотесты и скриншоты пишут в свои файлы save_dev*.json
 const SAVE_VERSION := 4
 const SETTINGS_PATH := "user://settings.cfg"
 const DEFAULT_SETTINGS := {"music": 0.6, "sfx": 0.8, "ambience": 0.7, "mouse": 1.0,
-	"shadows": 2, "msaa": 2, "fullscreen": false, "vsync": true, "sharpen": 1, "effects": 2, "shake": true, "endings": ""}
+	"shadows": 2, "msaa": 2, "fullscreen": false, "vsync": true, "sharpen": 1, "effects": 2, "shake": true, "endings": "", "slot": 1}
 const DAY_LENGTH := 600.0  # секунд на сутки (ночь идёт вдвое быстрее)
 
 var inventory: Dictionary = {}
@@ -147,11 +150,96 @@ func storm_active() -> bool:
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a in ["--autotest", "--validate", "--gallery", "--walktest"] or a.begins_with("--shot=") or a.begins_with("--gallery="):
-			save_path = "user://save_dev.json"
+			_dev_save = true
+	save_path = slot_path(1)
 	_setup_input()
 	reset_state()
 	load_settings()
 	apply_display()
+	if not _dev_save:
+		_pick_slot()
+
+
+# ======================================================================= Ячейки сохранения
+func slot_path(n: int) -> String:
+	var base := "user://save_dev" if _dev_save else "user://save"
+	return base + (".json" if n <= 1 else "_%d.json" % n)
+
+
+func slot_used(n: int) -> bool:
+	return FileAccess.file_exists(slot_path(n))
+
+
+func any_slot_used() -> bool:
+	for n in range(1, SLOTS + 1):
+		if slot_used(n):
+			return true
+	return false
+
+
+## Писать и читать дальше из ячейки n (запоминается в настройках — после перезапуска та же ячейка).
+func use_slot(n: int) -> void:
+	slot = clampi(n, 1, SLOTS)
+	save_path = slot_path(slot)
+	if not _dev_save:
+		settings["slot"] = slot
+		save_settings()
+
+
+## При запуске: последняя ячейка, в которую играли; если она пуста — самая свежая из сохранённых.
+func _pick_slot() -> void:
+	var n := clampi(int(settings.get("slot", 1)), 1, SLOTS)
+	if not slot_used(n):
+		var best := -1
+		for k in range(1, SLOTS + 1):
+			if slot_used(k) and (best < 0 or FileAccess.get_modified_time(slot_path(k)) > FileAccess.get_modified_time(slot_path(best))):
+				best = k
+		if best > 0:
+			n = best
+	slot = n
+	save_path = slot_path(n)
+
+
+## Что лежит в ячейке — для списка сохранений. Пустая ячейка — {}.
+func slot_info(n: int) -> Dictionary:
+	var p := slot_path(n)
+	if not FileAccess.file_exists(p):
+		return {}
+	var f := FileAccess.open(p, FileAccess.READ)
+	if f == null:
+		return {}
+	var data = JSON.parse_string(f.get_as_text())
+	if typeof(data) != TYPE_DICTIONARY:
+		return {"broken": true}
+	if int(data.get("version", 0)) < SAVE_VERSION:
+		return {"old": true}
+	var ch := clampi(int(data.get("chapter", 0)), 0, Data.CHAPTERS.size() - 1)
+	var loc := str(data.get("location", "home"))
+	var fl: Dictionary = data.get("flags", {})
+	var info := {
+		"chapter": "Игра пройдена" if fl.get("ending_open_sea", false) or fl.get("ending_keeper", false) else str(Data.CHAPTERS[ch]["title"]),
+		"island": str(Data.LOCATIONS.get(loc, {}).get("name", loc)),
+		"day": int(data.get("day", 1)),
+	}
+	# когда сохранено: в новых сохранениях записано, в старых — по времени файла
+	var when := str(data.get("saved_at", ""))
+	if when == "":
+		var bias: int = int(Time.get_time_zone_from_system().get("bias", 0))
+		when = Time.get_datetime_string_from_unix_time(FileAccess.get_modified_time(p) + bias * 60, true)
+	var parts := when.split(" ")
+	if parts.size() == 2:
+		var d := parts[0].split("-")
+		var t := parts[1].split(":")
+		if d.size() == 3 and t.size() >= 2:
+			when = "%s.%s.%s  %s:%s" % [d[2], d[1], d[0], t[0], t[1]]
+	info["when"] = when
+	return info
+
+
+func delete_slot(n: int) -> void:
+	var p := slot_path(n)
+	if FileAccess.file_exists(p):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 
 
 # ======================================================================= Настройки
@@ -579,6 +667,7 @@ func save_game(extra: Dictionary) -> void:
 		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags, "cleared": cleared.keys(),
 		"time_of_day": time_of_day, "day": day, "world_time": world_time,
 		"location": location, "held": held,
+		"saved_at": Time.get_datetime_string_from_system(false, true),
 	}
 	# данные текущего острова кладём к остальным островам
 	loc_data[location] = extra.duplicate()

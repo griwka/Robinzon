@@ -7,6 +7,9 @@ signal new_game_pressed
 signal resume_pressed
 signal save_pressed
 signal to_main_menu_pressed
+signal load_slot_pressed(n: int)      # загрузить игру из ячейки n
+signal save_slot_pressed(n: int)      # сохранить текущую игру в ячейку n
+signal new_game_slot_pressed(n: int)  # начать новую игру в ячейке n
 
 var hud: HUD   # берём у HUD стили, чтобы всё выглядело одинаково
 var root: Control
@@ -14,7 +17,16 @@ var main_box: Control
 var pause_box: Control
 var settings_box: PanelContainer
 var confirm_box: PanelContainer
+var confirm_label: Label
+var confirm_yes: Button
+var _confirm_cb: Callable
+var slots_box: PanelContainer
+var slots_shade: ColorRect
+var _slots_mode := "load"     # load — загрузить, save — сохранить в ячейку, new — новая игра
+var _slots_back: Callable
 var continue_btn: Button
+var load_btn: Button
+var save_btn: Button
 var ending_label: Label
 var _settings_back: Callable
 
@@ -30,6 +42,7 @@ func _ready() -> void:
 	_build_main()
 	_build_pause()
 	_build_settings()
+	_build_slots()
 	_build_confirm()
 	hide_all()
 
@@ -87,6 +100,8 @@ func _build_main() -> void:
 	v.add_child(gap)
 	continue_btn = _button("Продолжить", func(): continue_pressed.emit())
 	v.add_child(continue_btn)
+	load_btn = _button("Загрузить игру", func(): open_slots("load", show_main.bind(continue_btn.visible)), HUD.WOOD_LIGHT)
+	v.add_child(load_btn)
 	v.add_child(_button("Новая игра", _on_new_game, Color("e0a23a")))
 	v.add_child(_button("Настройки", func(): open_settings(show_main.bind(continue_btn.visible)), HUD.WOOD_LIGHT))
 	v.add_child(_button("Выход", func(): get_tree().quit(), Color("b9573b")))
@@ -96,16 +111,19 @@ func _build_main() -> void:
 	main_box.add_child(ver)
 
 
+## Новая игра: если сохранений ещё нет — сразу в первую ячейку, иначе выбрать ячейку.
 func _on_new_game() -> void:
-	if FileAccess.file_exists(Game.save_path):
-		confirm_box.visible = true
+	if not Game.any_slot_used():
+		new_game_slot_pressed.emit(1)
 	else:
-		new_game_pressed.emit()
+		open_slots("new", show_main.bind(continue_btn.visible))
 
 
 func show_main(has_save: bool) -> void:
 	hide_all()
 	continue_btn.visible = has_save
+	continue_btn.text = "Продолжить" if not has_save else "Продолжить  ·  ячейка %d" % Game.slot
+	load_btn.visible = Game.any_slot_used()
 	var names := {"sea": "«Открытое море»", "keeper": "«Хранитель огня»"}
 	var seen: Array[String] = []
 	for e in str(Game.settings.get("endings", "")).split(",", false):
@@ -138,7 +156,10 @@ func _build_pause() -> void:
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(t)
 	v.add_child(_button("Продолжить", func(): resume_pressed.emit()))
-	v.add_child(_button("Сохранить игру", func(): save_pressed.emit(), HUD.WOOD_LIGHT))
+	save_btn = _button("Сохранить игру", func(): save_pressed.emit(), HUD.WOOD_LIGHT)
+	v.add_child(save_btn)
+	v.add_child(_button("Сохранить в другую ячейку", func(): open_slots("save", show_pause), HUD.WOOD_LIGHT))
+	v.add_child(_button("Загрузить игру", func(): open_slots("load", show_pause), HUD.WOOD_LIGHT))
 	v.add_child(_button("Настройки", func(): open_settings(show_pause), HUD.WOOD_LIGHT))
 	v.add_child(_button("Главное меню", func(): to_main_menu_pressed.emit(), Color("e0a23a")))
 	v.add_child(_button("Выйти из игры", func():
@@ -148,7 +169,140 @@ func _build_pause() -> void:
 
 func show_pause() -> void:
 	hide_all()
+	save_btn.text = "Сохранить  ·  ячейка %d" % Game.slot
 	pause_box.visible = true
+
+
+# ------------------------------------------------------------------ Ячейки сохранения
+func _build_slots() -> void:
+	slots_shade = ColorRect.new()   # в паузе игра под списком затемнена, как под меню паузы
+	slots_shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	slots_shade.color = Color(0.04, 0.02, 0.0, 0.45)
+	root.add_child(slots_shade)
+	slots_box = PanelContainer.new()
+	slots_box.add_theme_stylebox_override("panel", hud._box(HUD.PAPER, HUD.WOOD, 18, 8, 22))
+	slots_box.set_anchors_preset(Control.PRESET_CENTER)
+	slots_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	slots_box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	slots_box.custom_minimum_size = Vector2(760, 0)
+	root.add_child(slots_box)
+
+
+## Открыть список ячеек: mode — load / save / new; back — куда вернуться по «Назад».
+func open_slots(mode: String, back: Callable) -> void:
+	hide_all()
+	_slots_mode = mode
+	_slots_back = back
+	_fill_slots()
+	slots_shade.visible = get_tree().paused
+	slots_box.visible = true
+
+
+func _fill_slots() -> void:
+	for c in slots_box.get_children():
+		slots_box.remove_child(c)
+		c.queue_free()
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	slots_box.add_child(v)
+	var title := hud._label(str({"load": "Загрузить игру", "save": "Сохранить в ячейку", "new": "Новая игра — выбери ячейку"}[_slots_mode]), 32, HUD.INK, false)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(title)
+	var in_game := get_tree().paused
+	for n in range(1, Game.SLOTS + 1):
+		var info := Game.slot_info(n)
+		var current := in_game and n == Game.slot
+		var row := PanelContainer.new()
+		row.add_theme_stylebox_override("panel", hud._box(Color("fff6dc") if not current else Color("e6f5c8"), HUD.WOOD_LIGHT, 12, 3, 10))
+		v.add_child(row)
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 12)
+		row.add_child(h)
+		var num := hud._label(str(n), 34, HUD.WOOD, false)
+		num.custom_minimum_size = Vector2(36, 0)
+		num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		h.add_child(num)
+		var txt := VBoxContainer.new()
+		txt.add_theme_constant_override("separation", 0)
+		txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(txt)
+		var empty := info.is_empty()
+		var usable := not empty and not info.has("old") and not info.has("broken")
+		var top := "Пусто"
+		var sub := ""
+		if info.has("old"):
+			top = "Сохранение старой версии"
+			sub = "загрузить нельзя — сюжет с тех пор поменялся"
+		elif info.has("broken"):
+			top = "Сохранение повреждено"
+		elif usable:
+			top = str(info["chapter"])
+			sub = ("играешь сейчас  ·  " if current else "") + "%s  ·  день %d  ·  %s" % [info["island"], int(info["day"]), info["when"]]
+		var l1 := hud._label(top, 21, HUD.INK if not empty else HUD.WOOD_LIGHT, false)
+		l1.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l1.custom_minimum_size = Vector2(380, 0)
+		txt.add_child(l1)
+		if sub != "":
+			txt.add_child(hud._label(sub, 16, HUD.WOOD, false))
+		var act: Button = null
+		match _slots_mode:
+			"load":
+				if usable:
+					act = _small_button("Загрузить", _ask_load.bind(n), HUD.GREEN)
+			"save":
+				act = _small_button("Сохранить сюда", _ask_save.bind(n, not empty and not current), HUD.GREEN)
+			"new":
+				act = _small_button("Начать здесь", _ask_new.bind(n, not empty), Color("e0a23a"))
+		if act:
+			h.add_child(act)
+		if _slots_mode == "load" and not empty and not current:
+			h.add_child(_small_button("Удалить", _ask_delete.bind(n), Color("b9573b"), 110))
+	var back := _button("Назад", func(): _slots_back.call(), HUD.WOOD_LIGHT)
+	back.custom_minimum_size = Vector2(240, 54)
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(back)
+
+
+func _small_button(text: String, cb: Callable, color: Color, w := 180) -> Button:
+	var b := _button(text, cb, color)
+	b.custom_minimum_size = Vector2(w, 48)
+	b.add_theme_font_size_override("font_size", 20)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return b
+
+
+func _ask_load(n: int) -> void:
+	if get_tree().paused:   # из игры: несохранённое пропадёт — переспросим
+		ask("Загрузить ячейку %d?\nВсё, что не сохранено в текущей игре, пропадёт." % n, "Загрузить",
+			func(): load_slot_pressed.emit(n))
+	else:
+		load_slot_pressed.emit(n)
+
+
+func _ask_save(n: int, overwrite: bool) -> void:
+	var go := func():
+		save_slot_pressed.emit(n)
+		_fill_slots()
+		slots_box.visible = true
+	if overwrite:
+		ask("Сохранить в ячейку %d?\nТо, что там лежит, заменится текущей игрой." % n, "Сохранить", go)
+	else:
+		go.call()
+
+
+func _ask_new(n: int, overwrite: bool) -> void:
+	if overwrite:
+		ask("Начать новую игру в ячейке %d?\nСохранение в ней будет удалено." % n, "Да, новая игра",
+			func(): new_game_slot_pressed.emit(n))
+	else:
+		new_game_slot_pressed.emit(n)
+
+
+func _ask_delete(n: int) -> void:
+	ask("Удалить сохранение в ячейке %d?\nВернуть его будет нельзя." % n, "Удалить", func():
+		Game.delete_slot(n)
+		_fill_slots()
+		slots_box.visible = true)
 
 
 # ------------------------------------------------------------------ Настройки
@@ -196,6 +350,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		elif confirm_box.visible:
 			confirm_box.visible = false
+			get_viewport().set_input_as_handled()
+		elif slots_box.visible:
+			_slots_back.call()
 			get_viewport().set_input_as_handled()
 		elif pause_box.visible:
 			resume_pressed.emit()
@@ -279,20 +436,30 @@ func _build_confirm() -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	confirm_box.add_child(v)
-	var l := hud._label("Начать заново?\nТекущее сохранение будет удалено.", 24, HUD.INK, false)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(l)
+	confirm_label = hud._label("", 24, HUD.INK, false)
+	confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(confirm_label)
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 14)
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_child(h)
-	var yes := _button("Да, новая игра", func():
+	confirm_yes = _button("Да", func():
 		confirm_box.visible = false
-		new_game_pressed.emit(), Color("e0a23a"))
-	yes.custom_minimum_size = Vector2(260, 56)
-	h.add_child(yes)
+		_confirm_cb.call(), Color("e0a23a"))
+	confirm_yes.custom_minimum_size = Vector2(260, 56)
+	h.add_child(confirm_yes)
 	var no := _button("Отмена", func(): confirm_box.visible = false, HUD.WOOD_LIGHT)
 	no.custom_minimum_size = Vector2(200, 56)
 	h.add_child(no)
+
+
+## Переспросить: окно поверх текущего; «Отмена» просто закрывает его.
+func ask(text: String, yes_text: String, cb: Callable) -> void:
+	confirm_label.text = text
+	confirm_yes.text = yes_text
+	_confirm_cb = cb
+	confirm_box.visible = true
+	confirm_box.move_to_front()
 
 
 func hide_all() -> void:
@@ -300,7 +467,9 @@ func hide_all() -> void:
 	pause_box.visible = false
 	settings_box.visible = false
 	confirm_box.visible = false
+	slots_box.visible = false
+	slots_shade.visible = false
 
 
 func is_open() -> bool:
-	return main_box.visible or pause_box.visible or settings_box.visible or confirm_box.visible
+	return main_box.visible or pause_box.visible or settings_box.visible or confirm_box.visible or slots_box.visible
