@@ -91,6 +91,20 @@ func _process(_delta: float) -> void:
 				p.global_position = c.global_position + Vector3(1.4, 0.4, 0.6)
 				p.model.rotation.y = atan2(p.global_position.x - c.global_position.x, p.global_position.z - c.global_position.z)
 				p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+	if args.has("climb") and _frames >= 3:   # для скриншотов: герой на лиане N на высоте h (--climb=1:0.5)
+		var cp: PackedStringArray = str(args["climb"]).split(":")
+		var lianas := get_tree().get_nodes_in_group("climb")
+		var ci := clampi(int(cp[0]), 0, lianas.size() - 1)
+		var cl: Climbable = lianas[ci]
+		if _frames == 3:
+			Game.inventory["climbing_gloves"] = 1
+			p.global_position = cl.world_bottom() + Vector3(0.6, 0.2, 0)
+			p._start_climb(cl)
+		var b := cl.world_bottom()
+		var tp := cl.world_top()
+		var hy := lerpf(b.y, tp.y - 1.2, float(cp[1]) if cp.size() > 1 else 0.5)
+		p.global_position.y = hy
+		p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
 	if _frames == 2 and args.has("eyedeck"):
 		var gl := _tower()
 		if gl:

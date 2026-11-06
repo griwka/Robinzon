@@ -70,9 +70,12 @@ func _ready() -> void:
 	ch.rotation.y = -a0
 	add_child(ch)
 	for i in range(1, DECKS.size()):
-		var a_mid: float = (DECKS[i - 1][1] + DECKS[i][1]) * 0.5
-		var base := Vector3(cos(a_mid) * (DECK_R + 0.6), DECKS[i - 1][0], sin(a_mid) * (DECK_R + 0.6))
-		_add_liana(base, DECKS[i][0], _deck_center(i))
+		# лиана висит над самим настилом нижнего яруса (внутри перил, на стороне следующего яруса),
+		# а не за перилами у края: к ней легко подойти и ухватиться
+		var ap: float = DECKS[i - 1][1]
+		var rad := Vector3(cos(ap), 0, sin(ap))
+		var tan := Vector3(-sin(ap), 0, cos(ap))
+		_add_liana(_deck_center(i - 1) + rad * 0.6 + tan * 1.5, DECKS[i][0], _deck_center(i))
 	# чаша огня на верхнем ярусе — огонь, который увидел маяк
 	var top := _deck_center(2)
 	var fb := Models.glb("fire_bowl")
