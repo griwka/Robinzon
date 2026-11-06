@@ -51,6 +51,7 @@ var _squash := 1.0
 var _body_y := 0.45
 var stamina := STAMINA_MAX
 var climbing: Climbable = null
+var build_aim := false               # строим: камера смотрит на точку перед героем, чтобы он не заслонял место
 var force_indoor := false             # внутри башни (Великий маяк): камера ближе, как в бункере
 var ext_push := Vector3.ZERO          # ветер на открытом балконе толкает героя
 var near_climb: Climbable = null
@@ -406,7 +407,12 @@ func _physics_process(delta: float) -> void:
 
 func _update_camera(delta: float) -> void:
 	# плавное следование, одинаковое при любом FPS (экспоненциальное сглаживание)
-	cam_rig.global_position = cam_rig.global_position.lerp(global_position + Vector3(0, 1.4, 0), 1.0 - exp(-11.0 * delta))
+	var focus := global_position + Vector3(0, 1.4, 0)
+	if build_aim:
+		# при строительстве — в центре экрана место в трёх шагах впереди, герой внизу кадра
+		var ahead := 3.2 - 1.4 * clampf((-camera_pitch - 0.5) / 0.6, 0.0, 1.0)   # смотрим сверху — сдвиг меньше, герой в кадре
+		focus += -Basis(Vector3.UP, camera_yaw).z * ahead + Vector3(0, -0.6, 0)
+	cam_rig.global_position = cam_rig.global_position.lerp(focus, 1.0 - exp(-(6.0 if build_aim else 11.0) * delta))
 	cam_rig.rotation.y = camera_yaw
 	# в бункере потолок низкий: камера ближе и почти на уровне глаз, чтобы не упираться в ярус выше
 	var indoor := global_position.y < -8.0 or force_indoor
