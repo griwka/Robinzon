@@ -715,7 +715,7 @@ func _fill_craft() -> void:
 	var body := _clear(craft_panel)
 	var names := {"": "в руках", "workbench": "у верстака", "campfire": "у костра", "kiln": "у печи для обжига", "stove": "на печке",
 		"forge": "в кузнице"}
-	var note := _label("Рецепты «у верстака» и «у костра» работают, только если стоять рядом.", 15, INK, false)
+	var note := _label("Рецепты «у верстака» и «у костра» работают, только если стоять рядом. Грядки, загоны и дома — не здесь, а в строительстве (клавиша B).", 15, INK, false)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size = Vector2(580, 0)
 	body.add_child(note)

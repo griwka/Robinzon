@@ -61,6 +61,10 @@ func _process(_delta: float) -> void:
 		if args["ending"] == "sea":
 			for es in get_tree().get_nodes_in_group("eye_storm"):
 				es.dissolve()
+	if _frames == 2 and args.has("give"):   # для скриншотов: выдать предметы (--give=stone_axe,machete)
+		for id in str(args["give"]).split(","):
+			Game.inventory[id] = 1
+		Game.inventory_changed.emit()
 	if _frames == 2 and args.has("eyedeck"):
 		var gl := _tower()
 		if gl:
