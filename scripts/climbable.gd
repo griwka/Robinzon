@@ -13,15 +13,17 @@ var rest_step := 0.0    # на ледяной стене через каждые
 var locked_hint := ""   # не пускает (например, поперёк тропы спит морж) — вот почему
 var rock := false       # выступы базальта (стена кратера): нужны перчатки, как для лианы
 var hot := false        # на стене жарко (Остров Вулкана): растёт шкала жара
+var wind := false       # открытая стена на высоте (Великий маяк): в порыв ветра силы тают втрое быстрее
+var holds := ""         # своя модель выступов (стена Великого маяка), нужны перчатки
 
 
 func _ready() -> void:
 	add_to_group("climb")
 	var len := top.y - bottom.y
 	var segs := int(ceil(len))
-	if ice or rock:
+	if ice or rock or holds != "":
 		for i in segs:
-			var im := Models.glb("ice_steps" if ice else "rock_holds")
+			var im := Models.glb(holds if holds != "" else ("ice_steps" if ice else "rock_holds"))
 			if im == null:
 				break
 			im.position = bottom + Vector3(0, i * len / segs, 0)

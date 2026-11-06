@@ -51,6 +51,12 @@ const IDLE := {
 	"gosha": ["Чиню.", "...Железо бы.", "Корабль хороший. Терпеливый. Как я."],
 	"petya": ["Рыба сегодня...", "Мы с Пашей не спорим. Мы обсуждаем. Громко.", "Часы? Какие часы? Ничего я не писал."],
 	"pasha": ["...клюёт хорошо!", "Петя опять заканчивает за меня фразы. А я за него.", "Письмо? Какое письмо? Ничего я не писал."],
+	"lyova": [
+		"Огонь берёт силы. Зато, пока сидишь рядом, никогда не холодно. Даже ночью.",
+		"Ты пересаливаешь суп? Нет? Значит, точно не в меня.",
+		"Дед чинил эту скамейку тридцать раз. Я считал по заплаткам.",
+		"Румба ест мою кашу. Я делаю вид, что не вижу. Мы оба знаем.",
+	],
 	"walrus": [
 		"Морж приоткрывает один глаз, вздыхает и снова засыпает.",
 		"Хр-р-р... Фр-р-р... Усы шевелятся в такт храпу.",
@@ -64,8 +70,20 @@ const IDLE := {
 }
 const MODELS := {"marta": "marta", "kesha": "monkey", "stepa": "stepa", "timur": "timur", "ingrid": "ingrid",
 	"walrus": "walrus", "penguins": "penguin_feeder", "vera": "vera", "misha": "misha", "renata": "renata", "gosha": "gosha",
-	"petya": "petya", "pasha": "pasha"}
-const SHOP := {"marta": "marta", "stepa": "stepa", "timur": "timur", "ingrid": "ingrid", "vera": "vera"}
+	"petya": "petya", "pasha": "pasha", "lyova": "lyova"}
+const SHOP := {"marta": "marta", "stepa": "stepa", "timur": "timur", "ingrid": "ingrid", "vera": "vera", "lyova": "lyova"}
+## На Оке шторма (глава 8) команда ждёт на берегу и говорит о своём.
+const EYE_IDLE := {
+	"marta": ["Тут даже огонь в костре какой-то... задумчивый. Есть будешь?", "Лёва там наверху. Худой, наверное. Я чувствую."],
+	"stepa": ["Якорь держит. Ветер держит. Я держусь.", "Сколько лет я ругал этот шторм. А теперь стою и смотрю — красиво ведь."],
+	"ingrid": ["Магнитный север здесь смотрит вверх. На маяк. Я записала.", "Сорок минут по краю — и мы здесь. Я же говорила."],
+	"vera": ["Как спустится — сразу ко мне. Руки, сердце, всё проверю.", "Я взяла все свои травы. И подзатыльник. На всякий случай."],
+	"renata": ["Капитан наверху. Я внизу. Как раньше. Почти как раньше.", "Не торопись. Мы два года ждали. Подождём ещё."],
+	"misha": ["Тут камни чёрные, а трава зелёная. Красиво же!", "Я забрался на мачту и видел все семь огней. ВСЕ СЕМЬ!"],
+	"gosha": ["Корабль стоит хорошо.", "...Держит."],
+	"petya": ["Тут тихо...", "Паша, ты слышишь, как тихо?"],
+	"pasha": ["...очень тихо.", "Петя, не шепчи. И так тихо."],
+}
 ## Звери: говорит рассказчик, к игроку не поворачиваются, подсказка — своя.
 const BEASTS := ["walrus", "penguins"]
 
@@ -138,6 +156,28 @@ func get_hint() -> String:
 	return "Поговорить: %s" % Data.SPEAKERS.get(npc_id, {}).get("name", npc_id)
 
 
+## Разговор по заданию: засчитать пункт, показать его реплики (say) и отдать подарок (give).
+## radio — разговор по рации (засчитываются только пункты с "radio": true). true — пункт засчитан.
+static func quest_talk(who: String, radio := false) -> bool:
+	var q := Game.current_quest()
+	if q.is_empty() or not Game.quest_started:
+		return false
+	for t in q["tasks"]:
+		if t["kind"] != "talk" or t["target"] != who or Game.task_progress(t) >= t["count"]:
+			continue
+		if radio and not t.get("radio", false):
+			continue
+		var say: Array = t.get("say", [])
+		if not say.is_empty():
+			Game.dialogue_requested.emit(say, Callable())
+		var give: Dictionary = t.get("give", {})
+		for id in give:
+			Game.add_item(id, int(give[id]), false)
+		Game.bump("talk", who)
+		return true
+	return false
+
+
 ## Ждёт ли этот житель что-то по текущему заданию.
 func _wants(who: String) -> bool:
 	var q := Game.current_quest()
@@ -152,7 +192,7 @@ func _wants(who: String) -> bool:
 func interact(_player: Node) -> void:
 	var q := Game.current_quest()
 	# Миша прячется, пока тропа к его камню не освещена
-	if npc_id == "misha" and not Game.flags.get("trail_lit", false):
+	if npc_id == "misha" and Game.location == "fog" and not Game.flags.get("trail_lit", false):
 		Game.dialogue_requested.emit([["narrator", "Огонь на камне вздрагивает, и кто-то пригибается за ним. Отсюда, из тумана, тебя не разглядеть. Нужно больше света на тропе."]], Callable())
 		return
 	if not q.is_empty() and Game.quest_started:
@@ -160,15 +200,21 @@ func interact(_player: Node) -> void:
 			Game.dialogue_requested.emit([["renata", "Боцман? Пусть сам приплывёт и скажет. В глаза."]], Callable())
 			return
 		for t in q["tasks"]:
-			if t["kind"] == "talk" and t["target"] == npc_id and Game.task_progress(t) < t["count"]:
-				Game.bump("talk", npc_id)
-				if npc_id == "stepa" and q["id"] == "stepa_comes":
-					Game.flags["stepa_aboard"] = true
-					Game.dialogue_requested.emit([["stepa", "Поплыли. Только ночью. И не гони — я старый, меня укачивает."]], Callable())
+			if t["kind"] == "talk" and t["target"] == npc_id and Game.task_progress(t) < t["count"] and t.get("radio", false):
+				Game.notified.emit("С ним — по рации (клавиша T)", Color("ffe08a"))
 				return
+		if npc_id == "stepa" and q["id"] == "stepa_comes" and Game.task_progress(q["tasks"][0]) < 1:
+			Game.bump("talk", npc_id)
+			Game.flags["stepa_aboard"] = true
+			Game.dialogue_requested.emit([["stepa", "Поплыли. Только ночью. И не гони — я старый, меня укачивает."]], Callable())
+			return
+		if quest_talk(npc_id):
+			return
 	if Game.deliver_for_quest(npc_id):
 		return
 	var lines: Array = IDLE.get(npc_id, ["..."])
+	if Game.location == "eye" and EYE_IDLE.has(npc_id):
+		lines = EYE_IDLE[npc_id]
 	var who := "narrator" if npc_id in BEASTS else npc_id
 	if npc_id == "walrus" and _wants("walrus"):
 		Game.notified.emit("Нужна рыба: морж съест пять штук", Color("ff9d7a"))
@@ -184,7 +230,12 @@ func interact(_player: Node) -> void:
 				get_tree().call_group("main", "choose_destination")},
 			{"text": "Поговорить", "icon": "portrait_misha", "callback": say}])
 		return
-	if SHOP.has(npc_id) and Game.shop_open(SHOP[npc_id]):
+	if npc_id == "marta" and Game.location == "eye" and Game.count("feast") > 0 and not Game.ended():
+		Game.choice_requested.emit("Марта", [
+			{"text": "Накрыть праздничный стол для всех", "icon": "feast", "callback": func(): EyeIsland.feast()},
+			{"text": "Поговорить", "icon": "portrait_marta", "callback": say}])
+		return
+	if SHOP.has(npc_id) and Game.shop_open(SHOP[npc_id]) and Game.location != "eye":
 		Game.choice_requested.emit(Data.SPEAKERS[npc_id]["name"], [
 			{"text": "Торговать", "icon": "coins", "callback": func(): Game.shop_requested.emit(SHOP[npc_id])},
 			{"text": "Поговорить", "icon": "portrait_" + npc_id, "callback": say}])

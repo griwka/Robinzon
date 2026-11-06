@@ -16,6 +16,10 @@ extends Node
 ##   --near=stilt_camp|signal_rock|fog_shrine|fog_tower|misha|renata — места на Туманном острове
 ##   --view=albatros на Туманном: герой на конце мостков, камера смотрит на «Альбатрос»
 ##   --fogdone=1     на Туманном: седьмой огонь горит, туман ушёл, «Альбатрос» починен (для скриншотов)
+##   --near=eye_tower|eye_top|grandfather_house|great_lighthouse|order_board — места на Оке (и доска заказов дома)
+##   --eyedeck=1..3  на Оке: герой на балконе Великого маяка (3 — вершина)
+##   --lens=1        на Оке: линза стоит, Великий огонь золотой
+##   --ending=sea|keeper  финал (для автотеста главы 8 и скриншотов «после финала»)
 
 var main: Node
 var args := {}
@@ -48,6 +52,21 @@ func _process(_delta: float) -> void:
 			for id in ["down_jacket", "felt_boots", "mittens"]:
 				Game.inventory[id] = 1
 		p.update_clothes()
+	if _frames == 1 and args.get("lens", "") == "1":
+		Game.flags["eye_lens"] = true
+		get_tree().call_group("great_fire", "refresh", false)
+	if _frames == 1 and args.has("ending") and not args.has("autotest"):
+		Game.flags["ending_open_sea" if args["ending"] == "sea" else "ending_keeper"] = true
+		get_tree().call_group("great_fire", "refresh", false)
+		if args["ending"] == "sea":
+			for es in get_tree().get_nodes_in_group("eye_storm"):
+				es.dissolve()
+	if _frames == 2 and args.has("eyedeck"):
+		var gl := _tower()
+		if gl:
+			p.global_position = gl.deck_point(int(args["eyedeck"]) - 1)
+			p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+			_flush()
 	if _frames == 1 and args.get("fogdone", "") == "1":
 		Game.flags["fog_cleared"] = true
 		for part in StiltCamp.PARTS:
@@ -751,6 +770,109 @@ func _test_fog() -> void:
 	p.global_position = main.island.spawn_point
 
 
+# ------------------------------------------------------------------ Око шторма
+func _tower() -> GreatLighthouse:
+	for n in get_tree().get_nodes_in_group("great_lighthouse"):
+		return n
+	return null
+
+
+func _storm() -> EyeStorm:
+	for n in get_tree().get_nodes_in_group("eye_storm"):
+		return n
+	return null
+
+
+func _test_eye() -> void:
+	var gl := _tower()
+	var es := _storm()
+	var p: Player = main.player
+	_check(gl != null and es != null, "на Оке есть Великий маяк и стена шторма")
+	if gl == null or es == null:
+		return
+	_check(es.wall != null and es.beams.size() == 7, "вокруг — стена шторма и семь лучей маяков")
+	_check(gl.climbs.size() == 3 and gl.climbs[1].ladder, "подъём из трёх участков: стена, лестница внутри, стена")
+	gl._process(0.0)
+	_check(gl.climbs[0].locked_hint != "", "на маяк не лезут, пока не прочитана Книга Хранителей")
+	var crew := 0
+	var lyova_here := false
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is NPCPerson and n.npc_id in EyeIsland.CREW:
+			crew += 1
+		if n is NPCPerson and n.npc_id == "lyova":
+			lyova_here = n.global_position.y > gl.global_position.y + float(GreatLighthouse.H[2]) - 1.0
+	_check(crew == EyeIsland.CREW.size(), "команда ждёт на берегу (%d)" % crew)
+	_check(lyova_here, "Лёва сидит на вершине маяка, у огня")
+	_check(gl.fire_node._state == "blue", "до линзы Великий огонь синий")
+	var places := {}
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is StoryPlace:
+			places[n.id] = n
+	_check(places.has("grandfather_house") and places.has("grandfather_letters") and places.has("keepers_book"), "в саду домик и письма, у маяка — Книга")
+	if places.has("keepers_book"):
+		# порядок находок: письма — после дома, Книга — после писем
+		places["keepers_book"].interact(p)
+		_check(not Game.flags.get("poi_keepers_book", false), "Книгу не открыть раньше писем деда")
+	# ветер на балконе толкает к перилам, внутри башни — тихо
+	p.global_position = gl.deck_point(0)
+	GreatLighthouse.gust = 1.0
+	gl._phase = 2
+	gl._phase_t = 99.0
+	gl._process(0.0)
+	_check(p.ext_push.length() > 1.0, "в порыв ветер толкает героя на балконе")
+	p.global_position = gl.global_position + Vector3(0, float(GreatLighthouse.H[0]) + 0.3, 0)
+	gl._process(0.0)
+	_check(p.ext_push == Vector3.ZERO and p.force_indoor, "внутри башни ветра нет, камера ближе")
+	# в порыв на внешней стене силы тают быстрее, если лезть
+	var c3: Climbable = gl.climbs[2]
+	_check(c3.wind and c3.rest_step > 0.0, "верхняя стена — на ветру, с уступами для отдыха")
+	GreatLighthouse.gust = 0.0
+	gl._phase = 0
+	gl._phase_t = 6.0
+	p.ext_push = Vector3.ZERO
+	p.force_indoor = false
+	p.global_position = main.island.spawn_point
+
+
+## После финала: флаги, стена шторма, огонь, бонусы «вечной игры», доска заказов.
+func _test_ending() -> void:
+	var sea: bool = args.get("ending", "sea") != "keeper"
+	_check(Game.flags.get("ending_open_sea", false) == sea and Game.flags.get("ending_keeper", false) == (not sea), "выбран финал «%s»" % ("Открытое море" if sea else "Хранитель огня"))
+	_check(Game.ended() and Game.unlocked.has("shop_lyova"), "после финала открыто торговое судно Лёвы")
+	_check(str(Game.settings.get("endings", "")).contains("sea" if sea else "keeper"), "отметка о финале — в главном меню")
+	_check(main.hud.credits != null and not main.hud.credits.visible, "показаны титры с портретами")
+	var gf: GreatLighthouse.GreatFire = get_tree().get_first_node_in_group("great_fire")
+	var es := _storm()
+	if sea:
+		_check(es.gone() and gf._state == "out", "шторм растворился, Великий огонь погас")
+		_check(is_equal_approx(Game.sell_mult(), 1.5), "урожай дороже: пришли торговые корабли")
+	else:
+		_check(not es.gone() and gf._state == "gold", "шторм остался, огонь горит золотым")
+		_check(Game.count("cloudberry_jam") >= 3, "в бутылке от Лёвы — варенье")
+		var bed := _bed()
+		Game.flags["bounty_day"] = Game.day
+		_check(Game.bounty_today(), "Хранитель зажёг лучи: день щедрости")
+		_give({"seed_carrot": 1})
+		bed.plant("carrot")
+		_advance([bed], Data.CROPS["carrot"]["time"] + 1.0)
+		var before := Game.count("carrot")
+		bed.interact(main.player)
+		_check(Game.count("carrot") - before >= int(Data.CROPS["carrot"]["yield"][0]) * 2, "в день щедрости урожай вдвое больше")
+		Game.flags["window_day"] = Game.day
+		_check(Game.window_open(), "окно в шторме открыто — корабль Лёвы у причала дома")
+	# доска заказов: три заказа на день, за выполненный — монеты
+	var ids := OrderBoard.today()
+	_check(ids.size() == 3, "на доске три заказа")
+	var o: Array = OrderBoard.POOL[ids[0]]
+	_give({o[1]: int(o[2])})
+	var coins := Game.count("coins")
+	var ok := OrderBoard.fulfil(ids[0])
+	_check(ok and Game.count("coins") - coins == OrderBoard.reward(ids[0]) and OrderBoard.done(ids[0]), "заказ выполнен и оплачен")
+	_check(not OrderBoard.fulfil(ids[0]), "один заказ — один раз")
+	_flush()
+	Game.delete_save()   # после титров игра сохранилась — следующему автотесту это не нужно
+
+
 # ------------------------------------------------------------------ Форт
 func _fort() -> FortRuin:
 	for n in get_tree().get_nodes_in_group("obstacle"):
@@ -982,20 +1104,29 @@ func _do_task(t: Dictionary) -> void:
 	var target: String = t["target"]
 	match t["kind"]:
 		"talk":
-			if target == "stepa" and Game.location != "fort":
+			if t.get("radio", false):
+				NPCPerson.quest_talk(target, true)   # в игре — клавиша T
+				return
+			if target == "stepa" and Game.location != "fort" and Game.current_quest().get("id", "") == "stepa_comes":
 				# Стёпа в форте: в игре за ним плывут; здесь — как будто поговорили на берегу
 				Game.bump("talk", "stepa")
 				Game.flags["stepa_aboard"] = true
 				return
-			if target == "misha":
+			if target == "misha" and Game.location == "fog":
 				Game.flags["trail_lit"] = _signal().lit_count() >= 5 or Game.flags.get("trail_lit", false)
 				_check(Game.flags.get("trail_lit", false), "тропа к Мише освещена всеми пятью фонарями")
 			if target == "parrot":
 				main.parrot.interact(main.player)
 			else:
+				var found := false
 				for n in get_tree().get_nodes_in_group("interactable"):
 					if n is NPCPerson and n.npc_id == target:
 						n.interact(main.player)
+						found = true
+						break
+				if not found:
+					# житель на другом острове: в игре туда плывут, здесь — как будто поговорили там
+					NPCPerson.quest_talk(target)
 		"collected":
 			if target == "crate":
 				for c in get_tree().get_nodes_in_group("interactable"):
@@ -1189,7 +1320,18 @@ func _do_task(t: Dictionary) -> void:
 			Game.arrive(target)
 			Game.bump("sailed", "raft")
 			Game.bump("sailed", target)
+		"chose":
+			for f in get_tree().get_nodes_in_group("great_fire"):
+				var gf: GreatLighthouse.GreatFire = f
+				_check(gf.get_hint().contains("выбор"), "у Великого огня можно сделать выбор")
+				gf.choose("keeper" if args.get("ending", "sea") == "keeper" else "sea")
+				_flush()
 		"reached":
+			if target.begins_with("eye_deck"):
+				var gl := _tower()
+				main.player.global_position = gl.deck_point(int(target.substr(8)) - 1)
+				gl._process(0.0)
+				return
 			if target == "stilt_camp":
 				var cp := _camp()
 				main.player.global_position = cp.deck_point()
@@ -1270,6 +1412,9 @@ func _autotest() -> void:
 		_test_volcano()
 	if ch == 6 and Game.location == "fog" and int(args.get("from", "0")) == 0:
 		_test_fog()
+	var endings_before := str(Game.settings.get("endings", ""))
+	if ch == 7 and Game.location == "eye" and int(args.get("from", "0")) == 0:
+		_test_eye()
 	if ch > 0:
 		# всё, что открыли предыдущие задания (рецепты, лавки, флаги), — как у игрока, дошедшего сюда
 		var from_q := int(args.get("from", "0"))
@@ -1315,6 +1460,10 @@ func _autotest() -> void:
 				print("      %s: %d/%d" % [t["text"], Game.task_progress(t), t["count"]])
 			break
 	var done_ch: bool = Game.chapter > ch or (Game.quest_index >= qs.size())
+	if ch == 7 and Game.location == "eye" and done_ch:
+		_test_ending()
+		Game.settings["endings"] = endings_before   # отметку в меню автотест за игрока не ставит
+		Game.save_settings()
 	if ch == 6 and Game.location == "fog" and done_ch:
 		_check(Game.flags.get("lit_fog_tower", false) and Game.flags.get("eye_route", false), "седьмой огонь горит, «Альбатрос» вышел, открыт путь к Оку")
 		_check(Game.collection_complete("letters"), "все шесть писем команды собраны")

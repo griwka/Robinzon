@@ -7,13 +7,14 @@ class_name QuestValidator
 
 const KNOWN_KINDS := ["talk", "collected", "crafted", "built", "planted", "harvested", "watered", "fed", "product",
 	"caught", "sailed", "cleared", "found", "lit", "reached", "collection", "delivered", "sold", "bought", "restored",
-	"fished", "solved"]
+	"fished", "solved", "chose"]
 const NPCS := ["parrot", "marta", "kesha", "stepa", "timur", "ingrid", "walrus", "penguins", "vera",
-	"misha", "renata", "gosha", "petya", "pasha"]
+	"misha", "renata", "gosha", "petya", "pasha", "lyova"]
 const PUZZLES := ["cellar", "stars", "monolith", "shadows"]
 const ALBATROS_PARTS := ["albatros_hull", "albatros_mast", "albatros_helm", "albatros_lights", "albatros_radio"]
 const DECKS := ["deck1", "deck2", "deck3",
-	"bunker1", "bunker2", "bunker3", "bunker4", "bunker5", "bunker6", "bunker7", "glacier_top", "temple_gate", "crater_top", "stilt_camp"]
+	"bunker1", "bunker2", "bunker3", "bunker4", "bunker5", "bunker6", "bunker7", "glacier_top", "temple_gate", "crater_top", "stilt_camp",
+	"eye_deck1", "eye_deck2", "eye_deck3"]
 ## Ледяные ларцы: задание «found ice_chest ×3» — это три места ice_chest_1..3.
 const ICE_CHESTS := ["ice_chest_1", "ice_chest_2", "ice_chest_3"]
 
@@ -44,6 +45,9 @@ func run(chapters: Array = Data.CHAPTERS) -> Array[String]:
 					solved_seen[t["target"]] = true
 				if t["kind"] == "restored":
 					restored_seen[t["target"]] = true
+				# подарок за разговор (пирог Марты, бинты Веры) — сразу в сумке
+				for id in t.get("give", {}):
+					given[id] = true
 				if t["kind"] == "bought" and t["target"] != "any":
 					spend += _min_price(t["target"]) * int(t["count"])
 				# находка сразу доступна для следующих пунктов того же задания
@@ -224,6 +228,16 @@ func _check_task(t: Dictionary) -> void:
 		"talk":
 			if not tgt in NPCS:
 				_err("не с кем говорить: «%s»" % tgt)
+			if t.get("radio", false) and not can_get("radio_set"):
+				_err("с «%s» — по рации, а рации ещё нет" % tgt)
+			for line in t.get("say", []):
+				if not Data.SPEAKERS.has(line[0]):
+					_err("неизвестный говорящий «%s»" % line[0])
+		"chose":
+			if tgt != "ending":
+				_err("выбирать можно только финал, а не «%s»" % tgt)
+			if not given.has("pie") or not given.has("bandages"):
+				_err("к выбору не дойти: нет подарков для Лёвы")
 		"collected":
 			if not can_get(tgt):
 				_err("«%s»: предмет негде достать" % tgt)
@@ -332,6 +346,9 @@ func _check_task(t: Dictionary) -> void:
 					_err("через лаву не перейти: каменные мостки не открыты")
 			elif tgt == "stilt_camp":
 				pass   # лагерь на сваях открыт: к нему ведут мостки
+			elif tgt.begins_with("eye_deck"):
+				if not can_get("climbing_gloves"):
+					_err("на Великий маяк не залезть без перчаток")
 			elif tgt == "crater_top":
 				if not can_get("climbing_gloves"):
 					_err("на стену кратера не залезть без перчаток")

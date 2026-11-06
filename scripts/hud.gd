@@ -889,7 +889,7 @@ func _fill_shop() -> void:
 			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			info.add_child(_label("%s ×%d" % [Game.item_name(id), Game.count(id)], 20))
 			var res := Game.reserved(id)
-			info.add_child(_label("цена: %d мон." % Data.SELL_PRICES[id] + ("  ·  %d отложено для задания" % res if res > 0 else ""), 15,
+			info.add_child(_label("цена: %d мон." % int(round(Data.SELL_PRICES[id] * Game.sell_mult())) + ("  ·  %d отложено для задания" % res if res > 0 else ""), 15,
 				Color("ffd08a") if res > 0 else Color("f3e2bd")))
 			h.add_child(info)
 			var can := Game.sellable(id)
@@ -1011,6 +1011,7 @@ func show_choices(title: String, options: Array) -> void:
 		var b := Button.new()
 		b.text = o["text"]
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var cb: Callable = o["callback"]
 		b.pressed.connect(func():
 			close_all()
@@ -1048,7 +1049,7 @@ func show_help() -> void:
 
 
 func any_open() -> bool:
-	if dialogue_panel.visible:
+	if dialogue_panel.visible or (credits and credits.visible):
 		return true
 	for w in windows:
 		if w.visible:
@@ -1060,6 +1061,107 @@ func close_all() -> void:
 	for w in windows:
 		w.visible = false
 	panels_changed.emit(any_open())
+
+
+# ================================================================== Титры
+var credits: Control
+var _credits_done: Callable
+var _credits_tw: Tween
+const CAST := [
+	["parrot", "Попугай Румба", "помнил дорогу лучше всех"],
+	["marta", "Марта", "держала огонь на Баньяне и всех кормила"],
+	["kesha", "Обезьянка Кешью", "присматривала за ключом"],
+	["stepa", "Боцман Стёпа", "ругался, но приплыл"],
+	["timur", "Радист Тимур", "слышал. Каждую ночь"],
+	["ingrid", "Штурман Ингрид", "посчитала всё, даже пингвинов"],
+	["walrus", "Морж Борис", "спал поперёк тропы"],
+	["penguins", "Пингвины", "смотрели на сумку"],
+	["vera", "Доктор Вера", "лечила травами и подзатыльниками"],
+	["misha", "Юнга Миша", "стучал в рацию два года"],
+	["renata", "Рената", "привела команду домой"],
+	["gosha", "Механик Гоша", "починил «Альбатрос»"],
+	["petya", "Петя Лукин", "...и рыба"],
+	["pasha", "Паша Лукин", "...и часы"],
+	["lyova", "Лёва", "держал огонь, пока ты плыл"],
+	["player", "Ты", "упрямый человек. Это у вас семейное"],
+]
+
+
+## Титры с портретами всех жителей. Клик, E или Esc — пропустить.
+func show_credits(sea: bool, on_done: Callable) -> void:
+	_credits_done = on_done
+	if credits:
+		credits.queue_free()
+	credits = Control.new()
+	credits.set_anchors_preset(Control.PRESET_FULL_RECT)
+	credits.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(credits)
+	var bg := ColorRect.new()
+	bg.color = Color(0.06, 0.05, 0.1, 0.92)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	credits.add_child(bg)
+	var v := VBoxContainer.new()
+	v.name = "Roll"
+	v.add_theme_constant_override("separation", 18)
+	v.custom_minimum_size = Vector2(720, 0)
+	credits.add_child(v)
+	var t := _label("Затерянный остров", 64, Color("ffe08a"))
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var e := _label("Финал «%s»" % ("Открытое море" if sea else "Хранитель огня"), 30, Color("bfe8ff"))
+	e.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(e)
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 30)
+	v.add_child(gap)
+	for c in CAST:
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 18)
+		var face := TextureRect.new()
+		face.texture = FX.icon_texture("portrait_" + str(c[0]))
+		face.custom_minimum_size = Vector2(96, 96)
+		face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		h.add_child(face)
+		var col := VBoxContainer.new()
+		col.alignment = BoxContainer.ALIGNMENT_CENTER
+		col.add_child(_label(str(c[1]), 30, Color("fff6dc")))
+		col.add_child(_label(str(c[2]), 20, Color("d8cfe8")))
+		h.add_child(col)
+		v.add_child(h)
+	for line in ["", "Спасибо, что доплыл.", "Острова ждут: ферма, коллекции, заказы жителей."]:
+		var l := _label(line, 26, Color("ffe08a"))
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(l)
+	panels_changed.emit(true)
+	Audio.play("quest", -4.0, 0.0)
+	if DisplayServer.get_name() == "headless":
+		close_credits()
+		return
+	await get_tree().process_frame
+	var vs := root.get_viewport_rect().size
+	v.position = Vector2((vs.x - v.size.x) * 0.5, vs.y)
+	_credits_tw = create_tween()
+	_credits_tw.tween_property(v, "position:y", -v.size.y, 28.0)
+	_credits_tw.tween_callback(close_credits)
+
+
+func close_credits() -> void:
+	if credits == null or not credits.visible:
+		return
+	if _credits_tw and _credits_tw.is_valid():
+		_credits_tw.kill()
+	credits.visible = false
+	panels_changed.emit(any_open())
+	var cb := _credits_done
+	_credits_done = Callable()
+	if cb.is_valid():
+		cb.call()
+
+
+func _input(event: InputEvent) -> void:
+	if credits and credits.visible and event.is_pressed() and not event.is_echo() 			and (event is InputEventMouseButton or event.is_action("interact") or event.is_action("ui_cancel") or event.is_action("ui_accept")):
+		close_credits()
+		get_viewport().set_input_as_handled()
 
 
 func fade_through(mid: Callable) -> void:

@@ -96,10 +96,18 @@ func _ready() -> void:
 	Game.quest_completed.connect(func(q: Dictionary):
 		if q.get("id", "") == "village":
 			Audio.play("cheer", -2.0, 0.0)
+		if q.get("id", "") == "lyova":
+			Audio.play_theme("meeting")   # встреча с братом
+		if q.get("id", "") == "choice":
+			_ending()
 		_spawn_village.call_deferred())
 	hud.panels_changed.connect(_on_panels_changed)
 	Audio.listener = player
 	Audio.island = island
+	if Game.location == "eye":
+		Audio.play_theme("eye", true)   # своя тема Ока: тихая, с ветром
+	else:
+		Audio.stop_theme()
 
 	menu = GameMenu.new()
 	menu.hud = hud
@@ -175,7 +183,7 @@ func _resume() -> void:
 ## Причал на новом острове: плот, на котором мы приплыли (на нём можно уплыть обратно), и Румба на мачте.
 func _spawn_arrival_dock() -> void:
 	var dock := Building.new()
-	var vessel: String = {"fort": "canoe", "storm": "boat", "ice": "boat", "volcano": "boat", "fog": "boat"}.get(Game.location, "raft")
+	var vessel: String = {"fort": "canoe", "storm": "boat", "ice": "boat", "volcano": "boat", "fog": "boat", "eye": "boat"}.get(Game.location, "raft")
 	dock.setup(vessel)
 	var w := island.wreck_point
 	w.y = maxf(w.y, 0.0)
@@ -191,6 +199,8 @@ func _spawn_arrival_dock() -> void:
 		"canoe": parrot.position = Vector3(0, 2.6, 0.45)
 		"boat": parrot.position = Vector3(0, 3.1, 0.3)
 		_: parrot.position = Vector3(0, 2.9, 0)
+	if Game.location == "eye":
+		EyeIsland.spawn_shore(self, island)
 
 
 func _spawn_story_objects() -> void:
@@ -288,7 +298,13 @@ func _radio_call() -> void:
 		"ice": "ПРИЁМ! Как там Ингрид? Передай, что я НЕ кричу. Это у меня голос такой. И надень шапку!",
 		"volcano": "ПРИЁМ! Вера рядом? Спроси про кофе. Нет, не спрашивай. Спроси! ...Ладно, просто понюхай его за меня.",
 		"fog": "ПРИЁМ! Ты там? В ТУМАНЕ? Миша рядом? Скажи ему... скажи, что я СЛЫШАЛ. Каждую ночь слышал.",
+		"eye": "ПРИЁМ! Ты в самом Оке?! Тут у меня в эфире так тихо, будто весь шторм прислушивается. Держись!",
 	}
+	# разговор по заданию (Тимур говорит по рации) — засчитывается здесь
+	if NPCPerson.quest_talk("timur", true):
+		return
+	if Game.ended():
+		lines["eye"] = "ПРИЁМ! Я на связи. Всегда на связи. Это моя работа — и, кажется, моё счастье."
 	if Game.location == "ice" and Game.flags.get("ice_thawed", false):
 		lines["ice"] = "ПРИЁМ! Ингрид мне ответила! САМА! Я чуть рацию не уронил. Конец связи. То есть нет. То есть да."
 	var night := "" if Game.is_day() else " Ночью слушаю эфир. Пока тишина. Только шорох... как будто туман шуршит."
@@ -301,6 +317,8 @@ func rain_wind() -> float:
 
 
 func _spawn_clouds() -> void:
+	if Game.location == "eye":
+		return   # над Оком небо чистое, тучи — только в стене шторма
 	var g := RandomNumberGenerator.new()
 	g.seed = 4242
 	# облака — кольцом у горизонта и пониже: так их видно в кадре, а не только если задрать камеру
@@ -455,9 +473,9 @@ func _choose_destination() -> void:
 	if Game.flags.get("storm_route", false) and not Game.flags.get("restored_stepa_boat", false):
 		options.append({"text": "Грозовой остров — на каноэ не доплыть, нужен бот Стёпы", "icon": "sym_star",
 			"callback": func(): Game.notified.emit("Почини бот Стёпы на берегу форта", Color("ffe08a"))})
-	if Game.flags.get("eye_route", false):
-		options.append({"text": "Око шторма — глава 8 (в разработке)", "icon": "sym_sun",
-			"callback": func(): Game.notified.emit("Око шторма появится в следующей версии игры", Color("ffe08a"))})
+	if Game.flags.get("eye_route", false) and not Game.flags.get("eye_ready", false):
+		options.append({"text": "Око шторма — сначала собери команду (задание «Последний рейс»)", "icon": "sym_sun",
+			"callback": func(): Game.notified.emit("Обойди всех: Марту, Стёпу, Ингрид, Веру, Ренату и вызови Тимура по рации", Color("ffe08a"))})
 	if options.is_empty():
 		Game.notified.emit("Плыть пока некуда. Куда указывает свет?..", Color("ffe08a"))
 		return
@@ -513,6 +531,7 @@ func _load() -> bool:
 		var node := build.spawn_building(b["id"], Vector3(b["x"], b["y"], b["z"]), b["rot"], b.get("v", ""), b.get("s", {}))
 		_connect_building(node)
 	_spawn_village.call_deferred()
+	_spawn_postgame.call_deferred()
 	var p: Array = data.get("player", [])
 	if p.size() == 3:
 		player.global_position = Vector3(p[0], p[1] + 0.3, p[2])
@@ -545,6 +564,75 @@ func _spawn_village() -> void:
 		n.position = p
 		n.rotation.y = atan2(c.x - p.x, c.z - p.z)
 		add_child(n)
+
+
+# ================================================================== Финал (глава 8)
+const EPILOGUE_SEA := [
+	["narrator", "«Альбатрос» уходит домой с командой, Лёвой и тобой. Ты везёшь письма: письма команды — их родным, письма деда — маме."],
+	["narrator", "Через месяц вы возвращаетесь: ты, Лёва, Миша и корабль учёных. Архипелаг становится заповедником. Марта открывает столовую для гостей."],
+	["narrator", "Тимур наконец слышит в эфире весь мир. Стёпа плывёт домой и через полгода возвращается: «Дома скучно»."],
+	["parrot", "Румба видел море. Большое. Румба одобряет."],
+	["narrator", "Теперь к островам ходят торговые корабли, и урожай стоит дороже. У причала дома — судно Лёвы, у лагеря — доска заказов для гостей."],
+]
+const EPILOGUE_KEEPER := [
+	["narrator", "Год спустя у берега твоего острова качается бутылка. Внутри — записка. Знакомый почерк."],
+	["lyova", "«Мама плакала. Потом смеялась. Потом опять плакала, над письмами деда. Передаёт варенье, лови следующую бутылку. Мы с Мишей строим новую шхуну. Летом жди. — Л.»"],
+	["narrator", "Острова живые: всё растёт быстро. У Великого огня можно зажечь лучи — и день станет днём щедрости. Соскучишься — открой окно в шторме, и корабль Лёвы придёт к причалу."],
+	["parrot", "Румба остался. Румба теперь Хранитель попугаев. Это важная должность."],
+]
+
+
+## Выбор сделан: стена шторма уходит (или остаётся), эпилог, титры, отметка в главном меню.
+func _ending() -> void:
+	var sea: bool = Game.flags.get("ending_open_sea", false)
+	var key := "sea" if sea else "keeper"
+	var seen := str(Game.settings.get("endings", "")).split(",", false)
+	if not key in seen:
+		seen.append(key)
+		Game.settings["endings"] = ",".join(seen)
+		Game.save_settings()
+	Audio.play_theme("sea" if sea else "keeper")
+	if sea:
+		get_tree().call_group("eye_storm", "dissolve")
+	else:
+		Game.add_item("cloudberry_jam", 3, false)   # мама передала варенье
+	Game.dialogue_requested.emit(EPILOGUE_SEA if sea else EPILOGUE_KEEPER, func():
+		hud.show_credits(sea, func():
+			hud.toast("Дальше — вечная игра: ферма, коллекции, заказы жителей", Color("ffe08a"))
+			_save()))
+
+
+# ================================================================== После финала
+var _postgame_done := false
+
+
+## Дома после финала: доска заказов у лагеря и судно Лёвы у причала
+## («Открытое море» — всегда, «Хранитель огня» — в день, когда открыто окно в шторме).
+func _spawn_postgame() -> void:
+	if _postgame_done or Game.location != "home" or not Game.ended():
+		return
+	_postgame_done = true
+	var c := island.camp_center
+	var to_sea := island.wreck_point - c
+	to_sea.y = 0.0
+	to_sea = to_sea.normalized()
+	var side := Vector3(-to_sea.z, 0, to_sea.x)
+	var bp := c - side * 5.5 - to_sea * 1.5
+	bp.y = island.height_at(bp.x, bp.z)
+	var board := OrderBoard.new()
+	board.position = bp
+	board.rotation.y = atan2(c.x - bp.x, c.z - bp.z)
+	add_child(board)
+	island.poi_extra["order_board"] = bp
+	if Game.flags.get("ending_open_sea", false) or Game.window_open():
+		var lp := c.lerp(island.wreck_point, 0.55) + side * 3.0
+		lp.y = island.height_at(lp.x, lp.z)
+		var lv := NPCPerson.new()
+		lv.npc_id = "lyova"
+		lv.position = lp
+		lv.rotation.y = atan2(lp.x - c.x, lp.z - c.z)
+		add_child(lv)
+		island.poi_extra["lyova"] = lp
 
 
 func _new_game() -> void:

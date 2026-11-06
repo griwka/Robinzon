@@ -2,7 +2,7 @@
 """Генератор всех звуков и музыки игры (синтез, без сторонних записей — все права наши).
 
 Запуск:  python3 tools/gen_audio.py
-Нужно:   pip install numpy scipy ; ffmpeg (для .ogg)
+Нужно:   pip install numpy scipy soundfile  (.ogg пишет soundfile; если есть ffmpeg — им)
 Результат: assets/audio/music_*.ogg, amb_*.ogg, sfx_*.wav
 """
 import os
@@ -130,8 +130,17 @@ def write_wav(name, x, stereo=None):
 
 
 def write_ogg(name, left, right=None, quality=6):
-    tmp = write_wav("_tmp_" + name, left, right if right is not None else left)
     out = os.path.join(OUT, name + ".ogg")
+    import shutil
+    if shutil.which("ffmpeg") is None:
+        # без ffmpeg: Vorbis через libsndfile (pip install soundfile)
+        import soundfile as sf
+        data = np.stack([np.clip(left, -1, 1), np.clip(right if right is not None else left, -1, 1)], axis=1)
+        with sf.SoundFile(out, "w", SR, 2, format="OGG", subtype="VORBIS") as f:
+            for i in range(0, len(data), 4096):   # кусками: большой блок libvorbis на Windows не переваривает
+                f.write(data[i:i + 4096].astype(np.float32))
+        return
+    tmp = write_wav("_tmp_" + name, left, right if right is not None else left)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", tmp, "-c:a", "libvorbis", "-q:a", str(quality), out], check=True)
     os.remove(tmp)
 
@@ -297,6 +306,140 @@ def music_night():
     R = loop_reverb(R, 2.6, 0.4, 2200)
     m = max(np.max(np.abs(L)), np.max(np.abs(R)))
     write_ogg("music_night", L / m * 0.8, R / m * 0.8)
+
+
+# ------------------------------------------------------------ глава 8: темы Ока шторма
+def _fade_tail(L, R, secs=4.0):
+    n = int(secs * SR)
+    k = np.linspace(1.0, 0.0, n) ** 1.5
+    L[-n:] *= k
+    R[-n:] *= k
+    return L, R
+
+
+def _write_theme(name, L, R, peak=0.8):
+    m = max(np.max(np.abs(L)), np.max(np.abs(R))) + 1e-9
+    write_ogg(name, L / m * peak, R / m * peak)
+
+
+def music_eye():
+    """Око шторма (подъём): тихие тянущиеся аккорды, редкие звуки шкатулки, низкий гул и ветер вдали. Петля."""
+    bpm = 58
+    beat = 60 / bpm
+    prog = ["Am", "F", "C", "G", "Am", "F", "Em", "Em", "Dm", "Am", "F", "G", "Am", "F", "G", "Am"]
+    dur = len(prog) * 4 * beat
+    L = np.zeros(int(dur * SR))
+    R = np.zeros_like(L)
+    r = np.random.default_rng(81)
+    for bar, chord in enumerate(prog):
+        t0 = bar * 4 * beat
+        p = pad([note_hz(n) for n in CHORDS[chord][:3]], 4 * beat + 1.5) * 0.55
+        place_wrap(L, p, t0)
+        place_wrap(R, p * 0.92, t0 + 0.03)
+        place_wrap(L, bass(note_hz(ROOTS[chord]), 3.0) * 0.22, t0)
+        place_wrap(R, bass(note_hz(ROOTS[chord]), 3.0) * 0.22, t0)
+        # «маяк»: короткий мотив из трёх нот через такт — как мигающий огонь
+        if bar % 2 == 0:
+            notes = CHORDS[chord]
+            for i, k in enumerate((0, 2, 3)):
+                at = t0 + beat * (1.0 + i * 0.75)
+                place_wrap(L if i % 2 else R, musicbox(note_hz(notes[k]) * 2, 3.0) * 0.08, at)
+    # ветер вдали: шум, который медленно дышит
+    t = np.arange(len(L)) / SR
+    wind = bandpass(r.standard_normal(len(L)), 300, 1200) * (0.5 + 0.5 * np.sin(2 * np.pi * t / dur * 4)) * 0.05
+    L += wind
+    R += np.roll(wind, int(0.4 * SR))
+    L = loop_reverb(L, 3.0, 0.45, 2000)
+    R = loop_reverb(R, 3.0, 0.45, 2000)
+    _write_theme("music_eye", L, R, 0.75)
+
+
+def music_meeting():
+    """Встреча с братом: тёплая укулеле в медленном темпе и мелодия маримбы; в конце — тихий аккорд. Один раз."""
+    bpm = 74
+    beat = 60 / bpm
+    prog = ["C", "G", "Am", "F", "C", "F", "G", "C", "Am", "F", "C", "G"]
+    dur = len(prog) * 4 * beat + 4.0
+    L = np.zeros(int(dur * SR))
+    R = np.zeros_like(L)
+    r = np.random.default_rng(91)
+    for bar, chord in enumerate(prog):
+        t0 = bar * 4 * beat
+        for off, g in ((0.0, 0.9), (2.0, 0.6)):
+            for i, n in enumerate(CHORDS[chord]):
+                place(L, pluck(note_hz(n), 2.0, 0.7) * 0.09 * g, t0 + off * beat + i * 0.03)
+                place(R, pluck(note_hz(n), 2.0, 0.7) * 0.09 * g, t0 + off * beat + i * 0.03 + 0.008)
+        place(L, bass(note_hz(ROOTS[chord]), 2.2) * 0.3, t0)
+        place(R, bass(note_hz(ROOTS[chord]), 2.2) * 0.3, t0)
+    for bar, b8, n, strong in melody_line(prog, 4, r, 0.35):
+        at = bar * 4 * beat + b8 * beat / 2
+        place(L, marimba(note_hz(n)) * (0.16 if strong else 0.11), at)
+        place(R, marimba(note_hz(n)) * (0.17 if strong else 0.12), at + 0.005)
+    end = len(prog) * 4 * beat
+    p = pad([note_hz(n) for n in CHORDS["C"][:3]], 4.0) * 0.6
+    place(L, p, end - 0.5)
+    place(R, p, end - 0.48)
+    L, R = reverb(L, 2.2, 0.35), reverb(R, 2.2, 0.35)
+    L, R = _fade_tail(L, R, 3.0)
+    _write_theme("music_meeting", L, R)
+
+
+def music_sea():
+    """Финал «Открытое море»: светлая, широкая тема — укулеле, шкатулка октавой выше, морской шум. Один раз."""
+    bpm = 92
+    beat = 60 / bpm
+    prog = ["F", "C", "G", "Am", "F", "C", "G", "C", "F", "C", "Dm", "G", "F", "G", "C", "C"]
+    dur = len(prog) * 4 * beat + 5.0
+    L = np.zeros(int(dur * SR))
+    R = np.zeros_like(L)
+    r = np.random.default_rng(101)
+    for bar, chord in enumerate(prog):
+        t0 = bar * 4 * beat
+        for off, down, g in ((0.0, True, 0.9), (1.5, False, 0.5), (2.0, True, 0.7), (3.0, True, 0.55), (3.5, False, 0.45)):
+            for i, n in enumerate(CHORDS[chord] if down else CHORDS[chord][::-1]):
+                place(L, pluck(note_hz(n), 1.4) * 0.1 * g, t0 + off * beat + i * 0.012)
+                place(R, pluck(note_hz(n), 1.4, 0.9) * 0.1 * g, t0 + off * beat + i * 0.012 + 0.006)
+        place(L, bass(note_hz(ROOTS[chord])) * 0.4, t0)
+        place(R, bass(note_hz(ROOTS[chord])) * 0.4, t0)
+    for bar, b8, n, strong in melody_line(prog, 4, r, 0.5):
+        at = bar * 4 * beat + b8 * beat / 2
+        place(L, musicbox(note_hz(n) * 2) * (0.07 if strong else 0.05), at)
+        place(R, marimba(note_hz(n)) * (0.15 if strong else 0.1), at + 0.004)
+    t = np.arange(len(L)) / SR
+    surf = lowpass(r.standard_normal(len(L)), 700) * (0.6 + 0.4 * np.sin(2 * np.pi * t / 7.0)) * 0.04
+    L += surf
+    R += np.roll(surf, int(1.3 * SR))
+    L, R = reverb(L, 1.8, 0.25), reverb(R, 1.8, 0.25)
+    L, R = _fade_tail(L, R, 5.0)
+    _write_theme("music_sea", L, R)
+
+
+def music_keeper():
+    """Финал «Хранитель огня»: медленные аккорды, шкатулка ведёт мелодию, тёплый гул огня. Один раз."""
+    bpm = 60
+    beat = 60 / bpm
+    prog = ["Am", "F", "C", "G", "F", "C", "Dm", "G", "Am", "F", "G", "C"]
+    dur = len(prog) * 4 * beat + 6.0
+    L = np.zeros(int(dur * SR))
+    R = np.zeros_like(L)
+    r = np.random.default_rng(111)
+    for bar, chord in enumerate(prog):
+        t0 = bar * 4 * beat
+        p = pad([note_hz(n) for n in CHORDS[chord][:3]], 4 * beat + 1.2) * 0.6
+        place(L, p, t0)
+        place(R, p * 0.9, t0 + 0.02)
+        place(L, bass(note_hz(ROOTS[chord]), 3.5) * 0.25, t0)
+        place(R, bass(note_hz(ROOTS[chord]), 3.5) * 0.25, t0)
+    for bar, b8, n, strong in melody_line(prog, 4, r, 0.3):
+        at = bar * 4 * beat + b8 * beat / 2
+        place(L if b8 % 2 else R, musicbox(note_hz(n) * 2, 2.8) * (0.1 if strong else 0.07), at)
+    t = np.arange(len(L)) / SR
+    fire = lowpass(r.standard_normal(len(L)), 300) * (0.8 + 0.2 * np.sin(2 * np.pi * t * 0.3)) * 0.05
+    L += fire
+    R += fire
+    L, R = reverb(L, 2.8, 0.4, 2400), reverb(R, 2.8, 0.4, 2400)
+    L, R = _fade_tail(L, R, 6.0)
+    _write_theme("music_keeper", L, R)
 
 
 # ============================================================ атмосфера
@@ -851,6 +994,35 @@ def sfx_cheer():
     return normalize(x, 0.6)
 
 
+def sfx_gust():
+    """Порыв ветра на высоте: шум нарастает, свистит в перилах и обрывается."""
+    r = np.random.default_rng(151)
+    d = 2.4
+    t = t_axis(d)
+    n = len(t)
+    env = np.clip(t / 1.2, 0, 1) ** 2 * np.exp(-np.clip(t - 1.6, 0, None) / 0.3)
+    base = bandpass(r.standard_normal(n), 300, 2200) * env
+    whistle_f = 1200 + 400 * t + 90 * np.sin(2 * np.pi * 3.0 * t)
+    whistle = np.sin(2 * np.pi * np.cumsum(whistle_f) / SR) * 0.08 * env ** 2
+    return normalize(base + whistle, 0.6)
+
+
+def sfx_fire_out():
+    """Великий огонь гаснет: тёплый низкий выдох, затихающий треск, лёгкое шипение."""
+    r = np.random.default_rng(161)
+    d = 3.0
+    t = t_axis(d)
+    n = len(t)
+    whoosh = lowpass(r.standard_normal(n), 400) * np.exp(-t / 0.9) * np.clip(t / 0.15, 0, 1)
+    hiss = bandpass(r.standard_normal(n), 2500, 7000) * np.exp(-t / 1.2) * 0.15
+    x = whoosh + hiss
+    for k in range(14):
+        at = r.uniform(0.0, 2.2)
+        c = bandpass(r.standard_normal(int(0.015 * SR)), 1500, 5000) * np.exp(-t_axis(0.015) / 0.003) * np.exp(-at / 1.0) * 0.6
+        place(x, c, at)
+    return normalize(x, 0.6)
+
+
 def main():
     import sys
     os.makedirs(OUT, exist_ok=True)
@@ -861,9 +1033,13 @@ def main():
                  "wind": sfx_wind, "ice": sfx_ice, "penguin": sfx_penguin, "snore": sfx_snore, "drip": sfx_drip,
                  "step_snow": sfx_step_snow, "lava": sfx_lava, "steam": sfx_steam, "hammer": sfx_hammer,
                  "tortoise": sfx_tortoise, "rumble": sfx_rumble, "frog": sfx_frog, "creak": sfx_creak, "sail": sfx_sail,
-                 "cheer": sfx_cheer}
+                 "cheer": sfx_cheer, "gust": sfx_gust, "fire_out": sfx_fire_out}
+        music = {"eye": music_eye, "meeting": music_meeting, "sea": music_sea, "keeper": music_keeper}
         for name in only:
-            write_wav("sfx_" + name, table[name]())
+            if name.startswith("music_"):
+                music[name[6:]]()
+            else:
+                write_wav("sfx_" + name, table[name]())
         print("audio:", only)
         return
     sfx = {
@@ -878,7 +1054,7 @@ def main():
         "wind": sfx_wind(), "ice": sfx_ice(), "penguin": sfx_penguin(), "snore": sfx_snore(), "drip": sfx_drip(),
         "step_snow": sfx_step_snow(), "lava": sfx_lava(), "steam": sfx_steam(), "hammer": sfx_hammer(),
         "tortoise": sfx_tortoise(), "rumble": sfx_rumble(), "frog": sfx_frog(), "creak": sfx_creak(), "sail": sfx_sail(),
-        "cheer": sfx_cheer(),
+        "cheer": sfx_cheer(), "gust": sfx_gust(), "fire_out": sfx_fire_out(),
     }
     for i in range(4):
         sfx["bird%d" % i] = bird(100 + i)
@@ -889,6 +1065,10 @@ def main():
     amb_rain()
     music_day()
     music_night()
+    music_eye()
+    music_meeting()
+    music_sea()
+    music_keeper()
     print("audio:", sorted(os.listdir(OUT)))
 
 

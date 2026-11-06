@@ -41,6 +41,8 @@ var _squash := 1.0
 var _body_y := 0.45
 var stamina := STAMINA_MAX
 var climbing: Climbable = null
+var force_indoor := false             # внутри башни (Великий маяк): камера ближе, как в бункере
+var ext_push := Vector3.ZERO          # ветер на открытом балконе толкает героя
 var near_climb: Climbable = null
 var _climb_side := Vector3.FORWARD
 var _climb_phase := 0.0
@@ -304,8 +306,8 @@ func _physics_process(delta: float) -> void:
 		speed = WALK_SPEED * 0.5   # замёрз: еле идёшь
 
 	var accel := 12.0 if is_on_floor() else 4.0
-	velocity.x = lerpf(velocity.x, dir.x * speed, accel * delta)
-	velocity.z = lerpf(velocity.z, dir.z * speed, accel * delta)
+	velocity.x = lerpf(velocity.x, dir.x * speed + ext_push.x, accel * delta)
+	velocity.z = lerpf(velocity.z, dir.z * speed + ext_push.z, accel * delta)
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	elif controls_enabled and Input.is_action_just_pressed("jump") and near_climb == null:
@@ -373,7 +375,7 @@ func _update_camera(delta: float) -> void:
 	cam_rig.global_position = cam_rig.global_position.lerp(global_position + Vector3(0, 1.4, 0), 1.0 - exp(-11.0 * delta))
 	cam_rig.rotation.y = camera_yaw
 	# в бункере потолок низкий: камера ближе и почти на уровне глаз, чтобы не упираться в ярус выше
-	var indoor := global_position.y < -8.0
+	var indoor := global_position.y < -8.0 or force_indoor
 	cam_pitch_node.rotation.x = clampf(camera_pitch, -0.32, 0.35) if indoor else camera_pitch
 	var want_dist := minf(camera_distance, 4.2) if indoor else camera_distance
 	spring.spring_length = lerpf(spring.spring_length, want_dist, 1.0 - exp(-8.0 * delta))
@@ -500,8 +502,12 @@ func _climb(delta: float) -> void:
 		up = Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
 	var cold_k := 1.3 if Game.cold_active() else 1.0
 	stamina -= (9.0 if abs(up) > 0.1 else 2.5) * delta * (0.35 if climbing.ladder else cold_k)
-	# ледяная стена: на зарубке можно повисеть — силы возвращаются
-	if climbing.ice and abs(up) < 0.1 and climbing.at_rest(global_position.y - b.y):
+	# порыв ветра на открытой стене: лезть тяжело, лучше прижаться и переждать
+	var gusty: bool = climbing.wind and GreatLighthouse.gust > 0.5
+	if gusty and abs(up) > 0.1:
+		stamina -= 18.0 * delta
+	# на зарубке или уступе можно повисеть — силы возвращаются
+	if climbing.rest_step > 0.0 and abs(up) < 0.1 and climbing.at_rest(global_position.y - b.y) and not gusty:
 		stamina = minf(STAMINA_MAX, stamina + 2.5 * delta * cold_k + 14.0 * delta)
 	var y := global_position.y + up * CLIMB_SPEED * delta
 	global_position = Vector3(b.x, 0, b.z) + _climb_side * 0.45 + Vector3(0, y, 0)
@@ -584,9 +590,11 @@ func try_interact() -> void:
 
 func get_hint() -> String:
 	if climbing:
-		if climbing.ice:
+		if climbing.wind and GreatLighthouse.gust > 0.5:
+			return "Порыв ветра! Прижмись к стене — не лезь, пока не стихнет"
+		if climbing.rest_step > 0.0:
 			var rest := climbing.at_rest(global_position.y - climbing.world_bottom().y)
-			return "W — вверх,  S — вниз,  Пробел — спрыгнуть" + ("   ·   зарубка: повиси, отдышись" if rest else ",  Q — поесть")
+			return "W — вверх,  S — вниз,  Пробел — спрыгнуть" + (("   ·   %s: повиси, отдышись" % ("зарубка" if climbing.ice else "уступ")) if rest else ",  Q — поесть")
 		return "W — вверх,  S — вниз,  Пробел — спрыгнуть" + ("" if climbing.ladder else ",  Q — поесть")
 	if near_climb and (target == null or not is_instance_valid(target)):
 		if near_climb.locked_hint != "":
@@ -594,6 +602,8 @@ func get_hint() -> String:
 		if near_climb.ice:
 			return "[Пробел]  Лезть по ледяной стене" if Game.has_tool("ice_pick") and Game.has_tool("climbing_gloves") \
 				else "Ледяная стена (нужны ледоруб и перчатки лазальщика)"
+		if near_climb.holds != "":
+			return "[Пробел]  Лезть по выступам стены маяка" if Game.has_tool("climbing_gloves") 				else "Стена маяка (нужны перчатки лазальщика)"
 		if near_climb.rock:
 			return "[Пробел]  Лезть по выступам базальта (на стене жарко!)" if Game.has_tool("climbing_gloves") \
 				else "Стена кратера (нужны перчатки лазальщика)"
