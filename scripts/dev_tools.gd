@@ -304,6 +304,31 @@ func _shop_for(item_id: String) -> String:
 
 # ------------------------------------------------------------------ Ошибки игрока
 ## Ситуации, когда игрок делает «не то» или «не в том порядке», а задание всё равно должно быть выполнимо.
+## Палатка по заданию — только на поляне у лагеря, костёр — только у палатки.
+func _test_quest_places() -> void:
+	var bs: BuildSystem = main.build
+	var c: Vector3 = main.island.camp_center
+	var far := c + Vector3(25, 0, 0)
+	Game.chapter = 0
+	for i in Data.CHAPTERS[0]["quests"].size():
+		if Data.CHAPTERS[0]["quests"][i]["id"] == "tent":
+			Game.quest_index = i
+	Game.quest_started = true
+	_check(bs.quest_place_problem("tent", far) != "" and bs.quest_place_problem("tent", c + Vector3(2, 0, 1)) == "",
+		"палатку по заданию ставят только на поляне у лагеря")
+	for i in Data.CHAPTERS[0]["quests"].size():
+		if Data.CHAPTERS[0]["quests"][i]["id"] == "fire":
+			Game.quest_index = i
+	_check(bs.quest_place_problem("campfire", c) != "", "костёр без палатки рядом не засчитать")
+	var tent: Building = bs.spawn_building("tent", c, 0.0)
+	_check(bs.quest_place_problem("campfire", c + Vector3(3, 0, 0)) == "" and bs.quest_place_problem("campfire", far) != "",
+		"костёр — только рядом с палаткой")
+	tent.queue_free()
+	Game.chapter = 0
+	Game.quest_index = 0
+	Game.quest_started = false
+
+
 func _test_mistakes() -> void:
 	var start_q := func(task: Dictionary) -> int:
 		var key: String = task["kind"] + ":" + Game._task_target(task)
@@ -1400,6 +1425,7 @@ func _autotest() -> void:
 	var ch := int(args.get("chapter", "1")) - 1
 	if ch == 0:
 		_validate()
+		_test_quest_places()
 		_test_mistakes()
 		Game.start_current_quest()
 		_flush()

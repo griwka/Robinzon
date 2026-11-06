@@ -14,6 +14,10 @@ var active_variant := ""
 var ghost: Node3D
 var ghost_rot := 0.0
 var valid := false
+var reason := ""   # почему здесь нельзя строить (показывается в подсказке)
+## Где засчитывается постройка по заданию: "near" в пункте задания — "camp" (поляна у лагеря)
+## или id постройки (рядом с ней), "near_r" — радиус в метрах.
+const CAMP_R := 8.0
 var _ok_mat: StandardMaterial3D
 var _bad_mat: StandardMaterial3D
 
@@ -103,8 +107,39 @@ func _process(_delta: float) -> void:
 		return
 	ghost.global_position = pos
 	ghost.rotation.y = ghost_rot
+	reason = ""
 	valid = _check_valid(pos, cfg)
+	if valid:
+		reason = quest_place_problem(active_id, pos)
+		valid = reason == ""
 	_set_ghost_mat(_ok_mat if valid else _bad_mat)
+
+
+## Пока задание просит построить это в определённом месте (палатку — на поляне у лагеря,
+## костёр — у палатки), строить можно только там. Возвращает, что не так, или "".
+func quest_place_problem(id: String, pos: Vector3) -> String:
+	var q := Game.current_quest()
+	if q.is_empty() or not Game.quest_started:
+		return ""
+	for t in q["tasks"]:
+		if t["kind"] != "built" or t["target"] != id or not t.has("near") or Game.task_progress(t) >= t["count"]:
+			continue
+		if t.has("where") and t["where"] != Game.location:
+			continue
+		var p2 := Vector2(pos.x, pos.z)
+		var near: String = t["near"]
+		var r: float = t.get("near_r", CAMP_R if near == "camp" else 4.5)
+		if near == "camp":
+			if p2.distance_to(Vector2(island.camp_center.x, island.camp_center.z)) > r:
+				return "Для задания: ставь на поляне у лагеря, рядом с обломками лодки"
+			continue
+		var ok := false
+		for b in get_tree().get_nodes_in_group("building"):
+			if b.id == near and Vector2(b.global_position.x, b.global_position.z).distance_to(p2) < r:
+				ok = true
+		if not ok:
+			return "Для задания: ставь рядом с постройкой «%s»" % Data.BUILDINGS[near]["name"]
+	return ""
 
 
 ## Свободное место под мосток рядом с точкой (или null).
@@ -173,7 +208,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _try_place() -> void:
 	if not valid:
-		Game.notified.emit("Здесь строить нельзя", Color("ff9d7a"))
+		Game.notified.emit(reason if reason != "" else "Здесь строить нельзя", Color("ff9d7a"))
 		return
 	var cfg: Dictionary = Data.BUILDINGS[active_id]
 	if not Game.pay(cost_of(active_id, active_variant)):
