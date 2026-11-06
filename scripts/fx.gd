@@ -276,7 +276,7 @@ static func popup(parent: Node3D, pos: Vector3, icon_id: String, amount: int) ->
 	if tex:
 		var s := Sprite3D.new()
 		s.texture = tex
-		s.pixel_size = 0.0034
+		s.pixel_size = 0.0024
 		s.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		s.shaded = false
 		s.no_depth_test = true
@@ -285,21 +285,22 @@ static func popup(parent: Node3D, pos: Vector3, icon_id: String, amount: int) ->
 		root.add_child(s)
 	var lb := Label3D.new()
 	lb.text = "+%d" % amount
-	lb.font_size = 56
+	lb.font_size = 48
 	lb.outline_size = 14
 	lb.modulate = Color("fff6dc")
 	lb.outline_modulate = Color("5a3320")
-	lb.pixel_size = 0.0045
+	lb.pixel_size = 0.0036
 	lb.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	lb.no_depth_test = true
 	lb.render_priority = 4
-	lb.position.x = 0.22 if tex else 0.0
+	lb.position.x = 0.17 if tex else 0.0
 	root.add_child(lb)
 	root.scale = Vector3.ONE * 0.3
 	var tw := root.create_tween()
 	tw.tween_property(root, "scale", Vector3.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.parallel().tween_property(root, "global_position", pos + Vector3(0, 0.9, 0), 1.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(root, "scale", Vector3.ONE * 0.01, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	# поднимается не спеша и невысоко — чтобы успеть прочитать и не улететь за край экрана
+	tw.parallel().tween_property(root, "global_position", pos + Vector3(0, 0.45, 0), 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_property(root, "scale", Vector3.ONE * 0.01, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	tw.tween_callback(root.queue_free)
 
 

@@ -450,10 +450,10 @@ func _on_item_gained(id: String, amount: int) -> void:
 	if not is_inside_tree() or DisplayServer.get_name() == "headless":
 		return
 	var now := Time.get_ticks_msec() / 1000.0
-	if now - _popup_t > 0.6:
+	if now - _popup_t > 0.9:
 		_popup_stack = 0
 	_popup_t = now
-	FX.popup(get_parent(), global_position + Vector3(0, 2.1 + _popup_stack * 0.42, 0), id, amount)
+	FX.popup(get_parent(), global_position + Vector3(0, 1.85 + _popup_stack * 0.3, 0), id, amount)   # сразу над головой
 	_popup_stack = (_popup_stack + 1) % 4
 
 
