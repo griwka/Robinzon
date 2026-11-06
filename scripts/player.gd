@@ -654,7 +654,7 @@ func _find_climb() -> void:
 	for c in get_tree().get_nodes_in_group("climb"):
 		var b: Vector3 = c.world_bottom()
 		var t: Vector3 = c.world_top()
-		if Vector2(global_position.x - b.x, global_position.z - b.z).length() < 1.0 \
+		if Vector2(global_position.x - b.x, global_position.z - b.z).length() < 1.35 \
 				and global_position.y > b.y - 0.7 and global_position.y < t.y - 0.8:
 			near_climb = c
 			return
@@ -692,15 +692,21 @@ func _climb(delta: float) -> void:
 	if climbing.rest_step > 0.0 and abs(up) < 0.1 and climbing.at_rest(global_position.y - b.y) and not gusty:
 		stamina = minf(STAMINA_MAX, stamina + 2.5 * delta * cold_k + 14.0 * delta)
 	var y := global_position.y + up * CLIMB_SPEED * delta
-	global_position = Vector3(b.x, 0, b.z) + _climb_side * 0.45 + Vector3(0, y, 0)
+	# по лиане — вплотную, обхватив её; по стене и лестнице — чуть дальше
+	var rope := not (climbing.ice or climbing.rock or climbing.ladder or climbing.holds != "")
+	global_position = Vector3(b.x, 0, b.z) + _climb_side * (0.3 if rope else 0.45) + Vector3(0, y, 0)
 	model.rotation.y = lerp_angle(model.rotation.y, atan2(_climb_side.x, _climb_side.z), 10.0 * delta)
-	# поза лазания: руки и ноги перехватываются по очереди
+	# поза лазания: руки над головой сходятся к лиане и перехватывают её по очереди,
+	# ноги согнуты и по очереди упираются; корпус ровный, чуть покачивается в такт
 	_climb_phase += delta * abs(up) * 7.0
 	var sw := sin(_climb_phase)
-	arm_l.rotation.x = -2.6 + sw * 0.5
-	arm_r.rotation.x = -2.6 - sw * 0.5
-	leg_l.rotation.x = -0.5 - sw * 0.4
-	leg_r.rotation.x = -0.5 + sw * 0.4
+	var inward := 0.26 if rope else 0.08
+	arm_l.rotation = Vector3(-2.75 - sw * 0.45, 0.0, inward)
+	arm_r.rotation = Vector3(-2.75 + sw * 0.45, 0.0, -inward)
+	leg_l.rotation.x = -0.6 + sw * 0.35
+	leg_r.rotation.x = -0.6 - sw * 0.35
+	body_pivot.rotation = Vector3(0.0, 0.0, sw * 0.05)
+	body_pivot.position.y = _body_y + absf(sw) * 0.03
 	if abs(up) > 0.1 and int(_climb_phase / PI) != int((_climb_phase - delta * 7.0) / PI):
 		Audio.play("rustle", -14.0, 0.2)
 	_update_camera(delta)
