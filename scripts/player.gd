@@ -349,13 +349,20 @@ func _physics_process(delta: float) -> void:
 		velocity.y = JUMP_VELOCITY
 		_squash = 1.25
 
-	# в открытое море не уплыть: глубина держит у берега
-	var isl := get_tree().get_first_node_in_group("island")
-	if isl:
-		var ahead := global_position + Vector3(velocity.x, 0, velocity.z) * 0.25
-		if isl.height_at(ahead.x, ahead.z) < -0.9 and global_position.y < 0.2:   # на мостках над водой — можно
-			velocity.x = 0.0
-			velocity.z = 0.0
+	# в открытое море не уплыть: на глубине нельзя плыть дальше от острова. Назад к берегу и вдоль него —
+	# можно всегда (раньше на глубине обнулялось всё движение, и прыгнувший в воду герой застревал)
+	var isl := get_tree().get_first_node_in_group("island") as Island
+	if isl and global_position.y < 0.2:   # на мостках над водой — можно
+		var hv := Vector3(velocity.x, 0, velocity.z)
+		var ahead := global_position + hv * 0.25
+		if isl.height_at(ahead.x, ahead.z) < -0.9:
+			var out := Vector3(global_position.x - isl.global_position.x, 0, global_position.z - isl.global_position.z)
+			if out.length() > 0.01:
+				out = out.normalized()
+				var away := hv.dot(out)
+				if away > 0.0:
+					velocity.x -= out.x * away
+					velocity.z -= out.z * away
 	# в воде — медленнее и всплываем. Вода — только над морским дном: под землёй (бункер на Грозовом острове
 	# уходит ниже уровня моря) никакой воды нет, иначе героя тянет к потолку
 	if in_water():

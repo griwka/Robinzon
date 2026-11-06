@@ -77,6 +77,7 @@
   - листва: `Crown` и `*_leaf` (ветер и прозрачность у камеры);
   - остальное: `Fruit`, `Lid`, `DoorL`/`DoorR`, `Handle`, `FirePoint`, `Perch`, `Soil`.
 - **Сохранение:** версия `SAVE_VERSION` в `game.gd`. Новые флаги для старых сохранений — через миграцию в `load_game`.
+  Ячейки: `Game.SLOTS`, `slot_path(n)`, `use_slot(n)`, `slot_info(n)`; ячейка 1 — прежний `save.json`, у тестов свои `save_dev*.json`.
 
 ## Команды
 Godot должен быть в PATH как `godot`; на Windows — консольная версия `Godot_v4.7.x-stable_win64_console.exe`.
@@ -139,6 +140,7 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 - `--quest=old_camp` — текущее задание по id; `--give=stone_axe,machete` — выдать предметы; `--hold=stone_axe` — инструмент в руке;
 - `--pose=stone_axe:0.32` — застывшая поза работы (фаза 0..1), `--face=0` — куда смотрит герой (с `--yaw=1.57` — вид сбоку);
 - `--fxtest` — все эффекты перед кадром;
+- `--climb=N:h` — герой на лиане N на высоте h (0..1); `--slots=load|new|save|pauseload` — список ячеек сохранения;
 - `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO.
 
 Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для музыки и фона — ffmpeg в PATH;
