@@ -86,6 +86,12 @@ func _process(_delta: float) -> void:
 	else:
 		# луч ушёл в небо/воду — ставим перед игроком
 		pos = player.global_position - Basis(Vector3.UP, player.model.rotation.y).z * 3.0
+	# прицел упал под ноги герою — отодвигаем постройку вперёд, чтобы её было видно и герой не стоял внутри
+	var from_p := Vector3(pos.x - player.global_position.x, 0, pos.z - player.global_position.z)
+	var min_d: float = float(Data.BUILDINGS[active_id].get("radius", 1.0)) + 1.0
+	if from_p.length() < min_d:
+		var fw := -Basis(Vector3.UP, player.camera_yaw).z
+		pos = player.global_position + fw * min_d
 	pos.x = snappedf(pos.x, 0.5)
 	pos.z = snappedf(pos.z, 0.5)
 	pos.y = island.height_at(pos.x, pos.z)

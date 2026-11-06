@@ -183,6 +183,9 @@ func _process(_delta: float) -> void:
 			hud.visible = false
 		if args.has("flush"):   # закрыть вступительные диалоги, интерфейс оставить
 			_flush()
+		if args.has("building"):   # для скриншотов: режим строительства (--building=campfire)
+			Game.unlocked[str(args["building"])] = true
+			main.build.start(str(args["building"]))
 		match args.get("open", ""):
 			"inventory": hud.open_inventory()
 			"collections":

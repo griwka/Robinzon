@@ -358,6 +358,7 @@ func _process(delta: float) -> void:
 	else:
 		hud.set_hint("")
 	hud.set_crosshair(build.is_active())
+	player.build_aim = build.is_active()
 	hud.set_stamina(player.stamina, Player.STAMINA_MAX)
 	if not in_menu:
 		_autosave_t += delta
