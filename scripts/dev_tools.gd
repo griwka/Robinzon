@@ -230,8 +230,8 @@ func _process(_delta: float) -> void:
 		FX.poof(w, base + right * 1.3 + Vector3(0, 0.5, 0), Color("8fa850"), 1.0)
 		FX.ring(w, base + right * 2.6 + Vector3(0, 0.08, 0), Color("e6dcc0"), 1.0, 14)
 		FX.dust(w, p.global_position + Vector3(0, 0.05, 0), Color("f1dfb0"), 8, 0.45)
-		FX.popup(w, p.global_position + Vector3(0, 2.1, 0), "wood", 3)
-		FX.popup(w, p.global_position + Vector3(0, 2.55, 0), "stone", 2)
+		FX.popup(w, p.global_position + Vector3(0, 1.85, 0), "wood", 3)
+		FX.popup(w, p.global_position + Vector3(0, 2.15, 0), "stone", 2)
 		FX.flash(p.model, 1.0, 0.6)
 	if args.has("shot") and _frames == int(args.get("frames", "90")):
 		get_viewport().get_texture().get_image().save_png(args["shot"])
