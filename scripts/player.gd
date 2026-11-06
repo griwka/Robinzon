@@ -16,6 +16,7 @@ var camera_pitch := -0.62
 var camera_distance := 9.0
 var controls_enabled := true
 var can_interact := true  # false в режиме строительства
+var use_key := false      # действие начато клавишей E (а не ЛКМ): пальму E трясёт, ЛКМ — рубит
 
 var target: Node = null  # текущий объект взаимодействия
 
@@ -365,6 +366,8 @@ func _physics_process(delta: float) -> void:
 		var held := Input.is_action_pressed("attack") or Input.is_action_pressed("interact")
 		# ресурсы можно добывать, удерживая кнопку; постройки — по одному нажатию
 		if (target is ResourceNode and held) or (not (target is ResourceNode) and pressed):
+			if _swing_t <= 0.0:
+				use_key = Input.is_action_pressed("interact") and not Input.is_action_pressed("attack")
 			try_interact()
 	if _swing_t > 0.0:
 		_swing_t -= delta
@@ -614,4 +617,6 @@ func get_hint() -> String:
 		return "[Пробел]  Лезть по лиане" if Game.has_tool("climbing_gloves") else "Лиана (нужны перчатки лазальщика)"
 	if target == null or not is_instance_valid(target):
 		return ""
+	if target is ResourceNode and (target as ResourceNode).key_hint() != "":
+		return (target as ResourceNode).key_hint()
 	return "[ЛКМ / E]  " + target.get_hint()

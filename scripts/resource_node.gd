@@ -176,6 +176,15 @@ func tool_hint() -> String:
 	return KINDS[kind]["tool"]
 
 
+## Подсказка с разными клавишами (пальма с топором: E — потрясти, ЛКМ — срубить) или "".
+func key_hint() -> String:
+	if kind == "palm" and Game.has_tool("stone_axe"):
+		if coconut_ready:
+			return "[E]  Потрясти пальму   ·   [ЛКМ]  Срубить пальму"
+		return "[ЛКМ]  Срубить пальму   ·   кокосы ещё не выросли"
+	return ""
+
+
 func get_hint() -> String:
 	var cfg: Dictionary = KINDS[kind]
 	if kind == "palm" and not Game.has_tool("stone_axe"):
@@ -189,8 +198,13 @@ func interact(player: Node) -> void:
 	if not active:
 		return
 	var cfg: Dictionary = KINDS[kind]
-	if kind == "palm" and not Game.has_tool("stone_axe"):
-		_shake_palm()
+	# пальму трясут руками (без топора — любой кнопкой, с топором — клавишей E), рубят топором по ЛКМ
+	var by_key: bool = player != null and player.get("use_key") == true
+	if kind == "palm" and (not Game.has_tool("stone_axe") or by_key):
+		if coconut_ready:
+			_shake_palm()
+		elif by_key:
+			Game.notified.emit("Кокосы ещё не выросли — загляни попозже", Color("ffe08a"))
 		return
 	if cfg["tool"] != "" and not Game.has_tool(cfg["tool"]):
 		Game.notified.emit("Нужен инструмент: %s" % Game.item_name(cfg["tool"]), Color("ff9d7a"))
