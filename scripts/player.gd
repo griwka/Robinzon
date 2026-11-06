@@ -16,7 +16,6 @@ var camera_pitch := -0.62
 var camera_distance := 9.0
 var controls_enabled := true
 var can_interact := true  # false в режиме строительства
-var use_key := false      # действие начато клавишей E (а не ЛКМ): пальму E трясёт, ЛКМ — рубит
 
 var target: Node = null  # текущий объект взаимодействия
 
@@ -33,6 +32,7 @@ var arm_r: Node3D
 var leg_l: Node3D
 var leg_r: Node3D
 var hand_tool: Node3D
+const CARRY_ANGLE := PI - 0.5   # наклон инструмента в руке, когда его несут (не во время удара)
 var back_tool: Node3D     # инструмент за спиной, когда руки свободны
 var _hand_id := ""
 var _back_id := ""
@@ -77,6 +77,7 @@ func _ready() -> void:
 	_build_model()
 	_build_camera()
 	Game.inventory_changed.connect(_update_tool)
+	Game.held_changed.connect(_update_tool)
 	Game.inventory_changed.connect(update_clothes)
 	Game.item_gained.connect(_on_item_gained)
 	_update_tool()
@@ -102,8 +103,9 @@ func _build_model() -> void:
 		_body_y = body_pivot.position.y
 		hand_tool = Node3D.new()
 		hand_tool.rotation = Vector3(PI / 2, 0, 0)
-		var hand := arm_r.find_child("HandR", true, false) as Node3D
-		(hand if hand else arm_r).add_child(hand_tool)
+		# кисть — на конце руки, в 0.41 м под плечом (узел HandR в модели стоит не там — у ступней)
+		hand_tool.position = Vector3(0.05, -0.41, -0.04)
+		arm_r.add_child(hand_tool)
 		_make_back_tool()
 		for mi in g.find_children("*", "MeshInstance3D", true, false):
 			(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
@@ -231,14 +233,10 @@ func _make_back_tool() -> void:
 	body_pivot.add_child(back_tool)
 
 
-## Инструмент в руке — только когда герой наведён на то, что им добывают (или замахнулся).
-## Иначе руки свободны, а топор (мачете, кирка) висит за спиной и не волочится по земле.
+## В руке — выбранный инструмент (клавиши 1–0 или взят сам, когда понадобился). Топор, мачете или кирка,
+## которых нет в руке, висят за спиной.
 func _update_tool() -> void:
-	var want := ""
-	if target and is_instance_valid(target) and target.has_method("tool_hint"):
-		want = target.tool_hint()
-	if want != "" and not Game.has_tool(want):
-		want = ""
+	var want := Game.held_tool()
 	var back := ""
 	for id in ["stone_axe", "machete", "pickaxe", "iron_pickaxe"]:
 		if Game.has_tool(id) and id != want:
@@ -395,8 +393,6 @@ func _physics_process(delta: float) -> void:
 		var held := Input.is_action_pressed("attack") or Input.is_action_pressed("interact")
 		# ресурсы можно добывать, удерживая кнопку; постройки — по одному нажатию
 		if (target is ResourceNode and held) or (not (target is ResourceNode) and pressed):
-			if _swing_t <= 0.0:
-				use_key = Input.is_action_pressed("interact") and not Input.is_action_pressed("attack")
 			try_interact()
 	if _swing_t > 0.0:
 		_swing_t -= delta
@@ -479,9 +475,18 @@ func _animate(delta: float, speed: float) -> void:
 	if _swing_t > 0.0:
 		var t := 1.0 - _swing_t / SWING_TIME
 		arm_r.rotation.x = lerpf(-2.6, 0.6, smoothstep(0.0, 0.55, t)) if t < 0.7 else lerpf(0.6, 0.0, (t - 0.7) / 0.3)
+	elif _hand_id != "":
+		arm_r.rotation.x = -0.3 + swing * 0.25   # несём инструмент: рука чуть вперёд, рукоять вверх
 	else:
 		arm_r.rotation.x = swing * 0.8
 	arm_r.rotation.z = 0.12 + (0.6 if not is_on_floor() else 0.0)
+	# во время удара инструмент — по руке, вперёд; когда его несут — стоймя (наклон задаём от корпуса,
+	# а не от кисти: так рукоять всегда смотрит вверх и не цепляет землю)
+	if hand_tool:
+		if _swing_t > 0.0 or _hand_id == "":
+			hand_tool.rotation = Vector3(PI / 2, 0, 0)
+		else:
+			hand_tool.global_basis = model.global_basis.orthonormalized() * Basis.from_euler(Vector3(CARRY_ANGLE, 0.0, -0.25))
 
 	# покачивание тела и "резиновая" голова с запаздыванием
 	body_pivot.position.y = _body_y + abs(sin(_walk_phase)) * 0.06 * moving
@@ -516,6 +521,7 @@ func _find_climb() -> void:
 
 func _start_climb(c: Climbable) -> void:
 	climbing = c
+	hand_tool.visible = false   # руки заняты
 	var b := c.world_bottom()
 	var side := Vector3(global_position.x - b.x, 0, global_position.z - b.z)
 	_climb_side = side.normalized() if side.length() > 0.05 else -Basis(Vector3.UP, model.rotation.y).z * -1.0
@@ -525,6 +531,7 @@ func _start_climb(c: Climbable) -> void:
 
 func _stop_climb(push := Vector3.ZERO) -> void:
 	climbing = null
+	hand_tool.visible = true
 	velocity = push
 
 
@@ -614,6 +621,12 @@ func _find_target() -> void:
 func try_interact() -> void:
 	if _swing_t > 0.0 or target == null:
 		return
+	# умный выбор: нужный инструмент есть в сумке — герой сам берёт его в руку (подсветка ячейки переходит).
+	# Пальму не трогаем: с пустыми руками её трясут, с топором — рубят, это решает игрок.
+	if target.has_method("tool_hint") and not (target is ResourceNode and (target as ResourceNode).kind == "palm"):
+		var need: String = target.tool_hint()
+		if need in Game.HOLD_TOOLS and Game.has_tool(need):
+			Game.hold(need)
 	_swing_t = SWING_TIME
 	var t := target
 	# эффект удара — в середине замаха

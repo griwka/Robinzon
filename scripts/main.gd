@@ -403,6 +403,17 @@ func _unhandled_input(event: InputEvent) -> void:
 					"help": hud.show_help()
 			get_viewport().set_input_as_handled()
 			return
+	# 1–9, 0 — взять инструмент из ячейки внизу (ещё раз — убрать, руки свободны)
+	if event is InputEventKey and event.pressed and not event.echo:
+		var kc: int = (event as InputEventKey).physical_keycode
+		if kc >= KEY_0 and kc <= KEY_9:
+			var idx := 9 if kc == KEY_0 else kc - KEY_1
+			var slots := Game.hold_slots()
+			if idx < slots.size():
+				Game.hold("" if Game.held == slots[idx] else slots[idx])
+				Audio.play("click", -6.0, 0.05)
+			get_viewport().set_input_as_handled()
+			return
 	if event.is_action_pressed("radio") and Game.has_tool("radio_set"):
 		_radio_call()
 		get_viewport().set_input_as_handled()

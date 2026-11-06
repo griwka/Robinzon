@@ -176,12 +176,16 @@ func tool_hint() -> String:
 	return KINDS[kind]["tool"]
 
 
-## Подсказка с разными клавишами (пальма с топором: E — потрясти, ЛКМ — срубить) или "".
+## Своя подсказка (пальма: что будет — потрясти или срубить — зависит от того, что в руке) или "".
 func key_hint() -> String:
 	if kind == "palm" and Game.has_tool("stone_axe"):
+		var key := Game.hold_slots().find("stone_axe") + 1
+		var k := str(key % 10)
+		if Game.held_tool() == "stone_axe":
+			return "[ЛКМ / E]  Срубить пальму   ·   [%s]  убрать топор — потрясти" % k
 		if coconut_ready:
-			return "[E]  Потрясти пальму   ·   [ЛКМ]  Срубить пальму"
-		return "[ЛКМ]  Срубить пальму   ·   кокосы ещё не выросли"
+			return "[ЛКМ / E]  Потрясти пальму   ·   [%s]  взять топор — срубить" % k
+		return "Кокосы ещё не выросли   ·   [%s]  взять топор — срубить" % k
 	return ""
 
 
@@ -198,13 +202,12 @@ func interact(player: Node) -> void:
 	if not active:
 		return
 	var cfg: Dictionary = KINDS[kind]
-	# пальму трясут руками (без топора — любой кнопкой, с топором — клавишей E), рубят топором по ЛКМ
-	var by_key: bool = player != null and player.get("use_key") == true
-	if kind == "palm" and (not Game.has_tool("stone_axe") or by_key):
+	# пальму трясут пустыми руками (или с другим инструментом), рубят — с топором в руке
+	if kind == "palm" and Game.held_tool() != "stone_axe":
 		if coconut_ready:
 			_shake_palm()
-		elif by_key:
-			Game.notified.emit("Кокосы ещё не выросли — загляни попозже", Color("ffe08a"))
+		else:
+			Game.notified.emit("Кокосы ещё не выросли — загляни попозже" + ("" if not Game.has_tool("stone_axe") else ". Срубить — возьми топор"), Color("ffe08a"))
 		return
 	if cfg["tool"] != "" and not Game.has_tool(cfg["tool"]):
 		Game.notified.emit("Нужен инструмент: %s" % Game.item_name(cfg["tool"]), Color("ff9d7a"))

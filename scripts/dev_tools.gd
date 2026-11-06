@@ -65,6 +65,8 @@ func _process(_delta: float) -> void:
 		for id in str(args["give"]).split(","):
 			Game.inventory[id] = 1
 		Game.inventory_changed.emit()
+	if _frames == 2 and args.has("hold"):
+		Game.hold(str(args["hold"]))
 	if _frames == 2 and args.has("eyedeck"):
 		var gl := _tower()
 		if gl:
@@ -333,7 +335,7 @@ func _test_quest_places() -> void:
 	Game.quest_started = false
 
 
-## Пальма: с топором E трясёт (кокосы), ЛКМ рубит; без топора трясут любой кнопкой.
+## Пальма: с пустыми руками её трясут (кокосы), с топором в руке — рубят. Инструменты в ячейках 1–0.
 func _test_palm() -> void:
 	var p: Player = main.player
 	var palm: ResourceNode = null
@@ -348,12 +350,27 @@ func _test_palm() -> void:
 	Game.inventory["stone_axe"] = 1
 	var hp0 := palm.hp
 	var leaf0 := Game.count("leaf")
-	p.use_key = true
+	Game.hold("")
 	palm.interact(p)
-	_check(not palm.coconut_ready and palm.hp == hp0 and Game.count("leaf") == leaf0 + 1, "с топором пальму можно потрясти (E): кокосы падают, пальма цела")
-	p.use_key = false
+	_check(not palm.coconut_ready and palm.hp == hp0 and Game.count("leaf") == leaf0 + 1, "пустыми руками пальму трясут: кокосы падают, пальма цела")
+	Game.hold("stone_axe")
 	palm.interact(p)
-	_check(palm.hp == hp0 - 1, "с топором ЛКМ рубит пальму")
+	_check(palm.hp == hp0 - 1, "с топором в руке пальму рубят")
+	Game.inventory["machete"] = 1
+	_check(Game.hold_slots() == ["machete", "stone_axe"], "в ячейках внизу — инструменты по порядку")
+	var bush: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode and n.kind == "thicket" and n.active:
+			bush = n
+	if bush:
+		p.target = bush
+		p._swing_t = 0.0
+		p.try_interact()
+		_check(Game.held_tool() == "machete", "к колючкам герой сам берёт мачете (умный выбор)")
+		p._swing_t = 0.0
+		p.target = null
+	Game.inventory.erase("machete")
+	Game.hold("")
 	palm.hp = hp0
 	palm.coconut_ready = true
 	if had == 0:
