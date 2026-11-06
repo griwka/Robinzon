@@ -19,7 +19,7 @@ const CARD := Color("f6e3b8")        # светлая карточка пред�
 const CARD_EDGE := Color("b88552")
 const ROW := Color("c99a5e")         # строка в окне — тёплое светлое дерево
 const ROW_EDGE := Color("8a5a30")
-const HOTBAR_ORDER := ["machete", "stone_axe", "pickaxe", "shovel", "fishing_rod", "watering_can", "net", "ice_pick", "ice_drill", "wood", "stone", "fiber", "leaf", "rope", "plank", "bamboo"]
+const HOTBAR_MATERIALS := ["wood", "stone", "fiber", "leaf", "rope", "plank", "bamboo"]
 
 var station_check: Callable
 
@@ -85,6 +85,7 @@ func _ready() -> void:
 	root.add_child(fade_rect)
 
 	Game.inventory_changed.connect(_on_inventory_changed)
+	Game.held_changed.connect(_on_inventory_changed)
 	Game.notified.connect(toast)
 	Game.quest_changed.connect(_update_quest)
 	Game.dialogue_requested.connect(show_dialogue)
@@ -375,7 +376,24 @@ func _on_inventory_changed() -> void:
 		hotbar.remove_child(c)
 		c.queue_free()
 	var shown := 0
-	for id in HOTBAR_ORDER:
+	# инструменты: ячейки с номерами 1–0, взятый в руку — подсвечен
+	var slots := Game.hold_slots()
+	for i in slots.size():
+		var cell := _item_slot(slots[i], 1)
+		var key := _label(str((i + 1) % 10), 15, Color("fff6dc"))
+		key.position = Vector2(6, 2)
+		cell.get_child(0).get_child(0).add_child(key)
+		if slots[i] == Game.held_tool():
+			var sb := _box(Color("fff2b0"), Color("f2a93a"), 12, 5, 0)
+			sb.shadow_size = 3
+			(cell.get_child(0) as PanelContainer).add_theme_stylebox_override("panel", sb)
+		hotbar.add_child(cell)
+		shown += 1
+	if not slots.is_empty():
+		var sep := VSeparator.new()
+		sep.custom_minimum_size = Vector2(8, 0)
+		hotbar.add_child(sep)
+	for id in HOTBAR_MATERIALS:
 		if Game.count(id) > 0:
 			hotbar.add_child(_item_slot(id, Game.count(id)))
 			shown += 1
@@ -862,9 +880,14 @@ func _fill_shop() -> void:
 			var rh := _row()
 			var h: HBoxContainer = rh[1]
 			h.add_child(_card_icon(e["item"], 48))
-			var nm := _label(Game.item_name(e["item"]), 20)
-			nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			h.add_child(nm)
+			var info := VBoxContainer.new()
+			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			info.add_theme_constant_override("separation", 0)
+			info.add_child(_label(Game.item_name(e["item"]), 20))
+			var what := _buy_note(e["item"])
+			if what != "":
+				info.add_child(_label(what, 15, Color("f3e2bd")))
+			h.add_child(info)
 			h.add_child(_label("%d" % e["price"], 20, Color("f3e2b8")))
 			h.add_child(_item_icon("coins", 26))
 			var b := Button.new()
@@ -905,6 +928,24 @@ func _fill_shop() -> void:
 			body.add_child(rh[0])
 		if not any:
 			body.add_child(_label("Продавать пока нечего. Урожай, фрукты, яйца, молоко, мёд и шерсть — всё покупают.", 17, INK, false))
+
+
+## Что получаешь за покупку: семена — пакетик на одну грядку и сколько с неё вырастет (и почём продать урожай),
+## саженец — дерево, которое плодоносит снова и снова. Иначе — сколько уже есть.
+func _buy_note(id: String) -> String:
+	var it: Dictionary = Game.item(id)
+	var have := Game.count(id)
+	var tail := ("  ·  есть: %d" % have) if have > 0 else ""
+	if it.get("cat", "") == "seed" and Data.CROPS.has(it.get("crop", "")):
+		var crop: String = it["crop"]
+		var y: Array = Data.CROPS[crop]["yield"]
+		var price: float = Data.SELL_PRICES.get(crop, 0) * Game.sell_mult()
+		var money := ("  ≈ %d–%d мон." % [int(round(price * int(y[0]))), int(round(price * int(y[1])))]) if price > 0.0 else ""
+		return "1 пакетик = 1 грядка · урожай %d–%d шт.%s%s" % [int(y[0]), int(y[1]), money, tail]
+	if it.get("cat", "") == "sapling" and Data.TREES.has(it.get("tree", "")):
+		var t: Dictionary = Data.TREES[it["tree"]]
+		return "дерево плодоносит снова и снова: по %d–%d шт.%s" % [int(t["yield"][0]), int(t["yield"][1]), tail]
+	return tail.trim_prefix("  ·  ")
 
 
 func open_inventory() -> void:
@@ -1025,7 +1066,9 @@ func _build_help() -> void:
 	var body := _body(help_panel)
 	body.add_child(_label("""WASD — ходить,  Shift — бег,  Пробел — прыжок
 Мышь — камера,  колёсико — приблизить/отдалить
-ЛКМ или E — собирать / рубить / использовать.  Пальма: E — потрясти, ЛКМ — срубить топором
+ЛКМ или E — собирать / рубить / использовать
+1–9, 0 — взять инструмент в руку (ещё раз — убрать). Нужный инструмент герой берёт и сам.
+Пальма: пустыми руками — потрясти (кокосы), с топором в руке — срубить
 C — крафт,  B — строительство,  Tab — инвентарь
 J — журнал заданий,  K — коллекции,  Q — поесть,  T — рация (когда появится)
 В строительстве: ЛКМ — поставить, R — повернуть, ПКМ — отмена

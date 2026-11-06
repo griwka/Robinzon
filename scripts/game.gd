@@ -12,6 +12,7 @@ signal collection_changed(col_id: String, item_id: String, is_new: bool)
 signal time_changed(time_of_day: float, day: int)
 signal shop_requested(shop_id: String)
 signal choice_requested(title: String, options: Array)
+signal held_changed
 
 const SAVE_PATH := "user://save.json"
 ## Куда сохраняется игра. Автотесты, проверка и скриншоты пишут в отдельный файл и никогда
@@ -46,6 +47,32 @@ var warmth := 100.0                    # тепло героя 0..100 (Ледя�
 var warm_tea := 0.0                    # сколько секунд ещё греет выпитый чай
 var heat := 0.0                        # жар героя 0..100 у лавы (Остров Вулкана; не сохраняется)
 var salve_t := 0.0                     # сколько секунд ещё действует мазь от ожогов
+var held := ""                         # инструмент в руке (выбран клавишами 1–0 или взят сам, когда нужен)
+
+## Инструменты, которые берут в руку (ячейки 1–0 внизу экрана) — в этом порядке.
+const HOLD_TOOLS := ["machete", "stone_axe", "pickaxe", "iron_pickaxe", "shovel", "fishing_rod", "watering_can",
+	"net", "ice_pick", "ice_drill"]
+
+
+## Ячейки внизу: инструменты, которые есть в сумке (по порядку; ячейка k — клавиша k, десятая — 0).
+func hold_slots() -> Array:
+	var out := []
+	for id in HOLD_TOOLS:
+		if has_tool(id):
+			out.append(id)
+	return out
+
+
+## Что сейчас в руке ("" — руки свободны).
+func held_tool() -> String:
+	return held if held != "" and has_tool(held) else ""
+
+
+func hold(id: String) -> void:
+	if id == held:
+		return
+	held = id
+	held_changed.emit()
 
 
 ## Холодно ли там, где сейчас герой: Ледяной остров, пока не зажжено Холодное сердце.
@@ -530,7 +557,7 @@ func save_game(extra: Dictionary) -> void:
 		"collections": collections, "chapter": chapter, "quest_index": quest_index,
 		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags, "cleared": cleared.keys(),
 		"time_of_day": time_of_day, "day": day, "world_time": world_time,
-		"location": location,
+		"location": location, "held": held,
 	}
 	# данные текущего острова кладём к остальным островам
 	loc_data[location] = extra.duplicate()
@@ -580,6 +607,7 @@ func load_game() -> Dictionary:
 	day = int(data.get("day", 1))
 	world_time = float(data.get("world_time", 0.0))
 	location = data.get("location", "home")
+	held = str(data.get("held", ""))
 	# глава дописана после того, как игрок её закончил: открываем следующую
 	if quest_index >= Data.CHAPTERS[mini(chapter, Data.CHAPTERS.size() - 1)]["quests"].size() and chapter + 1 < Data.CHAPTERS.size():
 		chapter += 1
@@ -607,6 +635,7 @@ func reset_state() -> void:
 	flags = {}
 	cleared = {}
 	location = "home"
+	held = ""
 	loc_data = {}
 	time_of_day = 0.3
 	day = 1
