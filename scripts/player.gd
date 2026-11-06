@@ -332,7 +332,7 @@ func _physics_process(delta: float) -> void:
 		_fall_speed = maxf(_fall_speed, -velocity.y)
 	if is_on_floor() and not _was_on_floor:
 		_squash = 0.75 if _fall_speed < 8.0 else 0.62  # приземление — сплющиваемся
-		Audio.play("step_sand", -4.0, 0.1)
+		Audio.play("step_sand%d" % randi_range(0, 3), -5.0, 0.05)
 		var hard := clampf((_fall_speed - 4.0) / 8.0, 0.0, 1.0)
 		if _fall_speed > 3.0 and global_position.y > -0.3:
 			FX.dust(self, Vector3(0, 0.05, 0), _ground_dust(), int(5 + hard * 8), 0.35 + hard * 0.25)
@@ -428,7 +428,9 @@ func _animate(delta: float, speed: float) -> void:
 		var h_here: float = isl.height_at(global_position.x, global_position.z) if isl else 5.0
 		var on_sand: bool = isl != null and h_here < 1.1
 		var on_snow: bool = Game.cold_active() and (h_here > Island.SNOW_LINE or global_position.y > h_here + 0.5)
-		Audio.play("step_snow" if on_snow else ("step_sand" if on_sand else "step_grass"), -10.0 + moving * 2.0, 0.15)
+		# у песка и травы по четыре варианта шага — чтобы не звучало одним и тем же звуком
+		var step := "step_snow" if on_snow else ("step_sand%d" % randi_range(0, 3) if on_sand else "step_grass%d" % randi_range(0, 3))
+		Audio.play(step, -12.0 + moving * 2.0, 0.06)
 		if on_sand and moving > 1.2 and global_position.y > -0.3:
 			FX.dust(self, Vector3(0, 0.05, 0.1), Color("f1dfb0"), 2, 0.22)
 	var swing := sin(_walk_phase) * 0.75 * moving

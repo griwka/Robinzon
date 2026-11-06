@@ -97,7 +97,7 @@ func _build_main() -> void:
 
 
 func _on_new_game() -> void:
-	if FileAccess.file_exists(Game.SAVE_PATH):
+	if FileAccess.file_exists(Game.save_path):
 		confirm_box.visible = true
 	else:
 		new_game_pressed.emit()

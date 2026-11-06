@@ -1375,6 +1375,10 @@ func _do_task(t: Dictionary) -> void:
 
 func _autotest() -> void:
 	print("=== AUTOTEST ===")
+	_check(Game.save_path != Game.SAVE_PATH, "автотест пишет в своё сохранение и не трогает сохранение игрока")
+	if Game.save_path == Game.SAVE_PATH:
+		get_tree().quit(1)   # ни в коем случае не удалять настоящее сохранение
+		return
 	Game.delete_save()
 	Game.reset_state()
 	Game.location = args.get("location", "home")

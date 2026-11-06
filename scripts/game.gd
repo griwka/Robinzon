@@ -14,6 +14,9 @@ signal shop_requested(shop_id: String)
 signal choice_requested(title: String, options: Array)
 
 const SAVE_PATH := "user://save.json"
+## Куда сохраняется игра. Автотесты, проверка и скриншоты пишут в отдельный файл и никогда
+## не трогают сохранение игрока (у exe и у проекта папка сохранений общая).
+var save_path := SAVE_PATH
 const SAVE_VERSION := 4
 const SETTINGS_PATH := "user://settings.cfg"
 const DEFAULT_SETTINGS := {"music": 0.6, "sfx": 0.8, "ambience": 0.7, "mouse": 1.0,
@@ -115,6 +118,9 @@ func storm_active() -> bool:
 
 
 func _ready() -> void:
+	for a in OS.get_cmdline_user_args():
+		if a in ["--autotest", "--validate", "--gallery"] or a.begins_with("--shot=") or a.begins_with("--gallery="):
+			save_path = "user://save_dev.json"
 	_setup_input()
 	reset_state()
 	load_settings()
@@ -529,7 +535,7 @@ func save_game(extra: Dictionary) -> void:
 	# данные текущего острова кладём к остальным островам
 	loc_data[location] = extra.duplicate()
 	data["locations"] = loc_data
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var f := FileAccess.open(save_path, FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify(data, "\t"))
 		notified.emit("Игра сохранена", Color("bfe3ff"))
@@ -544,9 +550,9 @@ func _int_dict(d) -> Dictionary:
 
 
 func load_game() -> Dictionary:
-	if not FileAccess.file_exists(SAVE_PATH):
+	if not FileAccess.file_exists(save_path):
 		return {}
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var f := FileAccess.open(save_path, FileAccess.READ)
 	var data = JSON.parse_string(f.get_as_text())
 	if typeof(data) != TYPE_DICTIONARY or int(data.get("version", 0)) < SAVE_VERSION:
 		return {}   # сохранение старой версии (другой сюжет) — начинаем заново
@@ -608,8 +614,8 @@ func reset_state() -> void:
 
 
 func delete_save() -> void:
-	if FileAccess.file_exists(SAVE_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+	if FileAccess.file_exists(save_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
 
 
 # ======================================================================= Управление
