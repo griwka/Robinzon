@@ -358,6 +358,17 @@ func _process(delta: float) -> void:
 	else:
 		hud.set_hint("")
 	hud.set_crosshair(build.is_active())
+	# точка на предмете, с которым будет действие
+	var tg: Node = player.target
+	var show_dot := false
+	if tg != null and is_instance_valid(tg) and not build.is_active() and not hud.any_open() and tg.has_method("interact_point"):
+		var wp: Vector3 = tg.interact_point()
+		var cam := player.camera
+		if not cam.is_position_behind(wp):
+			hud.set_target_dot(cam.unproject_position(wp), true)
+			show_dot = true
+	if not show_dot:
+		hud.set_target_dot(Vector2.ZERO, false)
 	player.build_aim = build.is_active()
 	hud.set_stamina(player.stamina, Player.STAMINA_MAX)
 	if not in_menu:

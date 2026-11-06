@@ -73,7 +73,28 @@ func run(chapters: Array = Data.CHAPTERS) -> Array[String]:
 		report.append("%s: купить в лавках на %d монет, в наградах %d — остальное (%d) зарабатывается хозяйством"
 			% [ch["title"], spend, earn, maxi(0, spend - earn)])
 	_check_pages(chapters)
+	_check_crops()
 	return errors
+
+
+## Грядки: каждая культура окупает свой пакетик, а семян с грядки в среднем меньше одного (лавка нужна).
+## В отчёт — выгода в монетах за минуту роста (без полива).
+func _check_crops() -> void:
+	_where = "Грядки"
+	for c in Data.CROPS:
+		var cfg: Dictionary = Data.CROPS[c]
+		var price := _min_price("seed_" + c)
+		var sell: int = Data.SELL_PRICES.get(c, 0)
+		var avg := (float(cfg["yield"][0]) + float(cfg["yield"][1])) * 0.5
+		var back: float = cfg["seed_back"]
+		if back >= 1.0:
+			_err("«%s»: семена возвращаются всегда — покупать их незачем" % c)
+		if price > 0 and sell > 0:
+			var profit := avg * sell - price * (1.0 - back)
+			if profit <= 0.0:
+				_err("«%s»: урожай не окупает пакетик семян" % c)
+			report.append("%s: %.1f мон/мин (пакетик %d, урожай %.1f × %d, семечко назад %d%%)"
+				% [cfg["name"], profit / float(cfg["time"]) * 60.0, price, avg, sell, int(back * 100.0)])
 
 
 ## Страницы журналов выдаются строго по сюжету — их должно хватать на всю коллекцию.

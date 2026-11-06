@@ -66,6 +66,20 @@ func _stream(name_: String) -> AudioStream:
 	return s
 
 
+var _variant_count: Dictionary = {}
+
+
+## Сколько вариантов у звука: sfx_<имя>0, sfx_<имя>1, … (0 — нет вариантов).
+func _variants(name_: String) -> int:
+	if _variant_count.has(name_):
+		return _variant_count[name_]
+	var n := 0
+	while n < 8 and ResourceLoader.exists(DIR + "sfx_%s%d.wav" % [name_, n]):
+		n += 1
+	_variant_count[name_] = n
+	return n
+
+
 func _loop_player(name_: String, bus: String) -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
 	p.bus = bus
@@ -91,7 +105,9 @@ func apply_volumes() -> void:
 
 ## Проиграть эффект. pos — точка в мире (звук тише, если далеко от игрока).
 func play(name_: String, volume_db := 0.0, pitch_var := 0.08, pos = null) -> void:
-	var s := _stream("sfx_" + name_)
+	# у звука может быть несколько записей (sfx_cluck0, sfx_cluck1, …) — берём случайную; иначе — одиночный
+	var n := _variants(name_)
+	var s := _stream("sfx_%s%d" % [name_, randi() % n]) if n > 0 else _stream("sfx_" + name_)
 	if s == null:
 		return
 	var now := Time.get_ticks_msec()

@@ -83,6 +83,12 @@ func _process(_delta: float) -> void:
 		p.pose_hold = float(pp[1]) if pp.size() > 1 else 0.5
 		if args.has("face"):
 			p.model.rotation.y = float(args["face"])
+	if _frames == 2 and args.get("near", "") == "crate":   # для скриншотов: герой у ящика, лицом к нему
+		for c in get_tree().get_nodes_in_group("interactable"):
+			if c is SupplyCrate:
+				p.global_position = c.global_position + Vector3(1.4, 0.4, 0.6)
+				p.model.rotation.y = atan2(p.global_position.x - c.global_position.x, p.global_position.z - c.global_position.z)
+				p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
 	if _frames == 2 and args.has("eyedeck"):
 		var gl := _tower()
 		if gl:
@@ -398,6 +404,28 @@ func _test_palm() -> void:
 	Game.inventory.erase("coconut")
 	if leaf0 > 0:
 		Game.inventory["leaf"] = leaf0
+
+
+## Инструменты не ломаются — вторую копию не сделать и не купить; лишние в старом сохранении разбираются.
+func _test_unique() -> void:
+	var inv: Dictionary = Game.inventory.duplicate()
+	var unl: Dictionary = Game.unlocked.duplicate()
+	Game.unlocked["net"] = true
+	Game.inventory = {"net": 1, "bamboo": 5, "rope": 5, "fiber": 10}
+	var r := {}
+	for rr in Data.RECIPES:
+		if rr["out"].has("net"):
+			r = rr
+	_check(not Game.craft(r) and Game.count("net") == 1, "второй сачок не сделать — он уже есть")
+	Game.inventory = {"net": 3}
+	Game._merge_duplicate_tools()
+	var back := 0
+	for m in r["in"]:
+		back += Game.count(m)
+	_check(Game.count("net") == 1 and back > 0, "лишние сачки из старого сохранения разобраны на материалы")
+	Game.inventory = inv
+	Game.unlocked = unl
+	Game.inventory_changed.emit()
 
 
 func _test_mistakes() -> void:
@@ -1498,6 +1526,7 @@ func _autotest() -> void:
 		_validate()
 		_test_quest_places()
 		_test_palm()
+		_test_unique()
 		_test_mistakes()
 		Game.start_current_quest()
 		_flush()

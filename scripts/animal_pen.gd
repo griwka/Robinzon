@@ -18,6 +18,7 @@ func _ready() -> void:
 	var cfg: Dictionary = Data.PENS[id]
 	for i in cfg["count"]:
 		var a := Animal.new()
+		a.pen = self
 		a.kind = cfg["animal"]
 		a.home = global_position
 		a.radius = 1.2 if id == "coop" else (1.0 if id == "goose_house" else 1.4)
@@ -89,9 +90,21 @@ func get_hint() -> String:
 			return "Аккумулятор висит. Заряжается только в грозу (%d%%)" % int(progress * 100.0)
 		return "Гроза! Аккумулятор заряжается: %d%%" % int(progress * 100.0)
 	if not fed:
-		return "%s голодны — покормить: %s" % [cfg["animal_name"], _cost_text(cfg["feed"])]
-	return "%s сыты. %s через ~%d c" % [cfg["animal_name"], Game.item_name(cfg["product"]),
-		int((1.0 - progress) * cfg["time"])]
+		return "%s голодны — покормить: %s (есть: %d)" % [cfg["animal_name"], _cost_text(cfg["feed"]), Game.count(cfg["feed"].keys()[0])]
+	return "%s сыты. %s — %s" % [cfg["animal_name"], Game.item_name(cfg["product"]), time_left_text()]
+
+
+## Сколько ждать продукта: «через 1 мин 10 с» (по игровому времени, как его считает загон).
+func time_left_text() -> String:
+	var left := int(ceil(maxf(0.0, 1.0 - progress) * float(Data.PENS[id]["time"])))
+	if left >= 60:
+		return "через %d мин %d с" % [left / 60, left % 60]
+	return "через %d с" % maxi(left, 1)
+
+
+## Есть ли у загона дело для игрока (собрать продукт или покормить).
+func needs_care() -> bool:
+	return product_ready or (not fed and id != "lightning_rod")
 
 
 func interact(_player: Node) -> void:
@@ -112,7 +125,7 @@ func interact(_player: Node) -> void:
 			fed = true
 			progress = 0.0
 			Game.bump("fed", id)
-			Audio.play({"coop": "cluck", "beehive": "rustle", "pig_sty": "oink", "goose_house": "honk", "lightning_rod": "radio", "tortoise_pen": "tortoise"}.get(id, "bleat"), -2.0, 0.1, global_position)
+			Audio.play({"coop": "cluck", "beehive": "rustle", "pig_sty": "oink", "goose_house": "honk", "lightning_rod": "radio", "tortoise_pen": "tortoise", "sheep_pen": "baa"}.get(id, "bleat"), -2.0, 0.1, global_position)
 			Game.notified.emit("Аккумулятор подключён. Ждём грозу!" if id == "lightning_rod" else "%s накормлены!" % cfg["animal_name"], Color("ffe08a"))
 			for a in animals:
 				if is_instance_valid(a):

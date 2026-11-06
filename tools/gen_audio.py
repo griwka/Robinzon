@@ -1078,6 +1078,28 @@ def sfx_fire_out():
     return normalize(x, 0.6)
 
 
+def sfx_pull(seed=0):
+    """Выдернуть траву с корнем: шорох стеблей, треск рвущихся корешков и мягкий «чпок» земли."""
+    r = np.random.default_rng(700 + seed)
+    d = 0.5
+    n = int(d * SR)
+    t = np.arange(n) / SR
+    swish_env = np.clip(t / 0.04, 0, 1) * np.exp(-t / 0.16)
+    swish = bandpass(r.standard_normal(n), 1200, 6500) * swish_env * 0.35
+    x = swish.copy()
+    for _ in range(int(r.integers(26, 40))):          # корешки рвутся: густые сухие щелчки
+        at = 0.03 + r.exponential(0.05)
+        m = int(r.integers(25, 90))
+        c = bandpass(r.standard_normal(m), 900, 5000) * np.exp(-np.arange(m) / (m / 4))
+        place(x, c * r.uniform(0.15, 0.45), at)
+    m = int(0.09 * SR)
+    tt = np.arange(m) / SR
+    pop = lowpass(r.standard_normal(m), 350) * np.exp(-tt / 0.02) * 1.4
+    place(x, pop, r.uniform(0.09, 0.13))
+    x *= np.clip((d - t) / 0.05, 0, 1)
+    return normalize(x, 0.6)
+
+
 def main():
     import sys
     os.makedirs(OUT, exist_ok=True)
@@ -1091,9 +1113,10 @@ def main():
                  "cheer": sfx_cheer, "gust": sfx_gust, "fire_out": sfx_fire_out}
         for i in range(4):
             table["step_sand%d" % i] = (lambda k: lambda: sfx_step("sand", k))(i)
-            table["step_grass%d" % i] = (lambda k: lambda: sfx_step("grass", k))(i)
-            table["chop%d" % i] = (lambda k: lambda: sfx_chop(k))(i)
+
         table["chop"] = sfx_chop
+        for i in range(3):
+            table["pull%d" % i] = (lambda k: lambda: sfx_pull(k))(i)
         table["whoosh"] = sfx_whoosh
         music = {"eye": music_eye, "meeting": music_meeting, "sea": music_sea, "keeper": music_keeper}
         for name in only:
@@ -1120,8 +1143,9 @@ def main():
     for i in range(4):
         sfx["bird%d" % i] = bird(100 + i)
         sfx["step_sand%d" % i] = sfx_step("sand", i)
-        sfx["step_grass%d" % i] = sfx_step("grass", i)
-        sfx["chop%d" % i] = sfx_chop(i)
+        # шаги по траве и удары топора — записи Kenney (tools/import_sounds.py), здесь не синтезируем
+        if i < 3:
+            sfx["pull%d" % i] = sfx_pull(i)
     for name, x in sfx.items():
         write_wav("sfx_" + name, x)
     amb_ocean()

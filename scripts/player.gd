@@ -367,7 +367,7 @@ func _physics_process(delta: float) -> void:
 		_fall_speed = maxf(_fall_speed, -velocity.y)
 	if is_on_floor() and not _was_on_floor:
 		_squash = 0.75 if _fall_speed < 8.0 else 0.62  # приземление — сплющиваемся
-		Audio.play("step_sand%d" % randi_range(0, 3), -5.0, 0.05)
+		Audio.play("step_sand", -5.0, 0.05)
 		var hard := clampf((_fall_speed - 4.0) / 8.0, 0.0, 1.0)
 		if _fall_speed > 3.0 and global_position.y > -0.3:
 			FX.dust(self, Vector3(0, 0.05, 0), _ground_dust(), int(5 + hard * 8), 0.35 + hard * 0.25)
@@ -394,6 +394,7 @@ func _physics_process(delta: float) -> void:
 	_animate(delta, flat.length())
 	_update_camera(delta)
 	_find_target()
+	_update_highlight()
 
 	if controls_enabled and can_interact:
 		var pressed := Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("interact")
@@ -469,7 +470,7 @@ func _animate(delta: float, speed: float) -> void:
 		var on_sand: bool = isl != null and h_here < 1.1
 		var on_snow: bool = Game.cold_active() and (h_here > Island.SNOW_LINE or global_position.y > h_here + 0.5)
 		# у песка и травы по четыре варианта шага — чтобы не звучало одним и тем же звуком
-		var step := "step_snow" if on_snow else ("step_sand%d" % randi_range(0, 3) if on_sand else "step_grass%d" % randi_range(0, 3))
+		var step := "step_snow" if on_snow else ("step_sand" if on_sand else "step_grass")
 		Audio.play(step, -12.0 + moving * 2.0, 0.06)
 		if on_sand and moving > 1.2 and global_position.y > -0.3:
 			FX.dust(self, Vector3(0, 0.05, 0.1), Color("f1dfb0"), 2, 0.22)
@@ -718,6 +719,9 @@ func _find_target() -> void:
 		# быстрый отсев по расстоянию — объектов на острове больше тысячи
 		if (n as Node3D).global_position.distance_squared_to(me) > 49.0:
 			continue
+		# бабочек и светлячков без сачка не ловят — не делаем их целью
+		if (n is Critters.Butterfly or n.is_in_group("firefly")) and not Game.has_tool("net"):
+			continue
 		var p: Vector3 = n.interact_point()
 		var to := p - global_position
 		if absf(to.y) > 3.0:
@@ -745,6 +749,36 @@ func _find_target() -> void:
 	if best != target:
 		target = best
 		_update_tool()
+
+
+# ------------------------------------------------------------------ Подсветка цели
+const HIGHLIGHT := preload("res://shaders/highlight.gdshader")
+static var _hl_mat: ShaderMaterial
+var _hl_node: Node = null
+var _hl_meshes: Array = []
+
+
+## Предмет, с которым будет действие, светится по контуру (подсветку снимаем, когда цель сменилась).
+func _update_highlight() -> void:
+	var want: Node = target if target != null and is_instance_valid(target) and not build_aim else null
+	if want != _hl_node:
+		for m in _hl_meshes:
+			if is_instance_valid(m) and (m as MeshInstance3D).material_overlay == _hl_mat:
+				(m as MeshInstance3D).material_overlay = null
+		_hl_meshes.clear()
+		_hl_node = want
+		if want:
+			if _hl_mat == null:
+				_hl_mat = ShaderMaterial.new()
+				_hl_mat.shader = HIGHLIGHT
+			for m in want.find_children("*", "MeshInstance3D", true, false):
+				# только сам предмет: большие плоскости (вода у места рыбалки и т. п.) не подсвечиваем
+				if (m as MeshInstance3D).get_aabb().size.length() < 14.0:
+					_hl_meshes.append(m)
+	# вспышка от удара (FX.flash) на время занимает тот же слот — потом возвращаем подсветку
+	for m in _hl_meshes:
+		if is_instance_valid(m) and (m as MeshInstance3D).material_overlay == null:
+			(m as MeshInstance3D).material_overlay = _hl_mat
 
 
 func try_interact() -> void:
