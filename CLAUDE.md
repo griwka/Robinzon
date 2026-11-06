@@ -84,6 +84,9 @@ Godot должен быть в PATH как `godot`; на Windows — консо�
 
 Окно игры для тестов и скриншотов — на втором мониторе и без звука: `--screen 1 --audio-driver Dummy`.
 Автотесты и проверка пишут в своё сохранение (`user://save_dev.json`) и не трогают сохранение игрока.
+`--autotest ... --walk` — вся глава ногами: перед каждым пунктом задания герой сам идёт к цели по навигационной сетке
+с настоящей физикой (заросли рубит, только если инструмент уже можно сделать; лезет и спускается по лианам и стенам,
+спрыгивает с высоты, пользуется люком бункера). Медленно: глава — 5–15 минут. Где не дошёл — FAIL «ногами: …».
 `--walktest` — проверка ногами, с настоящей физикой: маршруты по острову (форт — через ворота и подвал), ярусы бункера
 (герой стоит на полу). Автотест переносит героя напрямую и такие ошибки не видит. `--scan=N` — грубый поиск тупиков.
 
@@ -102,6 +105,7 @@ godot --headless --path . -- --autotest --location=home --chapter=7 --from=13 --
 godot --headless --path . -- --autotest --location=fog --chapter=7 --from=14
 godot --headless --path . -- --autotest --location=eye --chapter=8
 godot --headless --path . -- --autotest --location=eye --chapter=8 --from=9 --ending=keeper
+godot --headless --path . -- --autotest --location=eye --chapter=8 --walk
 godot --headless --path . -- --walktest --location=fort
 godot --headless --path . -- --walktest --location=storm
 godot --path . --resolution 1600x900 -- --shot=shot.png --frames=90 --location=fort

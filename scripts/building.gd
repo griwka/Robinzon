@@ -55,6 +55,8 @@ var spot: Node3D   # метка, на которой стоит постройк
 
 ## Мосток или фонарь занимает свою метку: лава там больше не мешает пройти, туман уходит, тени ложатся.
 func _claim_spot() -> void:
+	if is_queued_for_deletion() or spot != null:
+		return   # постройку уже убрали (или метка уже занята ею) — отложенный захват метки не нужен
 	for g in SPOT_GROUPS.get(id, []):
 		for s in get_tree().get_nodes_in_group(g):
 			var sp := s as Node3D

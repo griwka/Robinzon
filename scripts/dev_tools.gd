@@ -1044,17 +1044,31 @@ func _test_ending() -> void:
 ## Пройти героем к точке по-настоящему: нажата «вперёд», камера развёрнута к цели, работает физика.
 ## Заросли на пути (их в игре вырубают инструментом) убираем; застрять можно только на рельефе и стенах.
 ## Возвращает "" — дошёл, иначе — где застрял.
-func _walk_to(goal: Vector3, max_t := 40.0, near := 1.6) -> String:
+func _walk_to(goal: Vector3, max_t := 40.0, near := 1.6, honest := false) -> String:
 	var p: Player = main.player
 	p.controls_enabled = true
 	var t := 0.0
 	var last := p.global_position
 	var still := 0.0
+	var blocked := ""
+	var best_d := INF
+	var best_t := 0.0
 	while t < max_t:
 		var d := Vector3(goal.x - p.global_position.x, 0, goal.z - p.global_position.z)
 		if d.length() < near:
 			Input.action_release("move_forward")
+			Input.action_release("move_left")
+			Input.action_release("move_right")
 			return ""
+		if d.length() < best_d - 0.3:
+			best_d = d.length()
+			best_t = t
+		elif honest and t - best_t > 5.0:
+			Input.action_release("move_forward")
+			Input.action_release("move_left")
+			Input.action_release("move_right")
+			return "топчется на месте у %s (высота земли %.1f, до точки %.1f м%s)" % [str(p.global_position.snapped(Vector3.ONE * 0.1)),
+				main.island.height_at(p.global_position.x, p.global_position.z), d.length(), "" if blocked == "" else "; путь закрыт: " + blocked]
 		p.camera_yaw = atan2(-d.x, -d.z)
 		Input.action_press("move_forward")
 		await get_tree().physics_frame
@@ -1070,14 +1084,536 @@ func _walk_to(goal: Vector3, max_t := 40.0, near := 1.6) -> String:
 			var cleared := false
 			for n in get_tree().get_nodes_in_group("obstacle"):
 				if n is ResourceNode and n.active and (n as Node3D).global_position.distance_to(p.global_position) < 2.6:
+					var tool: String = ResourceNode.KINDS[n.kind]["tool"]
+					if honest and tool != "" and not Game.has_tool(tool):
+						if not _kit_ok(tool):
+							blocked = "%s — нужен %s, а его ещё нельзя сделать" % [n.kind, Game.item_name(tool)]
+							continue   # без инструмента не прорубиться — как в игре
 					n._deplete()
 					cleared = true
+			if honest and not cleared:
+				# как игрок: упёрся — подпрыгнуть, потом шагнуть вбок
+				if still > 0.6 and still < 0.6 + dt * 1.5:
+					Input.action_press("jump")
+					await get_tree().physics_frame
+					Input.action_release("jump")
+				if still > 1.2 and still < 1.8:
+					Input.action_press("move_left" if int(t) % 2 == 0 else "move_right")
+				else:
+					Input.action_release("move_left")
+					Input.action_release("move_right")
 			if not cleared and still > 2.5:
 				Input.action_release("move_forward")
-				return "застрял в %s (высота земли %.1f, до цели %.1f м)" % [str(p.global_position.snapped(Vector3.ONE * 0.1)),
-					main.island.height_at(p.global_position.x, p.global_position.z), d.length()]
+				Input.action_release("move_left")
+				Input.action_release("move_right")
+				return "застрял в %s (высота земли %.1f, до цели %.1f м%s)" % [str(p.global_position.snapped(Vector3.ONE * 0.1)),
+					main.island.height_at(p.global_position.x, p.global_position.z), d.length(), "" if blocked == "" else "; путь закрыт: " + blocked]
 	Input.action_release("move_forward")
 	return "не дошёл за %d с, остановился в %s" % [int(max_t), str(p.global_position.snapped(Vector3.ONE * 0.1))]
+
+
+## Тесты пишут в своё сохранение (save_dev.json); пока герой долго идёт ногами, игра успевает сделать автосохранение.
+## Стираем его при выходе, иначе следующий тест начнёт с того места, где закончил этот.
+func _exit_tree() -> void:
+	if (args.has("autotest") or args.has("walktest")) and Game.save_path != Game.SAVE_PATH:
+		Game.delete_save()
+
+
+# ------------------------------------------------------------------ Автотест ногами (--autotest --walk)
+var walk_mode := false
+var _nav_ready := false
+var _nav_region: NavigationRegion3D
+var walk_stats := {"ok": 0, "fail": 0, "skip": 0, "climbs": 0, "drops": 0}
+
+
+## Навигационная сетка острова: рельеф, постройки, стены, деревья. Преграды, которые расчищают инструментом
+## (заросли, завалы), в сетку не входят — путь идёт сквозь них, а прорубаем их по дороге, если есть чем.
+func _nav_bake() -> void:
+	var nm := NavigationMesh.new()
+	nm.cell_size = 0.25
+	nm.cell_height = 0.1
+	nm.agent_radius = 0.5   # с запасом к радиусу героя (0.3), кратно клетке; дорожки у храма — отдельным маршрутом
+	nm.agent_height = 1.6
+	nm.agent_max_climb = 0.4
+	nm.agent_max_slope = 44.0
+	nm.region_min_size = 4.0
+	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
+	nm.geometry_collision_mask = 1 | 2 | 4
+	var hidden: Array = []
+	for n in get_tree().get_nodes_in_group("obstacle"):
+		if n is ResourceNode and n.active and n.is_obstacle() and n.collision_layer != 0:
+			hidden.append([n, n.collision_layer])
+			n.collision_layer = 0
+	# выключенные стенки (место под мосток, когда мосток стоит; открытые ворота) сетка иначе считает стенами
+	var off_shapes: Array = []
+	for cs in main.find_children("*", "CollisionShape3D", true, false):
+		if (cs as CollisionShape3D).disabled and (cs as CollisionShape3D).shape:
+			off_shapes.append([cs, (cs as CollisionShape3D).shape])
+			(cs as CollisionShape3D).shape = null
+	var src := NavigationMeshSourceGeometryData3D.new()
+	NavigationServer3D.parse_source_geometry_data(nm, src, main)
+	for h in hidden:
+		h[0].collision_layer = h[1]
+	for o in off_shapes:
+		o[0].shape = o[1]
+	NavigationServer3D.bake_from_source_geometry_data(nm, src)
+	var map: RID = (main as Node3D).get_world_3d().navigation_map
+	NavigationServer3D.map_set_cell_size(map, nm.cell_size)
+	NavigationServer3D.map_set_cell_height(map, nm.cell_height)
+	if _nav_region:
+		_nav_region.queue_free()   # пересборка: постройки и открытые проходы меняют остров
+	var reg := NavigationRegion3D.new()
+	reg.navigation_mesh = nm
+	main.add_child(reg)
+	_nav_region = reg
+	# сетка подключается к карте не сразу: ждём, пока по ней начнёт строиться путь
+	for i in 120:
+		await get_tree().physics_frame
+		if i > 3 and NavigationServer3D.map_get_iteration_id(map) > 0 				and not NavigationServer3D.map_get_path(map, main.player.global_position, main.island.camp_center, true).is_empty():
+			break
+	_nav_ready = true
+	print("      навигационная сетка: %d многоугольников" % nm.get_polygon_count())
+
+
+## Дойти ногами по сетке. "" — дошёл.
+func _game_dist(a: Vector3, b: Vector3) -> float:
+	var to := b - a
+	if absf(to.y) > 3.0:
+		return INF
+	to.y *= 0.5
+	return to.length()
+
+
+func _nav_walk(goal: Vector3, near := 2.0) -> String:
+	var p: Player = main.player
+	var map: RID = (main as Node3D).get_world_3d().navigation_map
+	var path := NavigationServer3D.map_get_path(map, p.global_position, goal, true)
+	if path.is_empty():
+		return "нет пути"
+	var end: Vector3 = path[path.size() - 1]
+	var end_miss := _game_dist(end + Vector3(0, 0.9, 0), goal)
+	if end_miss > near + 3.0:
+		return "путь обрывается в %.1f м от цели (в %s)" % [Vector3(end - goal).length(), str(end.snapped(Vector3.ONE * 0.1))]
+	for i in range(1, path.size()):
+		var last := i == path.size() - 1
+		var why := await _walk_to(path[i], 30.0, 0.55 if not last else 0.6, true)
+		if why != "":
+			if _game_dist(p.global_position + Vector3(0, 0.9, 0), goal) <= near:
+				return ""   # уже дотягиваемся — дальше идти не нужно
+			return why
+		if _game_dist(p.global_position + Vector3(0, 0.9, 0), goal) <= near * 0.8:
+			return ""
+	# сетка кончилась чуть раньше цели (склон, край стены): последние метры — напрямую, как игрок
+	if _game_dist(p.global_position + Vector3(0, 0.9, 0), goal) > near:
+		await _walk_to(goal, 6.0, 0.5, true)
+	var miss := _game_dist(p.global_position + Vector3(0, 0.9, 0), goal)
+	if miss > near:
+		return "не дотянуться: остановился в %.1f м от цели (в %s)" % [miss, str(p.global_position.snapped(Vector3.ONE * 0.1))]
+	return ""
+
+
+## Маршрут через ручьи лавы к двери храма (Вулкан): снаружи — по мосткам и по узким дорожкам между ручьями.
+## Первая точка — снаружи, последняя — у двери. Навигационная сетка эти дорожки (0,5 м) не видит, а герой проходит.
+func _temple_lanes() -> Array:
+	var tp := _temple()
+	var c := tp.global_position
+	var a_out := atan2(tp.out.z, tp.out.x)
+	var at := func(r: float, da: float) -> Vector3:
+		var v := c + Vector3(cos(a_out + da), 0, sin(a_out + da)) * r
+		v.y = main.island.height_at(v.x, v.z)
+		return v
+	var ch: Array = VolcanoTemple.CHANNELS
+	var cur_a: float = ch[ch.size() - 1][1]
+	var pts: Array = [at.call(float(ch[ch.size() - 1][0]) + 2.4, cur_a)]
+	for k in range(ch.size() - 1, -1, -1):
+		var r: float = ch[k][0]
+		var a: float = ch[k][1]
+		var lane: float = r + 1.0   # по дорожке между ручьями — до места мостка
+		var n := int(ceil(absf(a - cur_a) / 0.12))
+		for j in range(1, n + 1):
+			pts.append(at.call(lane, lerpf(cur_a, a, float(j) / n)))
+		pts.append(at.call(r + 1.0, a))
+		pts.append(at.call(r - 1.0, a))   # через мосток
+		cur_a = a
+	pts.append(c + tp.out * 1.5)
+	return pts
+
+
+## Внутри колец лавы у храма?
+func _in_temple_rings(q: Vector3) -> bool:
+	var tp := _temple()
+	if tp == null:
+		return false
+	var ch: Array = VolcanoTemple.CHANNELS
+	if absf(q.y - main.island.height_at(tp.global_position.x, tp.global_position.z)) > 3.0:
+		return false   # выше или ниже храма (гребень кратера) — это не внутри колец
+	return Vector2(q.x - tp.global_position.x, q.z - tp.global_position.z).length() < float(ch[ch.size() - 1][0]) + 0.8
+
+
+## Добраться до точки: пешком; не выходит — спрыгнуть вниз или залезть по лиане/стене, которая туда выводит.
+func _reach(goal: Vector3, depth := 0, near := 2.0) -> String:
+	var p: Player = main.player
+	if _temple() and _in_temple_rings(goal) != _in_temple_rings(p.global_position) and depth < 12:
+		var lanes := _temple_lanes()
+		if not _in_temple_rings(goal):
+			lanes.reverse()   # изнутри — наружу
+		else:
+			var w0 := await _reach(lanes[0], depth + 1, 1.2)
+			if w0 != "":
+				return "к мосткам у храма не дойти: " + w0
+		for i in range(1, lanes.size()):
+			var wl := await _walk_to(lanes[i], 15.0, 0.45, true)
+			var lp: Vector3 = lanes[i]
+			if wl != "" and Vector2(lp.x - p.global_position.x, lp.z - p.global_position.z).length() > 1.2:
+				return "по мосткам у храма не пройти (точка %d): %s" % [i, wl]
+		if _in_temple_rings(goal) and _game_dist(p.global_position + Vector3(0, 0.9, 0), goal) <= near:
+			return ""
+		return await _reach(goal, depth + 1, near)
+	var why := await _nav_walk(goal, near)
+	if why == "" or depth >= 12:
+		return why
+	# сетка грубая (ступеньки, подвал, узкие проходы): пробуем просто идти прямо к цели, как игрок
+	if absf(p.global_position.y - goal.y) < 3.0:
+		var dw2 := await _walk_to(goal, 25.0, near * 0.8, true)
+		if dw2 == "" or _game_dist(p.global_position + Vector3(0, 0.9, 0), goal) <= near:
+			return ""
+	# люк бункера (Грозовой): вниз и наверх — через люк, как в игре (E)
+	var below := goal.y < -8.0
+	if below != (p.global_position.y < -8.0):
+		for h in get_tree().get_nodes_in_group("interactable"):
+			if h is StormStation.Hatch and h.down == below:
+				var hw := await _reach(h.interact_point(), depth + 1, 2.3)
+				if hw != "":
+					return "к люку не дойти: " + hw
+				h.interact(p)
+				for i in 20:
+					await get_tree().physics_frame
+				return await _reach(goal, depth + 1, near)
+	if p.global_position.y > goal.y + 2.0:
+		var dw := await _climb_down(goal)
+		if dw != "":
+			dw = await _jump_down(goal)
+		if dw != "":
+			return why + "; спуститься не вышло: " + dw
+		return await _reach(goal, depth + 1, near)
+	var best: Climbable = null
+	var bd := INF
+	for c in get_tree().get_nodes_in_group("climb"):
+		var e: Vector3 = c.world_exit()
+		var dd := e.distance_to(goal)
+		if dd < 14.0 and absf(e.y - goal.y) < 2.5 and dd < bd:
+			best = c
+			bd = dd
+	if best == null:
+		return why
+	# к низу подъёма — так близко, чтобы ухватиться (в игре — 1.35 м по горизонтали)
+	var w := await _reach(best.world_bottom() + Vector3(0, 0.9, 0), depth + 1, 1.25)
+	if w != "":
+		# точно как в игре: дотянулись ли до подъёма (подсказка «лезть»)
+		await _walk_to(best.world_bottom(), 4.0, 0.9, true)
+		p._find_climb()
+		if not (p.near_climb == best and not p.near_climb_down):
+			return "к низу подъёма не дойти: " + w
+	var cw := await _climb_up(best)
+	if cw != "":
+		return cw
+	return await _reach(goal, depth + 1, near)
+
+
+## Инструмент «с собой»: глава в тесте начинается с пустой сумкой, а игрок к этому времени его уже сделал.
+## Рецепт открыт — выдаём (true); ещё закрыт — инструмента у игрока быть не может (false).
+func _kit_ok(tool: String) -> bool:
+	if Game.has_tool(tool):
+		return true
+	for r in Data.RECIPES:
+		if r["out"].has(tool) and Game.recipe_unlocked(r):
+			_give({tool: 1})
+			return true
+	return false
+
+
+## На морозе (Ледяной до оттепели) — как игрок: тёплая одежда, если её уже можно сделать, и погреться у огня.
+func _warm_up(need := 60.0) -> void:
+	if not Game.cold_active():
+		return
+	for c in ["down_jacket", "sweater", "felt_boots", "mittens"]:
+		_kit_ok(c)
+	if Game.warmth >= need:
+		return
+	var wm := get_tree().get_first_node_in_group("warmth") as Warmth
+	if wm == null:
+		return
+	var p: Player = main.player
+	var f := wm.nearest_fire(p.global_position)
+	if f == Vector3.INF:
+		return
+	await _nav_walk(f, 2.0)
+	var t := 0.0
+	while Game.warmth < 95.0 and t < 12.0:
+		await get_tree().physics_frame
+		t += get_physics_process_delta_time()
+
+
+## Перед подъёмом отдышаться, как игрок: постоять, пока силы не вернутся (на земле — быстро).
+func _rest() -> void:
+	var p: Player = main.player
+	var t := 0.0
+	while p.stamina < Player.STAMINA_MAX * 0.8 and t < 8.0:
+		await get_tree().physics_frame
+		t += get_physics_process_delta_time()
+
+
+## Залезть: встать у низа, нажать Пробел, держать «вверх» до самого верха.
+func _climb_up(c: Climbable) -> String:
+	var p: Player = main.player
+	var b := c.world_bottom()
+	await _walk_to(b, 6.0, 0.9, true)
+	await get_tree().physics_frame
+	if p.near_climb != c:
+		return "у низа подъёма (%s) нельзя ухватиться" % str(b.snapped(Vector3.ONE * 0.1))
+	# снаряжение: глава в тесте начинается с пустой сумкой, а игрок к этому времени уже сделал нужное.
+	# Если рецепт открыт — вещь «с собой»; если ещё нет — это настоящая ошибка сюжета
+	var kit: Array[String] = []
+	if not c.ladder:
+		kit.append("climbing_gloves")
+	if c.ice:
+		kit.append("ice_pick")
+	for tool in kit:
+		if not Game.has_tool(tool) and not _kit_ok(tool):
+			return "для подъёма нужен «%s», а его ещё нельзя сделать" % Game.item_name(tool)
+	if Game.cold_active() and Game.warmth < 80.0:
+		await _warm_up(80.0)
+		await _reach(b + Vector3(0, 0.9, 0), 6, 1.25)   # от огня — обратно к подъёму
+		await _walk_to(b, 4.0, 0.9, true)
+	await _rest()
+	await get_tree().physics_frame
+	if p.near_climb != c or p.near_climb_down:
+		return "отошёл от подъёма и не вернулся (у %s)" % str(p.global_position.snapped(Vector3.ONE * 0.1))
+	Input.action_press("jump")
+	await get_tree().physics_frame
+	Input.action_release("jump")
+	await get_tree().physics_frame
+	if p.climbing != c:
+		var why := c.locked_hint
+		if why == "" and not c.ladder and Game.storm_active():
+			why = "гроза — лазать нельзя"
+		elif why == "" and Game.frozen():
+			why = "герой замёрз"
+		elif why == "" and p.stamina < 10.0:
+			why = "нет сил"
+		elif why == "" and c.ice and not (Game.has_tool("ice_pick") and Game.has_tool("climbing_gloves")):
+			why = "нет ледоруба или перчаток"
+		elif why == "":
+			why = "near=%s down=%s силы=%d тепло=%d" % [str(p.near_climb == c), str(p.near_climb_down), int(p.stamina), int(Game.warmth)]
+		return "не начать подъём: %s" % (why if why != "" else "непонятно почему")
+	var t := 0.0
+	Input.action_press("move_forward")
+	while p.climbing == c and t < 60.0:
+		await get_tree().physics_frame
+		t += get_physics_process_delta_time()
+		# на уступе можно повисеть: устали — отдыхаем, как игрок
+		if c.rest_step > 0.0 and p.stamina < Player.STAMINA_MAX * 0.25 and c.at_rest(p.global_position.y - b.y):
+			Input.action_release("move_forward")
+			while p.stamina < Player.STAMINA_MAX * 0.9 and p.climbing == c:
+				await get_tree().physics_frame
+			Input.action_press("move_forward")
+	Input.action_release("move_forward")
+	if p.climbing == c:
+		return "подъём не кончился за минуту"
+	if p.global_position.y < c.world_top().y - 1.5:
+		return "сорвался с подъёма на высоте %.1f м" % (p.global_position.y - b.y)
+	walk_stats["climbs"] += 1
+	return ""
+
+
+## Спуститься по подъёму сверху (лиана, стена, лестница): дойти до места схода, Пробел, держать S до низа.
+func _climb_down(goal: Vector3) -> String:
+	var p: Player = main.player
+	var y0 := p.global_position.y
+	var best: Climbable = null
+	var bd := INF
+	for c in get_tree().get_nodes_in_group("climb"):
+		var e: Vector3 = c.world_exit()
+		if absf(e.y - y0) > 1.5 or c.world_bottom().y > y0 - 2.0:
+			continue
+		var dd: float = Vector2(e.x - p.global_position.x, e.z - p.global_position.z).length() + c.world_bottom().distance_to(goal) * 0.3
+		if dd < bd:
+			bd = dd
+			best = c
+	if best == null:
+		return "сверху нет подъёма вниз"
+	await _nav_walk(best.world_exit(), 0.5)
+	await get_tree().physics_frame
+	if not (p.near_climb == best and p.near_climb_down):
+		return "у верха подъёма не ухватиться"
+	if not best.ladder and not _kit_ok("climbing_gloves"):
+		return "для спуска нужны перчатки, а их ещё нельзя сделать"
+	if best.ice and not _kit_ok("ice_pick"):
+		return "для спуска нужен ледоруб, а его ещё нельзя сделать"
+	if Game.frozen():
+		return "герой замёрз наверху"
+	await _rest()
+	Input.action_press("jump")
+	await get_tree().physics_frame
+	Input.action_release("jump")
+	await get_tree().physics_frame
+	if p.climbing != best:
+		return "спуск не начался"
+	var t := 0.0
+	Input.action_press("move_back")
+	while p.climbing == best and t < 60.0:
+		await get_tree().physics_frame
+		t += get_physics_process_delta_time()
+	Input.action_release("move_back")
+	if p.global_position.y > y0 - 1.5:
+		return "спуск не довёл вниз"
+	walk_stats["climbs"] += 1
+	return ""
+
+
+## Спуститься с высоты: идти к цели с прыжками, пока не окажемся ниже; не вышло — пробуем другие стороны.
+func _jump_down(goal: Vector3) -> String:
+	var p: Player = main.player
+	var y0 := p.global_position.y
+	# сначала — проём у верха лестницы или лианы (в бункере спрыгивают именно там)
+	for c in get_tree().get_nodes_in_group("climb"):
+		var e: Vector3 = c.world_exit()
+		var tb: Vector3 = c.world_bottom()
+		if absf(e.y - y0) < 1.5 and Vector2(e.x - p.global_position.x, e.z - p.global_position.z).length() < 14.0 and tb.y < y0 - 2.0:
+			await _nav_walk(e, 1.0)
+			var dv := Vector3(tb.x - e.x, 0, tb.z - e.z)
+			if dv.length() < 0.1:
+				continue
+			p.camera_yaw = atan2(-dv.x, -dv.z)
+			var t0 := 0.0
+			Input.action_press("move_forward")
+			while t0 < 3.0 and not (p.global_position.y < y0 - 1.5 and p.is_on_floor()):
+				await get_tree().physics_frame
+				t0 += get_physics_process_delta_time()
+			Input.action_release("move_forward")
+			if p.global_position.y < y0 - 1.5:
+				walk_stats["drops"] += 1
+				return ""
+	var dirs: Array = [goal - p.global_position]
+	for k in 8:
+		dirs.append(Vector3(cos(k * PI / 4), 0, sin(k * PI / 4)))
+	for d in dirs:
+		var dv: Vector3 = d
+		dv.y = 0.0
+		if dv.length() < 0.01:
+			continue
+		var t := 0.0
+		p.camera_yaw = atan2(-dv.x, -dv.z)
+		Input.action_press("move_forward")
+		while t < 3.0:
+			if int(t * 4.0) % 4 == 0:
+				Input.action_press("jump")
+			else:
+				Input.action_release("jump")
+			await get_tree().physics_frame
+			t += get_physics_process_delta_time()
+			if p.global_position.y < y0 - 1.5 and p.is_on_floor():
+				break
+		Input.action_release("move_forward")
+		Input.action_release("jump")
+		if p.global_position.y < y0 - 1.5:
+			walk_stats["drops"] += 1
+			return ""
+	return "со всех сторон перила или стены (высота %.1f)" % y0
+
+
+## Куда идти для пункта задания (Vector3.INF — цели на этом острове нет или ходить не нужно).
+func _task_goal(t: Dictionary) -> Vector3:
+	var target: String = t["target"]
+	var p: Player = main.player
+	match t["kind"]:
+		"talk", "delivered":
+			if t.get("radio", false):
+				return Vector3.INF
+			var who: String = t.get("to", "marta") if t["kind"] == "delivered" else target
+			if who == "parrot" and main.parrot:
+				return main.parrot.global_position
+			for n in get_tree().get_nodes_in_group("interactable"):
+				if n is NPCPerson and n.npc_id == who:
+					return n.interact_point()
+		"collected", "found", "lit", "restored":
+			var best := Vector3.INF
+			for c in get_tree().get_nodes_in_group("interactable"):
+				var ok: bool = (target == "crate" and c is SupplyCrate) or (c is StoryPlace and (c.id == target or (target == "ice_chest" and c.id.begins_with("ice_chest"))))
+				if ok and (c as Node3D).global_position.distance_to(p.global_position) < best.distance_to(p.global_position):
+					best = c.interact_point()
+			return best
+		"cleared":
+			var best := Vector3.INF
+			for c in get_tree().get_nodes_in_group("interactable"):
+				if c is ResourceNode and c.kind == target and c.active \
+						and (c as Node3D).global_position.distance_to(p.global_position) < best.distance_to(p.global_position):
+					best = c.interact_point()
+			return best
+		"fished":
+			for c in get_tree().get_nodes_in_group("interactable"):
+				if c is FishingSpot and (c.ice == (target == "ice_fish")):
+					return (c as Node3D).global_position
+		"solved":
+			match target:
+				"shadows": return _shrine().global_position if _shrine() else Vector3.INF
+				"monolith": return _temple().global_position if _temple() else Vector3.INF
+				"stars": return _glacier().dial.global_position if _glacier() else Vector3.INF
+				_:
+					var f := _fort()
+					if f and not f.levers.is_empty():
+						return (f.levers[0] as Node3D).global_position
+		"reached":
+			if target.begins_with("eye_deck"):
+				return _tower().deck_point(int(target.substr(8)) - 1) if _tower() else Vector3.INF
+			match target:
+				"stilt_camp": return _camp().deck_point() if _camp() else Vector3.INF
+				"temple_gate": return _temple().global_position + _temple().out * 1.5 if _temple() else Vector3.INF
+				"crater_top": return _crater().top_point() if _crater() else Vector3.INF
+				"glacier_top": return _glacier().top_point() if _glacier() else Vector3.INF
+			if target.begins_with("bunker"):
+				return _station().deck_point(target) if _station() else Vector3.INF
+			for n in get_tree().get_nodes_in_group("obstacle"):
+				if n is BanyanTree and target.begins_with("deck"):
+					return n.to_global(n._deck_center(int(target.substr(4)) - 1))
+	return Vector3.INF
+
+
+## Перед пунктом задания — дойти до цели ногами. Не вышло — ошибка, а героя переносим, чтобы проверить остальное.
+func _walk_for_task(t: Dictionary) -> void:
+	if not _nav_ready:
+		await _nav_bake()
+	var goal := _task_goal(t)
+	if goal == Vector3.INF:
+		walk_stats["skip"] += 1
+		return
+	var p: Player = main.player
+	# дотянуться, как в игре: до места — 3.6 м, до большой преграды — 3.4, до жителя и ящика — 2.6
+	var near := 2.0
+	match t["kind"]:
+		"found", "lit", "restored":
+			near = 3.3 if t["target"] != "crate" else 2.3
+		"talk", "delivered", "collected", "fished":
+			near = 2.3
+		"cleared":
+			near = 3.1 if ResourceNode.KINDS.has(t["target"]) and t["target"] in ["rock", "jungle_tree", "cliff", "fallen_log", "thicket", "bamboo", "crooked_tree", "rockfall", "ice_wall", "pine", "basalt"] else 2.3
+	if _game_dist(p.global_position + Vector3(0, 0.9, 0), goal) <= near:
+		walk_stats["ok"] += 1
+		return
+	var from := p.global_position
+	var why := await _reach(goal, 0, near)
+	if why != "":
+		# по ходу главы построили мостки, открыли ворота, расчистили проходы — пересобираем сетку и пробуем ещё раз
+		await _nav_bake()
+		why = await _reach(goal, 0, near)
+	_check(why == "", "ногами: %s → «%s» (%s %s)%s" % [str(from.snapped(Vector3.ONE)), t["text"], t["kind"], t["target"],
+		"" if why == "" else " — " + why])
+	walk_stats["ok" if why == "" else "fail"] += 1
+	if why != "":
+		p.global_position = goal + Vector3(0, 0.6, 0)
+		p.velocity = Vector3.ZERO
+		for i in 5:
+			await get_tree().physics_frame
 
 
 ## Маршрут ногами: из одной точки через несколько — без телепортов. Печатает и проверяет каждый отрезок.
@@ -1132,6 +1668,30 @@ func _walktest() -> void:
 					await get_tree().physics_frame
 				var dy := p.global_position.y - dp.y
 				_check(absf(dy) < 0.8 and not p.in_water(), "ярус %d бункера (высота %.1f): герой стоит на полу (сдвиг %.2f м)" % [k, dp.y, dy])
+			await _walk_route("от причала к лагерю и обратно", dock, [camp, dock])
+		"volcano":
+			# к двери храма — по трём мосткам над ручьями лавы и по дорожкам между ручьями
+			var tp := _temple()
+			_give({"iron_pickaxe": 1})   # к храму идут уже с железной киркой (базальт вокруг)
+			for sp in tp.spots:
+				var bb: Building = main.build.spawn_building("stone_bridge", sp.global_position, sp.rotation.y)
+				bb._claim_spot()
+			for i in 5:
+				await get_tree().physics_frame
+			var pts := _temple_lanes()
+			var start: Vector3 = pts.pop_front()
+			var p: Player = main.player
+			p.global_position = start + Vector3(0, 0.6, 0)
+			p.velocity = Vector3.ZERO
+			for i in 10:
+				await get_tree().physics_frame
+			for i in pts.size():
+				var why := await _walk_to(pts[i], 15.0, 0.45, true)
+				if why != "":
+					_check(false, "к храму по мосткам: точка %d из %d — %s" % [i + 1, pts.size(), why])
+					break
+				if i == pts.size() - 1:
+					_check(true, "к двери храма по трём мосткам — дошёл ногами")
 			await _walk_route("от причала к лагерю и обратно", dock, [camp, dock])
 		_:
 			await _walk_route("от причала к лагерю и обратно", dock, [camp, dock])
@@ -1247,6 +1807,19 @@ func _test_climb() -> void:
 	Input.action_release("move_forward")
 	_check(p.climbing == null and p.global_position.y > c.world_top().y - 1.5, "лазание доводит до яруса (высота %.1f м за %.1f c)" % [p.global_position.y - b.y, steps / 60.0])
 	_check(p.stamina < start_stamina - 10.0, "подъём тратит силы (%d → %d)" % [start_stamina, p.stamina])
+	# и обратно: у верха (там, где сошли) — Пробел, и спускаемся по той же лиане до земли
+	p.global_position = c.world_exit()
+	p._find_climb()
+	_check(p.near_climb == c and p.near_climb_down and p.get_hint().contains("Спуститься"), "у верха лианы можно спуститься: «%s»" % p.get_hint())
+	p.stamina = Player.STAMINA_MAX
+	p._start_climb_down(c)
+	Input.action_press("move_back")
+	steps = 0
+	while p.climbing and steps < 1200:
+		p._physics_process(1.0 / 60.0)
+		steps += 1
+	Input.action_release("move_back")
+	_check(p.climbing == null and p.global_position.y < b.y + 0.6, "спуск по лиане доводит до земли (высота %.1f м)" % (p.global_position.y - b.y))
 	Game.inventory.erase("climbing_gloves")
 
 
@@ -1541,6 +2114,11 @@ func _do_task(t: Dictionary) -> void:
 					var lb: Building = main.build.spawn_building("pumpkin_lantern", sh.spots[i].global_position, 0.0)
 					lb._claim_spot()
 				sh._process(0.0)
+				if args.has("debugshadows"):
+					var st := []
+					for k in sh.spots.size():
+						st.append("%d:%s" % [k, sh.spots[k].used])
+					print("      метки у камней: ", " ".join(st), "  нужно: ", FogShrine.RIGHT, "  решено: ", sh.solved())
 				return
 			if target == "monolith":
 				var tp := _temple()
@@ -1673,7 +2251,8 @@ func _do_task(t: Dictionary) -> void:
 
 
 func _autotest() -> void:
-	print("=== AUTOTEST ===")
+	walk_mode = args.has("walk")
+	print("=== AUTOTEST%s ===" % (" НОГАМИ" if walk_mode else ""))
 	_check(Game.save_path != Game.SAVE_PATH, "автотест пишет в своё сохранение и не трогает сохранение игрока")
 	if Game.save_path == Game.SAVE_PATH:
 		get_tree().quit(1)   # ни в коем случае не удалять настоящее сохранение
@@ -1758,6 +2337,9 @@ func _autotest() -> void:
 			if Game.current_quest() != q:
 				break
 			if Game.task_progress(t) < t["count"]:
+				if walk_mode:
+					await _walk_for_task(t)
+					_flush()
 				_do_task(t)
 				_flush()
 		_flush()

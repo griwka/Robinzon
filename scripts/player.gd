@@ -55,6 +55,7 @@ var build_aim := false               # строим: камера смотрит
 var force_indoor := false             # внутри башни (Великий маяк): камера ближе, как в бункере
 var ext_push := Vector3.ZERO          # ветер на открытом балконе толкает героя
 var near_climb: Climbable = null
+var near_climb_down := false   # стоим у верха подъёма — Пробел: спуститься по нему (с балкона маяка, яруса, ледника)
 var _climb_side := Vector3.FORWARD
 var _climb_phase := 0.0
 # ощущение от управления: тряска камеры, бег, приземление, вода, всплывающие значки
@@ -321,6 +322,9 @@ func _physics_process(delta: float) -> void:
 			Game.notified.emit("Голыми руками по лиане не залезть — нужны перчатки лазальщика", Color("ff9d7a"))
 		elif stamina < 10.0:
 			Game.notified.emit("Нет сил. Отдохни или поешь (Q)", Color("ff9d7a"))
+		elif near_climb_down:
+			_start_climb_down(near_climb)
+			return
 		else:
 			_start_climb(near_climb)
 			return
@@ -658,12 +662,24 @@ func in_water() -> bool:
 # ------------------------------------------------------------------ Лазание
 func _find_climb() -> void:
 	near_climb = null
+	near_climb_down = false
 	for c in get_tree().get_nodes_in_group("climb"):
 		var b: Vector3 = c.world_bottom()
 		var t: Vector3 = c.world_top()
 		if Vector2(global_position.x - b.x, global_position.z - b.z).length() < 1.35 \
 				and global_position.y > b.y - 0.7 and global_position.y < t.y - 0.8:
 			near_climb = c
+			return
+	# у верха: там, где сходят с подъёма, можно и спуститься обратно (иначе с балкона за перилами не слезть)
+	for c in get_tree().get_nodes_in_group("climb"):
+		var t: Vector3 = c.world_top()
+		var e: Vector3 = c.world_exit()
+		if global_position.y < t.y - 1.4 or global_position.y > t.y + 0.8:
+			continue
+		if Vector2(global_position.x - e.x, global_position.z - e.z).length() < 0.8 \
+				or Vector2(global_position.x - t.x, global_position.z - t.z).length() < 1.4:
+			near_climb = c
+			near_climb_down = true
 			return
 
 
@@ -675,6 +691,23 @@ func _start_climb(c: Climbable) -> void:
 	_climb_side = side.normalized() if side.length() > 0.05 else -Basis(Vector3.UP, model.rotation.y).z * -1.0
 	velocity = Vector3.ZERO
 	Audio.play("rustle", -4.0)
+
+
+## Спуск сверху: повиснуть у верха подъёма с той стороны, где по нему лезут, и дальше — S вниз.
+func _start_climb_down(c: Climbable) -> void:
+	_start_climb(c)
+	var b := c.world_bottom()
+	var t := c.world_top()
+	var side := Vector3.ZERO
+	if c.ladder or c.ice or c.holds != "":
+		side = Vector3(sin(c.ladder_yaw), 0, cos(c.ladder_yaw))   # стена и лестница смотрят туда, где висит лезущий
+	else:
+		var e := c.world_exit()
+		side = Vector3(t.x - e.x, 0, t.z - e.z)   # лиана, скала: висим с дальней от схода стороны
+	if side.length() > 0.05:
+		_climb_side = side.normalized()
+	global_position = Vector3(b.x, t.y - 1.2, b.z)
+	model.rotation.y = atan2(_climb_side.x, _climb_side.z)
 
 
 func _stop_climb(push := Vector3.ZERO) -> void:
@@ -839,6 +872,10 @@ func get_hint() -> String:
 	if near_climb and (target == null or not is_instance_valid(target)):
 		if near_climb.locked_hint != "":
 			return near_climb.locked_hint
+		if near_climb_down:
+			var what := "по лестнице" if near_climb.ladder else ("по ледяной стене" if near_climb.ice else ("по выступам" if near_climb.holds != "" or near_climb.rock else "по лиане"))
+			var need := near_climb.ladder or Game.has_tool("climbing_gloves") and (not near_climb.ice or Game.has_tool("ice_pick"))
+			return ("[Пробел]  Спуститься " + what) if need else ("Спуститься " + what + " (нужны перчатки лазальщика)")
 		if near_climb.ice:
 			return "[Пробел]  Лезть по ледяной стене" if Game.has_tool("ice_pick") and Game.has_tool("climbing_gloves") \
 				else "Ледяная стена (нужны ледоруб и перчатки лазальщика)"
