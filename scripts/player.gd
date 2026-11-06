@@ -33,6 +33,9 @@ var arm_r: Node3D
 var leg_l: Node3D
 var leg_r: Node3D
 var hand_tool: Node3D
+var back_tool: Node3D     # инструмент за спиной, когда руки свободны
+var _hand_id := ""
+var _back_id := ""
 var _walk_phase := 0.0
 var _swing_t := 0.0
 var _head_lag := Vector3.ZERO
@@ -101,6 +104,7 @@ func _build_model() -> void:
 		hand_tool.rotation = Vector3(PI / 2, 0, 0)
 		var hand := arm_r.find_child("HandR", true, false) as Node3D
 		(hand if hand else arm_r).add_child(hand_tool)
+		_make_back_tool()
 		for mi in g.find_children("*", "MeshInstance3D", true, false):
 			(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		return
@@ -147,6 +151,7 @@ func _build_model_simple() -> void:
 	hand_tool.position = Vector3(0, -0.4, 0)
 	hand_tool.rotation = Vector3(PI / 2, 0, 0)
 	arm_r.add_child(hand_tool)
+	_make_back_tool()
 
 	# голова (большая — чиби-пропорции)
 	head = Node3D.new()
@@ -217,16 +222,40 @@ func update_clothes() -> void:
 		g.queue_free()
 
 
+## Крепление за спиной: инструмент висит наискосок, рукоять у плеча.
+func _make_back_tool() -> void:
+	back_tool = Node3D.new()
+	back_tool.name = "BackTool"
+	back_tool.position = Vector3(-0.16, 0.36, 0.3)
+	back_tool.rotation = Vector3(0.0, 0.0, PI - 0.95)
+	body_pivot.add_child(back_tool)
+
+
+## Инструмент в руке — только когда герой наведён на то, что им добывают (или замахнулся).
+## Иначе руки свободны, а топор (мачете, кирка) висит за спиной и не волочится по земле.
 func _update_tool() -> void:
-	for c in hand_tool.get_children():
-		c.queue_free()
 	var want := ""
 	if target and is_instance_valid(target) and target.has_method("tool_hint"):
 		want = target.tool_hint()
-	if want == "" or not Game.has_tool(want):
-		want = "stone_axe" if Game.has_tool("stone_axe") else ""
-	if want != "":
-		hand_tool.add_child(Models.tool_model(want))
+	if want != "" and not Game.has_tool(want):
+		want = ""
+	var back := ""
+	for id in ["stone_axe", "machete", "pickaxe", "iron_pickaxe"]:
+		if Game.has_tool(id) and id != want:
+			back = id
+			break
+	if want != _hand_id:
+		_hand_id = want
+		for c in hand_tool.get_children():
+			c.queue_free()
+		if want != "":
+			hand_tool.add_child(Models.tool_model(want))
+	if back_tool and back != _back_id:
+		_back_id = back
+		for c in back_tool.get_children():
+			c.queue_free()
+		if back != "":
+			back_tool.add_child(Models.tool_model(back))
 
 
 # ------------------------------------------------------------------ Камера
