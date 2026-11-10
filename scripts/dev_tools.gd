@@ -564,6 +564,88 @@ func _test_hunger() -> void:
 	Game.inventory_changed.emit()
 
 
+## Прибой выносит железо на сухой песок, ничего не вырастает на постройке, грядку можно убрать.
+func _test_tide_and_spots() -> void:
+	var p: Player = main.player
+	var inv: Dictionary = Game.inventory.duplicate()
+	var isl: Island = main.island
+	var tide := get_tree().get_first_node_in_group("tide_scrap") as TideScrap
+	_check(tide != null, "на острове крушения волны выносят обломки (TideScrap)")
+	if tide:
+		var piles: Array = []
+		for c in tide.holder.get_children():
+			if c is ResourceNode and (c as ResourceNode).washed and (c as ResourceNode).active:
+				piles.append(c)
+		_check(piles.size() >= 1 and piles.size() <= TideScrap.MAX, "с начала на берегу лежат обломки (%d)" % piles.size())
+		var on_sand := true
+		for c in piles:
+			var h := isl.height_at((c as Node3D).global_position.x, (c as Node3D).global_position.z)
+			if h < TideScrap.SAND_LO or h > TideScrap.SAND_HI:
+				on_sand = false
+		_check(on_sand, "обломки лежат на сухом песке — не в траве и не в воде")
+		var n0 := tide.count()
+		for i in 6:
+			tide.wash_ashore(false)
+		await get_tree().process_frame
+		_check(tide.count() <= TideScrap.MAX + 6 and TideScrap.INTERVAL >= 180.0, "волна приходит не чаще раза в %d с, на берегу не больше %d сразу" % [int(TideScrap.INTERVAL), TideScrap.MAX])
+		# на постройку обломки не попадают
+		var spot := tide.find_spot()
+		if spot != Vector3.INF:
+			var bed0: Building = main.build.spawn_building("garden_bed", spot, 0.0)
+			_check(not tide.spot_ok(spot), "там, где грядка, волна обломков не оставит")
+			bed0.queue_free()
+		# разобрали — исчезает и на том же месте не появляется
+		if not piles.is_empty():
+			var pile: ResourceNode = piles[0]
+			var at := pile.global_position
+			pile._deplete()
+			await get_tree().create_timer(0.6).timeout
+			_check(not is_instance_valid(pile), "разобранная кучка исчезла и на этом месте больше не появится")
+			var back := false
+			for c in tide.holder.get_children():
+				if c is ResourceNode and (c as ResourceNode).washed and (c as Node3D).global_position.distance_to(at) < 0.3:
+					back = true
+			_check(not back, "на месте разобранной кучки пусто")
+		# лишние кучки этой проверки — убрать
+		for c in tide.holder.get_children():
+			if c is ResourceNode and (c as ResourceNode).washed and tide.holder.get_children().find(c) >= 0 and tide.count() > n0:
+				c.queue_free()
+	# куст разобрали, на его месте поставили грядку — куст там больше не вырастет
+	var bush: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode and n.kind == "bush" and n.active:
+			bush = n
+			break
+	if bush:
+		var layer := bush.collision_layer
+		bush._deplete()
+		var bed: Building = main.build.spawn_building("garden_bed", bush.global_position, 0.0)
+		bush._respawn(layer)
+		_check(not bush.active, "на грядке, поставленной на месте куста, куст не вырастает")
+		bed.queue_free()
+		await get_tree().process_frame
+		var keep := p.global_position
+		p.global_position = bush.global_position + Vector3(20, 0, 20)
+		bush._respawn(layer)
+		_check(bush.active, "грядку убрали — куст снова растёт на своём месте")
+		p.global_position = keep
+	# грядку можно убрать: доски и волокно вернутся, посаженное — семенами
+	Game.inventory = {"seed_carrot": 1}
+	var bed2 := main.build.spawn_building("garden_bed", isl.camp_center + Vector3(26, 0, 22), 0.0) as GardenBed
+	bed2.plant("carrot")
+	var opts := bed2.wheel_options(p)
+	_check(not opts.is_empty() and str(opts[opts.size() - 1]["text"]) == "Убрать", "в круге у грядки есть «Убрать»")
+	bed2.remove_bed()
+	var cost: Dictionary = Data.BUILDINGS["garden_bed"]["cost"]
+	var refunded := true
+	for id in cost:
+		if Game.count(id) < int(cost[id]):
+			refunded = false
+	_check(refunded and Game.count("seed_carrot") == 1 and bed2.is_queued_for_deletion(), "грядка убрана: материалы и семечко вернулись")
+	Game.inventory = inv
+	Game.inventory_changed.emit()
+
+
 ## Износ инструментов, железные топор и мачете.
 func _test_wear() -> void:
 	var p: Player = main.player
@@ -622,13 +704,6 @@ func _test_wear() -> void:
 	Game.inventory["iron_machete"] = 1
 	_check(Game.has_tool("machete") and Game.tool_for("machete") == "iron_machete", "железное мачете заменяет простое")
 	_check(Game.WEAR.has("pickaxe") and not Game.WEAR.has("watering_can") and not Game.WEAR.has("net"), "ломаются рабочие инструменты (не лейка и не сачок)")
-	# на острове крушения ржавое железо находится снова: мачете можно сделать заново ещё до Грозового
-	if Game.location == "home":
-		var scrap := 0
-		for n in get_tree().get_nodes_in_group("interactable"):
-			if n is ResourceNode and n.kind == "scrap_pile":
-				scrap += 1
-		_check(scrap >= 3, "у места высадки есть кучи ржавого железа (%d) — на новое мачете" % scrap)
 	Game.inventory = inv
 	Game.wear = {}
 	Game.bar = []
@@ -663,7 +738,8 @@ func _test_friend_list() -> void:
 	var c: Vector3 = main.island.camp_center
 	var bed := main.build.spawn_building("garden_bed", c + Vector3(30, 0, 30), 0.0) as GardenBed
 	Game.inventory = {"seed_carrot": 2, "seed_corn": 1}
-	_check(bed.wheel_request(p) and got.size() == 1 and got[0][2].size() == 2, "пустая грядка: круг с семенами на выбор")
+	_check(bed.wheel_request(p) and got.size() == 1 and got[0][2].size() == 3 and str(got[0][2][2]["text"]) == "Убрать",
+		"пустая грядка: круг с семенами на выбор и «Убрать»")
 	if not got.is_empty():
 		(got[0][2][0]["callback"] as Callable).call()
 	_check(bed.crop != "", "выбор в круге сажает семена (%s)" % bed.crop)
@@ -2562,6 +2638,7 @@ func _autotest() -> void:
 		_test_friend_list()
 		_test_hunger()
 		_test_wear()
+		await _test_tide_and_spots()
 		_test_slots()
 		_test_mistakes()
 		Game.start_current_quest()

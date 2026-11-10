@@ -720,7 +720,10 @@ func _spawn_resources() -> void:
 		_spawn_stepa(holder)
 		_spawn_clay(holder)
 	if mix == "home":
-		_spawn_scrap_home(holder)
+		var tide := TideScrap.new()   # волны выносят на песок обломки — железо на новое мачете
+		tide.island = self
+		tide.holder = holder
+		add_child(tide)
 	if mix == "storm":
 		_spawn_scrap(holder)
 		_spawn_pits(holder, "sand", 6, "storm:sand_%d")
@@ -964,21 +967,6 @@ func _spawn_scrap(holder: Node3D) -> void:
 				continue
 			k += 1
 			_spawn(holder, "scrap_pile", Vector3(p.x, h - 0.03, p.z), 7000 + k, "storm:scrap_%d" % k, -100.0)
-
-
-## Остров крушения: обломки «Чайки» на берегу — кучи ржавого железа у места высадки. Инструменты ломаются,
-## а мачете делается из обломка металла: железо со временем находится снова, ещё до Грозового острова.
-func _spawn_scrap_home(holder: Node3D) -> void:
-	var k := 0
-	var to_camp := Vector3(camp_center.x - wreck_point.x, 0, camp_center.z - wreck_point.z).normalized()
-	var side := Vector3(-to_camp.z, 0, to_camp.x)
-	for spec in [[4.0, -4.5], [5.5, 4.0], [7.5, -6.5], [8.5, 6.0]]:
-		var p := wreck_point + to_camp * float(spec[0]) + side * float(spec[1])
-		var h := height_at(p.x, p.z)
-		if h < 0.2:
-			continue
-		k += 1
-		_spawn(holder, "scrap_pile", Vector3(p.x, h - 0.03, p.z), 7100 + k, "home:scrap_%d" % k, -100.0)
 
 
 ## Ямы у воды недалеко от лагеря (песок на Грозовом) — восстанавливаются.

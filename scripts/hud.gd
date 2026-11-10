@@ -994,7 +994,7 @@ func _build_row(title: String, desc: String, cost: Dictionary, id: String, varia
 	info.add_child(d)
 	info.add_child(_cost_row(cost) if not cost.is_empty() else _label("бесплатно", 15, HAVE))
 	var b := Button.new()
-	b.text = "Строить"
+	b.text = "Посадить" if id == "fruit_tree" else "Строить"   # саженец сажают, а не строят
 	b.custom_minimum_size = Vector2(120, 44)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.disabled = not Game.can_afford(cost)

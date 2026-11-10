@@ -43,7 +43,7 @@ const KINDS := {
 		"verb": "Собрать чернику", "radius": 0.6, "height": 0.7},
 	"crooked_tree": {"hp": 4, "tool": "stone_axe", "drops": {"wood": 4}, "respawn": 0.0,
 		"verb": "Срубить кривое дерево", "radius": 0.8, "height": 4.0},
-	"scrap_pile": {"hp": 2, "tool": "", "drops": {"scrap": 1}, "respawn": 80.0,
+	"scrap_pile": {"hp": 2, "tool": "", "drops": {"scrap": 1}, "respawn": 200.0,
 		"verb": "Разобрать кучу ржавого железа", "radius": 0.8, "height": 0.8},
 	"sand": {"hp": 1, "tool": "shovel", "drops": {"sand": 2}, "respawn": 50.0,
 		"verb": "Накопать песка", "radius": 0.7, "height": 0.2},
@@ -181,6 +181,7 @@ func _setup_visibility() -> void:
 			gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
+var washed := false       # кучку железа вынесла волна (TideScrap): разобрали — исчезает, на том же месте не появится
 const CAP_TOP := 4.5      # докуда поднимается невидимая «крышка» над преградой
 const CAP_LAYER := 32     # слой «крышек»: с ним сталкивается только герой
 var _cap: StaticBody3D
@@ -438,10 +439,34 @@ func _deplete() -> void:
 			Game.cleared[uid] = true
 		tw.tween_callback(queue_free)
 		return
+	if washed:
+		tw.tween_callback(queue_free)   # следующую кучку волна вынесет в другом месте
+		return
 	get_tree().create_timer(KINDS[kind]["respawn"]).timeout.connect(func(): _respawn(saved_layer))
 
 
+## Место занято: на нём поставили постройку (грядку, забор…) — куст или камень здесь больше не вырастет,
+## пока постройку не уберут. Стоит герой — подождём, пока отойдёт, чтобы не вырасти у него под ногами.
+func _spot_taken() -> int:
+	var me := Vector2(global_position.x, global_position.z)
+	var r: float = KINDS[kind]["radius"]
+	for b in get_tree().get_nodes_in_group("building"):
+		var bn := b as Node3D
+		var br: float = float(Data.BUILDINGS.get(str(b.get("id")), {}).get("radius", 1.0))
+		if me.distance_to(Vector2(bn.global_position.x, bn.global_position.z)) < r + br + 0.2:
+			return 2
+	var pl := get_tree().get_first_node_in_group("player") as Node3D
+	if pl and me.distance_to(Vector2(pl.global_position.x, pl.global_position.z)) < r + 0.6:
+		return 1
+	return 0
+
+
 func _respawn(layer: int) -> void:
+	var taken := _spot_taken()
+	if taken > 0:
+		# занято постройкой — проверим снова через полный срок; герой стоит — через пару секунд
+		get_tree().create_timer(KINDS[kind]["respawn"] if taken == 2 else 3.0).timeout.connect(func(): _respawn(layer))
+		return
 	hp = KINDS[kind]["hp"]
 	visual.transform.basis = Basis(Vector3.UP, _base_yaw)
 	visual.visible = true
