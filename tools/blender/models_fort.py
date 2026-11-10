@@ -318,5 +318,4 @@ def tool_shovel():
 
 BUILDERS = {"fort_wall": fort_wall, "fort_gate": fort_gate, "gatehouse": gatehouse, "lever": lever,
             "cellar_wall": cellar_wall, "fresco_slab": fresco_slab, "fisher_hut": fisher_hut, "stepa": stepa,
-            "pig": pig, "pig_sty": pig_sty, "kiln": kiln, "clay_pit": clay_pit,
-            "tool_fishing_rod": tool_fishing_rod, "tool_shovel": tool_shovel}
+            "pig": pig, "pig_sty": pig_sty, "kiln": kiln, "clay_pit": clay_pit}   # инструменты — в models_tools.py

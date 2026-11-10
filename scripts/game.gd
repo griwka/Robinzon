@@ -13,6 +13,8 @@ signal time_changed(time_of_day: float, day: int)
 signal shop_requested(shop_id: String)
 signal choice_requested(title: String, options: Array)
 signal held_changed
+signal wear_changed                     # инструмент износился (полоска прочности в ячейке)
+signal ate(value: int)                  # герой поел: сколько сытости (и сил — Player)
 signal wheel_requested(title: String, info: String, options: Array)   # меню действий по кругу (грядка, загон)
 
 const SAVE_PATH := "user://save.json"
@@ -54,7 +56,7 @@ var salve_t := 0.0                     # сколько секунд ещё де
 var held := ""                         # инструмент в руке (выбран клавишами 1–0 или взят сам, когда нужен)
 
 ## Инструменты, которые берут в руку (ячейки 1–0 внизу экрана) — в этом порядке.
-const HOLD_TOOLS := ["machete", "stone_axe", "pickaxe", "iron_pickaxe", "shovel", "fishing_rod", "watering_can",
+const HOLD_TOOLS := ["machete", "iron_machete", "stone_axe", "iron_axe", "pickaxe", "iron_pickaxe", "shovel", "fishing_rod", "watering_can",
 	"net", "ice_pick", "ice_drill"]
 
 
@@ -68,23 +70,28 @@ var _bar_recent: Array = []   # кто недавно был в руке: пер
 
 
 func hold_slots() -> Array:
-	bar = bar.filter(func(id): return id in HOLD_TOOLS and has_tool(id))
+	bar = bar.filter(func(id): return id in HOLD_TOOLS and _bar_worthy(id))
 	for id in HOLD_TOOLS:
 		if bar.size() >= BAR_SIZE:
 			break
-		if has_tool(id) and not bar.has(id):
+		if _bar_worthy(id) and not bar.has(id):
 			bar.append(id)
 	return bar
 
 
+## Инструмент лежит в сумке и не заменён железным (каменный топор при железном — не нужен в ячейке).
+func _bar_worthy(id: String) -> bool:
+	return count(id) > 0 and not (UPGRADE.has(id) and count(UPGRADE[id]) > 0)
+
+
 ## Что сейчас в руке ("" — руки свободны).
 func held_tool() -> String:
-	return held if held != "" and has_tool(held) else ""
+	return held if held != "" and count(held) > 0 else ""
 
 
 func hold(id: String) -> void:
 	var bar_changed := false
-	if id != "" and id in HOLD_TOOLS and has_tool(id):
+	if id != "" and id in HOLD_TOOLS and count(id) > 0:
 		_bar_recent.erase(id)
 		_bar_recent.push_front(id)
 		hold_slots()
@@ -180,6 +187,8 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a in ["--autotest", "--validate", "--gallery", "--walktest"] or a.begins_with("--shot=") or a.begins_with("--gallery="):
 			_dev_save = true
+	# в автотестах и скриншотах голод стоит (своя проверка включает его сама); --hunger — включить
+	hunger_on = not _dev_save or "--hunger" in OS.get_cmdline_user_args()
 	save_path = slot_path(1)
 	_setup_input()
 	reset_state()
@@ -296,6 +305,7 @@ func apply_display() -> void:
 
 
 func _process(delta: float) -> void:
+	_tick_hunger(delta)
 	var speed := 1.0 if is_day() else 2.0
 	time_of_day += delta / DAY_LENGTH * speed
 	world_time += delta
@@ -323,6 +333,9 @@ func sleep_until_morning() -> void:
 		day += 1
 	world_time += delta_days * DAY_LENGTH * 0.6
 	time_of_day = target
+	if hunger_on:
+		hunger = maxf(0.0, hunger - 15.0)   # за ночь проголодался: утром — завтракать
+		_hunger_check()
 
 
 # ======================================================================= Инвентарь
@@ -343,7 +356,141 @@ func count(id: String) -> int:
 
 
 func has_tool(id: String) -> bool:
-	return count(id) > 0
+	return count(id) > 0 or (UPGRADE.has(id) and count(UPGRADE[id]) > 0)
+
+
+# ======================================================================= Износ инструментов
+## Сколько ударов выдерживает инструмент. Железный — втрое дольше и рубит вдвое сильнее.
+## Сломался — пропадает из сумки; рецепт остаётся, сделать новый можно всегда (материалы возобновляются).
+const WEAR := {"stone_axe": 160, "machete": 160, "pickaxe": 160, "shovel": 140, "ice_pick": 160,
+	"iron_axe": 480, "iron_machete": 480, "iron_pickaxe": 480}
+## Железная замена: она делает то же, что простой инструмент (железный топор рубит всё, что каменный).
+const UPGRADE := {"stone_axe": "iron_axe", "machete": "iron_machete", "pickaxe": "iron_pickaxe"}
+var wear: Dictionary = {}               # id -> сколько ударов уже сделано
+
+
+## Чем на самом деле работать, если нужен need: железной заменой, если она есть.
+func tool_for(need: String) -> String:
+	if UPGRADE.has(need) and count(UPGRADE[need]) > 0:
+		return UPGRADE[need]
+	return need
+
+
+## Сколько «здоровья» снимает удар: железом — вдвое больше (меньше ударов на дерево и камень).
+func tool_power(tool: String) -> int:
+	return 2 if tool.begins_with("iron_") else 1
+
+
+## Прочность 0..1 (1 — новый). У инструментов без износа — всегда 1.
+func tool_hp(id: String) -> float:
+	if not WEAR.has(id):
+		return 1.0
+	return clampf(1.0 - float(wear.get(id, 0)) / float(WEAR[id]), 0.0, 1.0)
+
+
+## Удар инструментом: износ на единицу. Кончилась прочность — инструмент ломается.
+func use_tool(id: String) -> void:
+	if not WEAR.has(id) or count(id) <= 0:
+		return
+	var used: int = int(wear.get(id, 0)) + 1
+	var full: int = WEAR[id]
+	wear[id] = used
+	if full - used == int(full * 0.15):
+		notified.emit("%s скоро сломается — запасись материалами на новый" % item_name(id), Color("ffd07a"))
+	if used >= full:
+		wear.erase(id)
+		inventory[id] = count(id) - 1
+		if count(id) <= 0:
+			inventory.erase(id)
+		if held == id:
+			held = ""
+		notified.emit("Сломался инструмент: %s. Сделай новый (C) — рецепт остался" % item_name(id), Color("ff9d7a"))
+		Audio.play("metal", -2.0, 0.1)
+		inventory_changed.emit()
+		held_changed.emit()
+	wear_changed.emit()
+
+
+# ======================================================================= Голод
+## Сытость 0..100 тает за HUNGER_TIME секунд игры. Пять ступеней: ниже — сильнее замедления.
+## Никто не умирает: голодный герой просто медленнее ходит и хуже отдыхает. Поел — всё прошло.
+const HUNGER_TIME := 1500.0
+const HUNGER_STAGES := ["Сыт", "Хорошо", "Проголодался", "Голоден", "Очень голоден"]
+const HUNGER_SPEED := [1.0, 1.0, 1.0, 0.88, 0.75]      # скорость ходьбы
+const HUNGER_REGEN := [1.25, 1.0, 0.75, 0.5, 0.35]     # как быстро возвращаются силы
+const HUNGER_NOTE := ["силы возвращаются быстрее", "всё как обычно", "силы возвращаются медленнее",
+	"идёшь медленнее, силы возвращаются плохо", "бежать не выходит, идёшь медленно"]
+var hunger := 100.0
+var hunger_on := true                   # в автотестах голод стоит (кроме своей проверки), в игре — идёт
+var playing := false                    # идёт игра (не главное меню): только тогда хочется есть
+var _hunger_stage := 0
+
+
+## Ступень голода: 0 — сыт … 4 — очень голоден.
+func hunger_stage() -> int:
+	return clampi(4 - int(floor(hunger / 20.0)), 0, 4)
+
+
+func hunger_speed() -> float:
+	return HUNGER_SPEED[hunger_stage()]
+
+
+func hunger_regen() -> float:
+	return HUNGER_REGEN[hunger_stage()]
+
+
+func can_sprint() -> bool:
+	return hunger_stage() < 4
+
+
+func _tick_hunger(delta: float) -> void:
+	if not hunger_on or not playing or get_tree().paused:
+		return
+	hunger = maxf(0.0, hunger - delta * 100.0 / HUNGER_TIME)
+	_hunger_check()
+
+
+func _hunger_check() -> void:
+	var st := hunger_stage()
+	if st > _hunger_stage and st >= 2:
+		var msg := {2: "Ты проголодался — поешь (Q): урожай, фрукты, рыба, блюда",
+			3: "Голоден: идёшь медленнее, силы возвращаются плохо. Поешь (Q)",
+			4: "Очень голоден: бежать не выходит. Поешь (Q)!"}
+		notified.emit(msg[st], Color("ffb36b"))
+	_hunger_stage = st
+
+
+## Поесть то, что лучше всего закроет голод (не трогая то, что нужно для задания). Возвращает сытость.
+func eat_best_food() -> int:
+	var missing := 100.0 - hunger
+	var best := ""
+	var best_score := INF
+	for id in Data.ITEMS:
+		if Data.ITEMS[id].has("food") and count(id) - reserved(id) > 0:
+			var v := float(Data.ITEMS[id]["food"])
+			# ближе всего к тому, чего не хватает; перебор — хуже недобора
+			var score := absf(v - missing) + maxf(0.0, v - missing) * 0.5
+			if score < best_score:
+				best_score = score
+				best = id
+	if best == "":
+		notified.emit("Нечего есть (то, что нужно для задания, не трогаю) — собери урожай, потряси пальму или налови рыбы!", Color("ff9d7a"))
+		return 0
+	return eat_item(best)
+
+
+## Съесть конкретную еду (клик по ней в сумке). Возвращает сытость.
+func eat_item(id: String) -> int:
+	if not Data.ITEMS.get(id, {}).has("food") or count(id) - reserved(id) <= 0:
+		return 0
+	pay({id: 1})
+	var v: int = Data.ITEMS[id]["food"]
+	hunger = minf(100.0, hunger + v)
+	_hunger_check()
+	notified.emit("Съеден %s: +%d сытости, +%d сил" % [item_name(id).to_lower(), v, v * 2], Color("ffe08a"))
+	Audio.play("pickup", -4.0)
+	ate.emit(v)
+	return v
 
 
 func add_item(id: String, amount: int = 1, track := true, quiet := false) -> void:
@@ -466,20 +613,6 @@ func sell(shop_id: String, id: String, n := 1) -> void:
 
 # ======================================================================= Еда
 ## Съесть самое сытное. Возвращает сытность (0 — нечего есть). Еда восстанавливает силы при лазании.
-func eat_best_food() -> int:
-	var best := ""
-	for id in Data.ITEMS:
-		if Data.ITEMS[id].has("food") and count(id) - reserved(id) > 0:
-			if best == "" or Data.ITEMS[id]["food"] > Data.ITEMS[best]["food"]:
-				best = id
-	if best == "":
-		notified.emit("Нечего есть (то, что нужно для задания, не трогаю) — потряси пальму или банан!", Color("ff9d7a"))
-		return 0
-	pay({best: 1})
-	var v: int = Data.ITEMS[best]["food"]
-	notified.emit("Съеден %s: +%d сил" % [item_name(best).to_lower(), v * 2], Color("ffe08a"))
-	Audio.play("pickup", -4.0)
-	return v
 
 
 # ======================================================================= Коллекции
@@ -695,7 +828,7 @@ func save_game(extra: Dictionary) -> void:
 		"collections": collections, "chapter": chapter, "quest_index": quest_index,
 		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags, "cleared": cleared.keys(),
 		"time_of_day": time_of_day, "day": day, "world_time": world_time,
-		"location": location, "held": held, "bar": bar,
+		"location": location, "held": held, "bar": bar, "hunger": hunger, "wear": wear,
 		"saved_at": Time.get_datetime_string_from_system(false, true),
 	}
 	# данные текущего острова кладём к остальным островам
@@ -747,6 +880,9 @@ func load_game() -> Dictionary:
 	world_time = float(data.get("world_time", 0.0))
 	location = data.get("location", "home")
 	held = str(data.get("held", ""))
+	hunger = float(data.get("hunger", 100.0))
+	_hunger_stage = hunger_stage()
+	wear = _int_dict(data.get("wear", {}))
 	bar = []
 	for b in data.get("bar", []):
 		bar.append(str(b))
@@ -800,6 +936,9 @@ func reset_state() -> void:
 	cleared = {}
 	location = "home"
 	held = ""
+	hunger = 100.0
+	_hunger_stage = 0
+	wear = {}
 	bar = []
 	_bar_recent = []
 	loc_data = {}

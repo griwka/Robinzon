@@ -153,6 +153,7 @@ func _ready() -> void:
 
 func _show_main_menu(has_save: bool) -> void:
 	in_menu = true
+	Game.playing = false
 	hud.visible = false
 	player.controls_enabled = false
 	menu_cam.current = true
@@ -163,6 +164,7 @@ func _show_main_menu(has_save: bool) -> void:
 ## Начать (или продолжить) игру: убрать меню, вернуть камеру игроку.
 func start_play() -> void:
 	in_menu = false
+	Game.playing = true
 	menu.hide_all()
 	hud.visible = true
 	player.camera.current = true

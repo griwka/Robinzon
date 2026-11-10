@@ -562,5 +562,4 @@ def tool_net():
 BUILDERS = {"tent": tent, "campfire": campfire, "torch": torch, "workbench": workbench, "hut": hut, "coop": coop,
             "goat_pen": goat_pen, "raft": raft, "fence": fence, "flowerbed": flowerbed, "bench": bench,
             "hammock": hammock, "scarecrow": scarecrow, "shell_path": shell_path, "supply_crate": supply_crate,
-            "boat_wreck": boat_wreck, "tool_stone_axe": tool_axe, "tool_pickaxe": tool_pickaxe,
-            "tool_watering_can": tool_watering_can, "tool_net": tool_net, "tool_machete": tool_machete}
+            "boat_wreck": boat_wreck}   # инструменты — в models_tools.py

@@ -88,6 +88,7 @@ func _ready() -> void:
 	_build_camera()
 	Game.inventory_changed.connect(_update_tool)
 	Game.held_changed.connect(_update_tool)
+	Game.ate.connect(func(v: int): stamina = minf(STAMINA_MAX, stamina + v * 2.0))
 	Game.inventory_changed.connect(update_clothes)
 	Game.item_gained.connect(_on_item_gained)
 	_update_tool()
@@ -248,8 +249,8 @@ func _make_back_tool() -> void:
 func _update_tool() -> void:
 	var want := Game.held_tool()
 	var back := ""
-	for id in ["stone_axe", "machete", "pickaxe", "iron_pickaxe"]:
-		if Game.has_tool(id) and id != want:
+	for id in ["iron_axe", "stone_axe", "iron_machete", "machete", "iron_pickaxe", "pickaxe"]:
+		if Game.count(id) > 0 and id != want:
 			back = id
 			break
 	if want != _hand_id:
@@ -305,8 +306,7 @@ func _physics_process(delta: float) -> void:
 	if controls_enabled and Input.is_action_just_pressed("eat"):
 		# на морозе Q — сначала кружка чая (если тепло на исходе), иначе еда
 		if not (Game.warmth < 85.0 and Warmth.drink_tea()) and not (Game.heat > 25.0 and Heat.use_salve()):
-			var v := Game.eat_best_food()
-			stamina = minf(STAMINA_MAX, stamina + v * 2.0)
+			Game.eat_best_food()   # силы прибавит сигнал Game.ate
 	if climbing:
 		_climb(delta)
 		return
@@ -331,7 +331,7 @@ func _physics_process(delta: float) -> void:
 			_start_climb(near_climb)
 			return
 	if is_on_floor():
-		stamina = minf(STAMINA_MAX, stamina + 30.0 * delta)
+		stamina = minf(STAMINA_MAX, stamina + 30.0 * delta * Game.hunger_regen())
 	var input := Vector2.ZERO
 	if controls_enabled:
 		input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
@@ -340,7 +340,8 @@ func _physics_process(delta: float) -> void:
 	dir.y = 0
 	if dir.length() > 1.0:
 		dir = dir.normalized()
-	var speed := SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
+	var speed := SPRINT_SPEED if Input.is_action_pressed("sprint") and Game.can_sprint() else WALK_SPEED
+	speed *= Game.hunger_speed()   # голодный идёт медленнее (ступени — в Game.HUNGER_STAGES)
 	if _swing_t > 0.0:
 		speed *= 0.4
 	if in_grass:
@@ -560,6 +561,11 @@ static func _keys(t: float, k: Array) -> float:
 ## Инструмент направляем от корпуса: pitch — куда смотрит головка (0 — вниз, PI/2 — вперёд, PI — вверх,
 ## больше PI — за спину), yaw — поворот вбок (> 0 — влево), spin — вращение вокруг своей оси.
 func _work_pose(kind: String, t: float) -> void:
+	# железные топор и мачете машут так же, как простые
+	if kind == "iron_axe":
+		kind = "stone_axe"
+	elif kind == "iron_machete":
+		kind = "machete"
 	var c := _carry_pitch(_hand_id)
 	var pitch := c
 	var yaw := 0.0
@@ -734,7 +740,7 @@ func _climb(delta: float) -> void:
 		stamina -= 18.0 * delta
 	# на зарубке или уступе можно повисеть — силы возвращаются
 	if climbing.rest_step > 0.0 and abs(up) < 0.1 and climbing.at_rest(global_position.y - b.y) and not gusty:
-		stamina = minf(STAMINA_MAX, stamina + 2.5 * delta * cold_k + 14.0 * delta)
+		stamina = minf(STAMINA_MAX, stamina + (2.5 * delta * cold_k + 14.0 * delta) * maxf(0.5, Game.hunger_regen()))
 	var y := global_position.y + up * CLIMB_SPEED * delta
 	# по лиане — вплотную, обхватив её; по стене и лестнице — чуть дальше
 	var rope := not (climbing.ice or climbing.rock or climbing.ladder or climbing.holds != "")
@@ -871,12 +877,13 @@ func try_interact() -> void:
 	var need := ""
 	if target.has_method("tool_hint"):
 		need = target.tool_hint()
-	if need in Game.HOLD_TOOLS and Game.has_tool(need) and not (target is ResourceNode and (target as ResourceNode).kind == "palm"):
-		Game.hold(need)
+	var real := Game.tool_for(need)   # есть железная замена — работаем ею
+	if real in Game.HOLD_TOOLS and Game.count(real) > 0 and not (target is ResourceNode and (target as ResourceNode).kind == "palm"):
+		Game.hold(real)
 	# чем работаем: нужным инструментом (он уже в руке), топором по пальме — если он в руке, иначе руками
 	swing_kind = "hands"
-	if need != "" and Game.held_tool() == need:
-		swing_kind = need
+	if need != "" and Game.held_tool() in [need, real]:
+		swing_kind = Game.held_tool()
 	_whoosh_done = false
 	_swing_t = SWING_TIME
 	var t := target

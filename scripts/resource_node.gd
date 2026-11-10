@@ -222,9 +222,10 @@ func tool_hint() -> String:
 ## Своя подсказка (пальма: что будет — потрясти или срубить — зависит от того, что в руке) или "".
 func key_hint() -> String:
 	if kind == "palm" and Game.has_tool("stone_axe"):
-		var key := Game.hold_slots().find("stone_axe") + 1
-		var k := str(key % 10)
-		if Game.held_tool() == "stone_axe":
+		var axe := Game.tool_for("stone_axe")
+		var key := Game.hold_slots().find(axe) + 1
+		var k := str(key % 10) if key > 0 else "Tab"
+		if Game.held_tool() == axe:
 			return "[ЛКМ / E]  Срубить пальму   ·   [%s]  убрать топор — потрясти" % k
 		if coconut_ready:
 			return "[ЛКМ / E]  Потрясти пальму   ·   [%s]  взять топор — срубить" % k
@@ -246,7 +247,7 @@ func interact(player: Node) -> void:
 		return
 	var cfg: Dictionary = KINDS[kind]
 	# пальму трясут пустыми руками (или с другим инструментом), рубят — с топором в руке
-	if kind == "palm" and Game.held_tool() != "stone_axe":
+	if kind == "palm" and not (Game.held_tool() in ["stone_axe", "iron_axe"]):
 		if coconut_ready:
 			_shake_palm()
 		else:
@@ -258,7 +259,11 @@ func interact(player: Node) -> void:
 	if cfg["tool"] != "" and Game.frozen():
 		Game.notified.emit("Руки замёрзли и не держат %s. Сначала согрейся у огня" % Game.item_name(cfg["tool"]).to_lower(), Color("bfe3ff"))
 		return
-	hp -= 1
+	# удар: железом — вдвое сильнее; инструмент от каждого удара чуть изнашивается
+	var used := Game.tool_for(cfg["tool"]) if cfg["tool"] != "" else ""
+	hp -= Game.tool_power(used)
+	if used != "":
+		Game.use_tool(used)
 	_hit_fx(player)
 	if hp <= 0:
 		for id in cfg["drops"]:

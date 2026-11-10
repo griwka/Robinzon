@@ -129,6 +129,35 @@ func _process(_delta: float) -> void:
 			"inv": main.hud.open_inventory()
 	if _frames == 30 and args.has("farline"):   # для скриншотов: реплика жителя с другого острова
 		main.hud.show_dialogue([[str(args["farline"]), "Суп готов. Возвращайся, пока не остыл."]], Callable())
+	if _frames == 3 and args.has("toolrow"):   # для скриншотов: все инструменты в ряд (--toolrow --nohud)
+		var ids := ["stone_axe", "iron_axe", "machete", "iron_machete", "pickaxe", "iron_pickaxe",
+			"shovel", "watering_can", "net", "fishing_rod", "ice_pick", "ice_drill"]
+		var base: Vector3 = main.island.camp_center + Vector3(0, 0, 0)
+		base.y = main.island.height_at(base.x, base.z) + 2.6
+		for i in ids.size():
+			var m := Models.tool_model(ids[i])
+			main.add_child(m)
+			m.global_position = base + Vector3((i % 6 - 2.5) * 0.62, -(i / 6) * 1.45, 0)
+			m.rotation = Vector3(0, -PI / 2 + 0.55, 0)
+			m.scale = Vector3.ONE * 1.25
+		p.global_position = base + Vector3(0, -2.2, 6.0)
+		p.visible = false
+		var cam := Camera3D.new()
+		main.add_child(cam)
+		cam.global_position = base + Vector3(0, -0.7, 4.3)
+		cam.look_at(base + Vector3(0, -0.95, 0))
+		cam.fov = 50
+		cam.current = true
+	if _frames == 5 and args.has("sat"):   # для скриншотов: сытость (--sat=35) и износ (--worn=machete:0.7,stone_axe:0.2)
+		Game.hunger = float(args["sat"])
+		Game._hunger_stage = Game.hunger_stage()
+		main.hud.update_hunger()
+	if _frames == 5 and args.has("worn"):
+		for pr in str(args["worn"]).split(","):
+			var kv := pr.split(":")
+			if kv.size() == 2 and Game.WEAR.has(kv[0]):
+				Game.wear[kv[0]] = int(float(kv[1]) * Game.WEAR[kv[0]])
+		Game.wear_changed.emit()
 	if _frames == 30 and args.has("pausemenu"):   # для скриншотов: меню паузы
 		main._pause()
 	if _frames == 4 and args.has("slots"):   # для скриншотов: список ячеек (--slots=load|new|save|pauseload)
@@ -488,6 +517,123 @@ func _test_slots() -> void:
 	_check(not Game.slot_used(3), "ячейку можно очистить")
 	Game.use_slot(1)
 	_check(Game.save_path == Game.slot_path(1), "вернулись в первую ячейку")
+
+
+## Голод: шкала тает, по ступеням — замедления; еда закрывает голод; никто не умирает и ничего не запирается.
+func _test_hunger() -> void:
+	var p: Player = main.player
+	var inv: Dictionary = Game.inventory.duplicate()
+	var was_on := Game.hunger_on
+	var was_playing := Game.playing
+	Game.hunger_on = true
+	Game.playing = true
+	Game.hunger = 100.0
+	Game._hunger_stage = 0
+	_check(Game.hunger_stage() == 0 and Game.hunger_regen() > 1.0 and Game.can_sprint(), "сытый: силы возвращаются быстрее")
+	Game._tick_hunger(Game.HUNGER_TIME * 0.5)
+	_check(absf(Game.hunger - 50.0) < 0.5 and Game.hunger_stage() == 2, "за половину срока сытость падает вдвое (%.0f) — «проголодался»" % Game.hunger)
+	_check(Game.hunger_regen() < 1.0 and Game.hunger_speed() == 1.0, "проголодался: силы медленнее, ходьба как обычно")
+	Game.hunger = 30.0
+	_check(Game.hunger_stage() == 3 and Game.hunger_speed() < 1.0 and Game.can_sprint(), "голоден: идёшь медленнее, бежать ещё можно")
+	Game.hunger = 5.0
+	_check(Game.hunger_stage() == 4 and not Game.can_sprint() and Game.hunger_speed() >= 0.7, "очень голоден: не бежишь, но идёшь")
+	Game.hunger = 0.0
+	Game._tick_hunger(600.0)
+	_check(Game.hunger == 0.0, "ниже нуля голод не падает — герой не умирает")
+	# подъём с пустым желудком всё равно возможен: на уступе силы копятся
+	_check(maxf(0.5, Game.hunger_regen()) * 14.0 > 2.5 * 1.3, "даже очень голодным на уступе стены можно отдышаться")
+	# еда
+	Game.inventory = {"banana": 1, "fish_soup": 1, "carrot": 2}
+	Game.hunger = 85.0
+	var got := Game.eat_best_food()
+	_check(got > 0 and got <= 15 and Game.count("fish_soup") == 1, "почти сыт — съедает малое (%d), похлёбку бережёт" % got)
+	Game.hunger = 10.0
+	var st0 := p.stamina
+	p.stamina = 10.0
+	Game.eat_best_food()
+	_check(Game.count("fish_soup") == 0 and Game.hunger > 50.0 and p.stamina > 10.0, "очень голоден — съедает похлёбку, сытость и силы растут")
+	Game.hunger = 70.0
+	Game.sleep_until_morning()
+	_check(absf(Game.hunger - 55.0) < 0.5, "за ночь сна проголодался (−15)")
+	Game.hunger = 100.0
+	Game._hunger_stage = 0
+	Game.hunger_on = was_on
+	Game.playing = was_playing
+	p.stamina = st0
+	Game.inventory = inv
+	Game.inventory_changed.emit()
+
+
+## Износ инструментов, железные топор и мачете.
+func _test_wear() -> void:
+	var p: Player = main.player
+	var inv: Dictionary = Game.inventory.duplicate()
+	var held0 := Game.held
+	Game.inventory = {"stone_axe": 1}
+	Game.wear = {}
+	Game.bar = []
+	_check(Game.tool_hp("stone_axe") == 1.0, "новый топор — полная прочность")
+	Game.use_tool("stone_axe")
+	_check(Game.wear.get("stone_axe", 0) == 1 and Game.tool_hp("stone_axe") < 1.0, "удар изнашивает топор")
+	Game.wear["stone_axe"] = Game.WEAR["stone_axe"] - 1
+	Game.hold("stone_axe")
+	Game.use_tool("stone_axe")
+	_check(Game.count("stone_axe") == 0 and Game.held_tool() == "" and not Game.wear.has("stone_axe"), "топор сломался — пропал из сумки и из руки")
+	var axe_r := {}
+	for r in Data.RECIPES:
+		if r["out"].has("stone_axe"):
+			axe_r = r
+	_give(axe_r["in"])
+	var had_unlock := Game.unlocked.has("stone_axe")
+	Game.unlocked["stone_axe"] = true   # раз топор был — рецепт открыт
+	_check(Game.craft(axe_r) and Game.count("stone_axe") == 1 and Game.tool_hp("stone_axe") == 1.0, "сломанный топор делается заново по тому же рецепту")
+	if not had_unlock:
+		Game.unlocked.erase("stone_axe")
+	# железный топор: рубит всё, что каменный, вдвое сильнее и втрое дольше
+	Game.inventory["iron_axe"] = 1
+	_check(Game.has_tool("stone_axe") and Game.tool_for("stone_axe") == "iron_axe" and Game.tool_power("iron_axe") == 2,
+		"железный топор заменяет каменный и бьёт вдвое сильнее")
+	_check(Game.WEAR["iron_axe"] > Game.WEAR["stone_axe"] * 2, "железный топор живёт дольше каменного")
+	_check(not Game.hold_slots().has("stone_axe") and Game.hold_slots().has("iron_axe"), "при железном каменный топор не занимает ячейку внизу")
+	var tree: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode and n.kind == "jungle_tree" and n.active:
+			tree = n
+			break
+	if tree:
+		var hp0 := tree.hp
+		var w0: int = Game.wear.get("iron_axe", 0)
+		Game.hold("iron_axe")
+		tree.interact(p)
+		_check(tree.hp == hp0 - 2 and Game.wear.get("iron_axe", 0) == w0 + 1, "удар железным топором: −2 дереву, износ железного")
+		tree.hp = hp0
+	var palm: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode and n.kind == "palm" and n.active:
+			palm = n
+			break
+	if palm:
+		var php := palm.hp
+		Game.hold("iron_axe")
+		palm.interact(p)
+		_check(palm.hp == php - 2, "железным топором пальму рубят (не трясут)")
+		palm.hp = php
+	_check(Game.has_tool("machete") == false, "мачете без мачете нет")
+	Game.inventory["iron_machete"] = 1
+	_check(Game.has_tool("machete") and Game.tool_for("machete") == "iron_machete", "железное мачете заменяет простое")
+	_check(Game.WEAR.has("pickaxe") and not Game.WEAR.has("watering_can") and not Game.WEAR.has("net"), "ломаются рабочие инструменты (не лейка и не сачок)")
+	# на острове крушения ржавое железо находится снова: мачете можно сделать заново ещё до Грозового
+	if Game.location == "home":
+		var scrap := 0
+		for n in get_tree().get_nodes_in_group("interactable"):
+			if n is ResourceNode and n.kind == "scrap_pile":
+				scrap += 1
+		_check(scrap >= 3, "у места высадки есть кучи ржавого железа (%d) — на новое мачете" % scrap)
+	Game.inventory = inv
+	Game.wear = {}
+	Game.bar = []
+	Game.held = held0
+	Game.inventory_changed.emit()
 
 
 ## Правки по списку от игрока: трава без стены, круг действий, четыре ячейки, реплики издалека.
@@ -2192,6 +2338,8 @@ func _do_task(t: Dictionary) -> void:
 					break
 				if c is ResourceNode and c.kind == target and c.active:
 					for k in ResourceNode.KINDS[target]["hp"]:
+						if tools.has(target) and not Game.has_tool(tools[target]):
+							_give({tools[target]: 1})   # сломался — игрок сделал бы новый по тому же рецепту
 						c.interact(main.player)
 					done += 1
 		"found", "lit":
@@ -2412,6 +2560,8 @@ func _autotest() -> void:
 		_test_palm()
 		_test_unique()
 		_test_friend_list()
+		_test_hunger()
+		_test_wear()
 		_test_slots()
 		_test_mistakes()
 		Game.start_current_quest()

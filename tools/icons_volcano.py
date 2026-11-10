@@ -62,6 +62,34 @@ def i_iron_pickaxe():
     return img
 
 
+def i_iron_axe():
+    """Железный топор: тёмная кованая голова, светлая заточенная кромка, кожаная обмотка рукояти."""
+    img, d = new()
+    stroke(d, [(120, 470), (300, 90)], rgb("9a6a3c"), 36)
+    for k in range(4):
+        y = 400 + k * 18
+        line(d, [(128 - (y - 400) * 0.1 + 8, y), (160 - (y - 400) * 0.1, y - 14)], rgb("6b3a22"), 14)
+    poly(d, [(215, 80), (300, 60), (420, 30), (470, 150), (430, 285), (310, 210), (230, 210)], rgb("5d6873"))
+    d.polygon([(410, 42), (462, 150), (425, 272), (405, 262), (438, 150)], fill=rgb("dde4ea"))
+    rrect(d, (250, 60, 320, 215), 18, rgb("4a535c"))
+    shine(d, 330, 120, 40, 10, -0.4, 140)
+    return img
+
+
+def i_iron_machete():
+    """Железное мачете: тёмный длинный клинок с долом, латунная гарда, тёмная рукоять."""
+    img, d = new()
+    rrect(d, (60, 340, 190, 410), 26, rgb("4a2a1a"))
+    for x in (95, 135, 170):
+        ell(d, x, 375, 9, 9, rgb("d2a548"), w=5)
+    poly(d, [(185, 325), (215, 300), (240, 425), (205, 440)], rgb("d2a548"))
+    blade = quad_curve((225, 330), (370, 210), (480, 70)) + quad_curve((480, 70), (440, 225), (235, 405))[1:]
+    poly(d, blade, rgb("6e7a86"))
+    line(d, quad_curve((245, 340), (360, 245), (462, 95)), rgb("e6edf2"), 9)
+    line(d, quad_curve((235, 365), (350, 280), (430, 150)), rgb("4a545e"), 7)
+    return img
+
+
 def i_iron_nails():
     img, d = new()
     for k in range(5):
@@ -245,7 +273,7 @@ def portrait_vera():
 
 ICONS = {
     "aloe": i_aloe, "burn_salve": i_burn_salve, "charcoal": i_charcoal, "ore": i_ore, "iron_ingot": i_iron_ingot,
-    "iron_pickaxe": i_iron_pickaxe, "iron_nails": i_iron_nails, "obsidian": i_obsidian, "crucible": i_crucible,
+    "iron_pickaxe": i_iron_pickaxe, "iron_axe": i_iron_axe, "iron_machete": i_iron_machete, "iron_nails": i_iron_nails, "obsidian": i_obsidian, "crucible": i_crucible,
     "obsidian_lens": i_obsidian_lens, "coffee": i_coffee, "roasted_coffee": i_roasted_coffee, "spicy_soup": i_spicy_soup,
     "fertilizer": i_fertilizer, "fire_gloves": i_fire_gloves, "herbal_tea": i_herbal_tea,
     "pumice": stone_icon("pumice"), "sulfur": stone_icon("sulfur"), "basalt_stone": stone_icon("basalt_stone"),

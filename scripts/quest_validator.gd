@@ -74,6 +74,7 @@ func run(chapters: Array = Data.CHAPTERS) -> Array[String]:
 			% [ch["title"], spend, earn, maxi(0, spend - earn)])
 	_check_pages(chapters)
 	_check_crops()
+	_check_tools()
 	return errors
 
 
@@ -95,6 +96,49 @@ func _check_crops() -> void:
 				_err("«%s»: урожай не окупает пакетик семян" % c)
 			report.append("%s: %.1f мон/мин (пакетик %d, урожай %.1f × %d, семечко назад %d%%)"
 				% [cfg["name"], profit / float(cfg["time"]) * 60.0, price, avg, sell, int(back * 100.0)])
+
+
+## Инструменты ломаются — значит, каждый ломающийся должен делаться заново из того, что возобновляется:
+## кусты, пальмы, камешки, грядки, загоны, рыбалка, лавки. Иначе сломанный топор мог бы оставить без задания.
+func _check_tools() -> void:
+	_where = "Износ инструментов"
+	var ok := {"fish": true, "ice_fish": true}
+	for k in ResourceNode.KINDS:
+		var cfg: Dictionary = ResourceNode.KINDS[k]
+		if float(cfg["respawn"]) > 0.0:
+			for d in cfg["drops"]:
+				ok[d] = true
+	for c in Data.CROPS:
+		ok[c] = true
+	for pid in Data.PENS:
+		ok[Data.PENS[pid]["product"]] = true
+	for sid in Data.SHOPS:
+		for e in Data.SHOPS[sid].get("buy", []):
+			ok[e["item"]] = true
+	# рецепты, все материалы которых возобновляются, дают возобновляемое (верёвка, доски, слитки…)
+	var grew := true
+	while grew:
+		grew = false
+		for r in Data.RECIPES:
+			var all := true
+			for m in r["in"]:
+				if not ok.has(m):
+					all = false
+			if all:
+				for o in r["out"]:
+					if not ok.has(o):
+						ok[o] = true
+						grew = true
+	for tool in Game.WEAR:
+		var has_recipe := false
+		for r in Data.RECIPES:
+			if r["out"].has(tool):
+				has_recipe = true
+		if not has_recipe:
+			_err("«%s» ломается, но рецепта нет — новый не сделать" % tool)
+		elif not ok.has(tool):
+			_err("«%s» ломается, а материалы на новый не возобновляются" % tool)
+	report.append("Инструменты ломаются: %s" % ", ".join(Game.WEAR.keys().map(func(t): return "%s %d ударов" % [Game.item_short(t), Game.WEAR[t]])))
 
 
 ## Страницы журналов выдаются строго по сюжету — их должно хватать на всю коллекцию.

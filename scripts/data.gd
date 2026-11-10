@@ -143,6 +143,8 @@ const ITEMS := {
 	"ice_pick": {"name": "Ледоруб", "short": "Ледоруб", "color": Color("6fa8d8"), "cat": "tool"},
 	"ice_drill": {"name": "Ледовый бур", "short": "Бур", "color": Color("c9a050"), "cat": "tool"},
 	"iron_pickaxe": {"name": "Железная кирка", "short": "Ж. кирка", "color": Color("6a7a8a"), "cat": "tool"},
+	"iron_axe": {"name": "Железный топор", "short": "Ж. топор", "color": Color("6a7a8a"), "cat": "tool"},
+	"iron_machete": {"name": "Железное мачете", "short": "Ж. мачете", "color": Color("8a9aaa"), "cat": "tool"},
 	"firefly_lantern": {"name": "Фонарь со светлячками", "short": "Св. фонарь", "color": Color("d8ff8a"), "cat": "tool"},
 }
 
@@ -185,6 +187,8 @@ const RECIPES := [
 	{"id": "spicy_soup", "out": {"spicy_soup": 1}, "in": {"fish": 2, "pepper": 1, "potato": 1}, "station": "campfire"},
 	{"id": "iron_ingot", "out": {"iron_ingot": 1}, "in": {"ore": 2, "charcoal": 1}, "station": "forge", "unlock": true},
 	{"id": "iron_pickaxe", "out": {"iron_pickaxe": 1}, "in": {"iron_ingot": 3, "plank": 2}, "station": "forge", "unlock": true},
+	{"id": "iron_axe", "out": {"iron_axe": 1}, "in": {"iron_ingot": 2, "plank": 2, "rope": 1}, "station": "forge", "unlock": true},
+	{"id": "iron_machete", "out": {"iron_machete": 1}, "in": {"iron_ingot": 2, "plank": 1, "rope": 1}, "station": "forge", "unlock": true},
 	{"id": "iron_nails", "out": {"iron_nails": 10}, "in": {"iron_ingot": 1}, "station": "forge", "unlock": true},
 	# тигель не тратится: он и в рецепте, и в результате
 	{"id": "obsidian_lens", "out": {"obsidian_lens": 1, "crucible": 1}, "in": {"obsidian": 6, "charcoal": 3, "crucible": 1}, "station": "forge", "unlock": true},
@@ -1295,7 +1299,7 @@ const CHAPTERS := [
 			{"kind": "crafted", "target": "iron_ingot", "count": 4, "text": "Выплавь железные слитки"}],
 		"outro": [["vera", "Лёва ковал здесь по ночам. Стучал так, что черепахи прятали головы."],
 			["vera", "К храму тропу перегородили базальтовые столбы. Каменной киркой их не взять. Нужна железная."]],
-		"reward": {"unlock": ["iron_pickaxe"]}},
+		"reward": {"unlock": ["iron_pickaxe", "iron_axe", "iron_machete"]}},
 	{"id": "iron_pick", "title": "Железная кирка",
 		"intro": [["parrot", "Три слитка и две доски. Тяжёлая кирка! Румба не будет её держать. Румба будет смотреть."]],
 		"tasks": [{"kind": "crafted", "target": "iron_pickaxe", "count": 1, "text": "Скуй железную кирку"},

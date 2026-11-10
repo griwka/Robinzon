@@ -711,5 +711,5 @@ BUILDERS = {
     "temple_facade": temple_facade, "temple_door": temple_door, "monolith": monolith, "lava_chute": lava_chute,
     "lava_bowl": lava_bowl, "lava_crack": lava_crack, "cold_stone": cold_stone,
     "volcano_tower_ruin": volcano_tower_ruin, "volcano_tower": volcano_tower,
-    "wear_fire_gloves": wear_fire_gloves, "tool_iron_pickaxe": tool_iron_pickaxe,
-}
+    "wear_fire_gloves": wear_fire_gloves,
+}   # инструменты — в models_tools.py

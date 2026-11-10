@@ -87,6 +87,7 @@ func _ready() -> void:
 
 	Game.inventory_changed.connect(_on_inventory_changed)
 	Game.held_changed.connect(_on_inventory_changed)
+	Game.wear_changed.connect(_on_inventory_changed)
 	Game.notified.connect(toast)
 	Game.quest_changed.connect(_update_quest)
 	Game.dialogue_requested.connect(show_dialogue)
@@ -96,6 +97,7 @@ func _ready() -> void:
 	Game.collection_changed.connect(func(_c, _i, _n): if col_panel.visible: _fill_collections())
 	Game.time_changed.connect(func(_t, _d):
 		clock_label.text = Game.clock_text()
+		update_hunger()
 		_update_storm())
 	_on_inventory_changed()
 	_update_quest()
@@ -291,6 +293,58 @@ func _build_status() -> void:
 	k.add_child(_item_icon("coins", 28))
 	coin_label = _label("0", 20, Color("f3e2b8"))
 	k.add_child(coin_label)
+	# сытость: пять ступеней, каждая — свой отрезок шкалы
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 3)
+	hb.mouse_filter = Control.MOUSE_FILTER_PASS
+	h.add_child(hb)
+	var hi := _item_icon("fruit_salad", 30)
+	hb.add_child(hi)
+	for i in 5:
+		var seg := ProgressBar.new()
+		seg.show_percentage = false
+		seg.max_value = 20.0
+		seg.custom_minimum_size = Vector2(26, 16)
+		seg.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		seg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var bg := _box(WOOD_DARK, WOOD_DARK, 5, 2, 0)
+		bg.shadow_size = 0
+		var fg := _box(Color("8fd45a"), Color("4f8f2a"), 5, 2, 0)
+		fg.shadow_size = 0
+		seg.add_theme_stylebox_override("background", bg)
+		seg.add_theme_stylebox_override("fill", fg)
+		hb.add_child(seg)
+		_hunger_segs.append(seg)
+		_hunger_fills.append(fg)
+	hunger_label = _label("", 17, Color("fff6dc"))
+	hb.add_child(hunger_label)
+	_hunger_box = hb
+	update_hunger()
+
+
+var hunger_label: Label
+var _hunger_box: Control
+var _hunger_segs: Array = []
+var _hunger_fills: Array = []
+var _hunger_shown := -1.0
+const HUNGER_COLORS := [Color("8fd45a"), Color("c6dc5a"), Color("f2c24a"), Color("f2913a"), Color("e8543a")]
+
+
+## Шкала сытости: пять отрезков (по 20), цвет — по ступени; подпись — когда уже хочется есть.
+func update_hunger() -> void:
+	if _hunger_segs.is_empty() or absf(Game.hunger - _hunger_shown) < 0.05:
+		return
+	_hunger_shown = Game.hunger
+	var st := Game.hunger_stage()
+	var col: Color = HUNGER_COLORS[st]
+	for i in 5:
+		(_hunger_segs[i] as ProgressBar).value = clampf(Game.hunger - i * 20.0, 0.0, 20.0)
+		(_hunger_fills[i] as StyleBoxFlat).bg_color = col
+		(_hunger_fills[i] as StyleBoxFlat).border_color = col.darkened(0.35)
+	hunger_label.text = Game.HUNGER_STAGES[st] if st >= 2 else ""
+	hunger_label.add_theme_color_override("font_color", col.lightened(0.25))
+	_hunger_box.tooltip_text = "Сытость: %s (%d%%) — %s. Поесть — Q или клик по еде в сумке (Tab)" % [
+		Game.HUNGER_STAGES[st].to_lower(), int(Game.hunger), Game.HUNGER_NOTE[st]]
 
 
 ## Значок тучи: гроза близко / идёт (только на Грозовом острове).
@@ -467,6 +521,26 @@ func _item_slot(id: String, n: int, big := false, px := 0) -> Control:
 		badge.add_child(cnt)
 		holder.add_child(badge)
 		badge.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE)
+	if Game.WEAR.has(id) and Game.count(id) > 0:
+		var hp := Game.tool_hp(id)
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.max_value = 1.0
+		bar.value = hp
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var bb := _box(Color(0.22, 0.13, 0.06, 0.9), Color(0.98, 0.93, 0.8, 0.95), 4, 2, 0)
+		bb.shadow_size = 0
+		var bf := _box(Color("e8543a").lerp(Color("f2c24a"), smoothstep(0.1, 0.4, hp)).lerp(Color("7fd04a"), smoothstep(0.45, 0.8, hp)), Color(0, 0, 0, 0), 3, 0, 0)
+		bf.shadow_size = 0
+		bar.add_theme_stylebox_override("background", bb)
+		bar.add_theme_stylebox_override("fill", bf)
+		holder.add_child(bar)
+		bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		bar.offset_left = 7
+		bar.offset_right = -7
+		bar.offset_top = -14
+		bar.offset_bottom = -4
+		box.tooltip_text = "%s — прочность %d%%" % [Game.item_name(id), int(hp * 100.0)]
 	if big:
 		var nm := _label(Game.item_short(id), 14, INK, false)
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1053,6 +1127,16 @@ func _fill_inventory() -> void:
 		for id in Data.ITEMS:
 			if Data.ITEMS[id]["cat"] == cat and Game.count(id) > 0:
 				var cell := _item_slot(id, Game.count(id), true)
+				if Data.ITEMS[id].has("food"):
+					var fslot := cell.get_child(0) as PanelContainer
+					fslot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+					cell.tooltip_text = "%s — нажми, чтобы съесть (+%d сытости)" % [Game.item_name(id), int(Data.ITEMS[id]["food"])]
+					fslot.gui_input.connect(func(ev: InputEvent):
+						if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+							if Game.count(id) - Game.reserved(id) <= 0:
+								Game.notified.emit("Это нужно для задания — не ем", Color("ff9d7a"))
+							else:
+								Game.eat_item(id))
 				if id in Game.HOLD_TOOLS:
 					var slot := cell.get_child(0) as PanelContainer
 					slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -1169,6 +1253,9 @@ func _build_help() -> void:
 	body.add_child(_label("""WASD — ходить,  Shift — бег,  Пробел — прыжок
 Мышь — камера,  колёсико — приблизить/отдалить
 ЛКМ или E — собирать / рубить / использовать
+Сытость — шкала из пяти отрезков вверху. Проголодался — силы возвращаются медленнее, голоден — идёшь медленнее,
+очень голоден — не бежишь. Поесть: Q (подберёт подходящую еду) или клик по еде в сумке.
+Инструменты изнашиваются (полоска под ячейкой) и ломаются; новый делается по тому же рецепту. Железные — прочнее и рубят вдвое быстрее.
 1–4 — взять инструмент из ячейки внизу (ещё раз — убрать). Нужный инструмент герой берёт и сам; остальные — в сумке (Tab), клик по инструменту берёт его в руку.
 У грядки и загона E открывает круг действий: выбери мышью, цифрой или нажми E ещё раз.
 Пальма: пустыми руками — потрясти (кокосы), с топором в руке — срубить
