@@ -2659,6 +2659,19 @@ func _autotest() -> void:
 	_check(p.global_position.y > 0.0, "игрок появился на суше")
 	_check(get_tree().get_nodes_in_group("interactable").size() > 150, "на острове есть ресурсы и живность")
 	_check(Game.quest_started and Game.current_quest()["id"] == "wake", "первое задание началось")
+	# у каждой постройки и преграды на острове есть свой размер — иначе при постройке игра падает
+	var no_r: Array = []
+	for group in ["building", "obstacle"]:
+		for b in get_tree().get_nodes_in_group(group):
+			if not b.has_method("block_radius"):
+				no_r.append(str(b.name))
+	_check(no_r.is_empty(), "у всех построек и преград есть размер для проверки места (%s)" % ", ".join(no_r))
+	var probe: Vector3 = isl.camp_center + Vector3(6, 0, 6)
+	probe.y = isl.height_at(probe.x, probe.z)
+	p.global_position = probe + Vector3(2, 0.3, 0)
+	main.build._check_valid(probe, Data.BUILDINGS["bench"])
+	p.global_position = isl.spawn_point
+	_check(true, "проверка места для постройки отработала без ошибок")
 	for poi_id in main.island.poi.keys():
 		if not Island.RINGS.has(poi_id):
 			continue   # без кольца преград (форт закрыт стенами, самолёт и камни — открыты)

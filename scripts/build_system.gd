@@ -186,6 +186,8 @@ func _check_valid(pos: Vector3, cfg: Dictionary) -> bool:
 	var p2 := Vector2(pos.x, pos.z)
 	for group in ["building", "obstacle"]:
 		for b in get_tree().get_nodes_in_group(group):
+			if not b.has_method("block_radius"):
+				continue
 			var br: float = b.block_radius()
 			if br > 0.0 and Vector2(b.global_position.x, b.global_position.z).distance_to(p2) < r + br + 0.1:
 				return false

@@ -70,6 +70,11 @@ func _ready() -> void:
 		island.poi_extra["vera"] = to_global(vp)
 
 
+## Сколько места занимают чаши, лечебница и Вера — ближе строить нельзя.
+func block_radius() -> float:
+	return 6.8
+
+
 func _ground(local_p: Vector3) -> float:
 	var w := position + local_p
 	return island.height_at(w.x, w.z) - position.y if island else 0.0
