@@ -126,6 +126,7 @@ func _process(_delta: float) -> void:
 		match str(args["panel"]):
 			"build": main.hud.open_build()
 			"craft": main.hud.open_craft()
+			"kiln", "stove", "campfire", "forge", "workbench": main.hud.open_craft(str(args["panel"]))
 			"inv": main.hud.open_inventory()
 	if _frames == 30 and args.has("farline"):   # для скриншотов: реплика жителя с другого острова
 		main.hud.show_dialogue([[str(args["farline"]), "Суп готов. Возвращайся, пока не остыл."]], Callable())
@@ -562,6 +563,40 @@ func _test_hunger() -> void:
 	p.stamina = st0
 	Game.inventory = inv
 	Game.inventory_changed.emit()
+
+
+## Станции крафта (верстак, костёр, печь для обжига, печка, кузница): у каждой E открывает крафт с её рецептами
+## наверху, а рецепт «у станции» работает, когда стоишь рядом.
+func _test_stations() -> void:
+	var p: Player = main.player
+	var stations := {}
+	for r in Data.RECIPES:
+		if r["station"] != "":
+			stations[r["station"]] = true
+	var base: Vector3 = main.island.camp_center + Vector3(-24, 0, 26)
+	var k := 0
+	for st in stations:
+		_check(Data.BUILDINGS.has(st) and st in Building.ACTIONS, "станция «%s» — постройка, у неё есть действие по E" % st)
+		if not Data.BUILDINGS.has(st):
+			continue
+		var pos := base + Vector3(k * 6.0, 0, 0)
+		pos.y = main.island.height_at(pos.x, pos.z)
+		k += 1
+		var b: Building = main.build.spawn_building(st, pos, 0.0)
+		main._connect_building(b)
+		var opened := [""]
+		var on_craft := func(s: String): opened[0] = s
+		b.craft_requested.connect(on_craft)
+		b.interact(p)
+		_check(opened[0] == st and main.hud.craft_panel.visible and main.hud._craft_station == st,
+			"E у «%s» открывает крафт этой станции (%s)" % [Data.BUILDINGS[st]["name"], b.get_hint()])
+		main.hud.close_all()
+		p.global_position = pos + Vector3(1.6, 0.3, 0)
+		_check(main._near_station(st), "рядом с «%s» её рецепты работают" % Data.BUILDINGS[st]["name"])
+		p.global_position = pos + Vector3(12, 0.3, 0)
+		_check(not main._near_station(st), "издалека — «Далеко»")
+		b.queue_free()
+	p.global_position = main.island.spawn_point
 
 
 ## Прибой выносит железо на сухой песок, ничего не вырастает на постройке, грядку можно убрать.
@@ -2639,6 +2674,7 @@ func _autotest() -> void:
 		_test_hunger()
 		_test_wear()
 		await _test_tide_and_spots()
+		_test_stations()
 		_test_slots()
 		_test_mistakes()
 		Game.start_current_quest()

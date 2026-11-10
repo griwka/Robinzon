@@ -8,7 +8,7 @@ signal sleep_requested
 signal craft_requested(station: String)
 signal choice_requested(title: String, options: Array)
 
-const ACTIONS := ["campfire", "workbench", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe", "boat", "shelter", "stove", "forge",
+const ACTIONS := ["campfire", "workbench", "kiln", "tent", "hut", "hammock", "torch", "raft", "bench", "canoe", "boat", "shelter", "stove", "forge",
 	"pumpkin_lantern", "well", "long_table"]
 const SPOT_GROUPS := {"stone_bridge": ["bridge_spot"], "pumpkin_lantern": ["lantern_spot", "shadow_spot"]}
 
@@ -189,6 +189,7 @@ func get_hint() -> String:
 		"shelter": return "Навес — переждать грозу здесь" if Game.storm_active() else "Навес — под ним гроза не страшна"
 		"stove": return "Печка — заварить чай" + (", погреться" if Game.cold_active() else "")
 		"forge": return "Кузница — плавить и ковать"
+		"kiln": return "Печь для обжига — обжечь глину в кирпичи, песок в стекло"
 		"pumpkin_lantern":
 			if spot and spot.is_in_group("shadow_spot"):
 				return "Тыквенный фонарь — забрать (переставить)"
@@ -204,6 +205,7 @@ func interact(_player: Node) -> void:
 		"campfire": craft_requested.emit("campfire")
 		"stove": craft_requested.emit("stove")
 		"forge": craft_requested.emit("forge")
+		"kiln": craft_requested.emit("kiln")
 		"well":
 			Audio.play("water", -3.0, 0.1, global_position)
 			Game.notified.emit("Ты пьёшь из колодца. Вода пахнет камнем и дождём", Color("bfe3ff"))

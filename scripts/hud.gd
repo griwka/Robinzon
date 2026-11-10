@@ -869,7 +869,11 @@ func _refill(p: PanelContainer) -> void:
 	elif p == shop_panel: _fill_shop()
 
 
-func open_craft(_station := "") -> void:
+var _craft_station := ""   # окно открыто у станции (печь, костёр…) — её рецепты наверху
+
+
+func open_craft(station := "") -> void:
+	_craft_station = station
 	_fill_craft()
 	_open(craft_panel)
 
@@ -882,7 +886,24 @@ func _fill_craft() -> void:
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size = Vector2(580, 0)
 	body.add_child(note)
+	# у станции — сначала её рецепты (что можно сделать прямо здесь), потом всё остальное
+	var order: Array = []
+	if _craft_station != "":
+		for r in Data.RECIPES:
+			if r["station"] == _craft_station and Game.recipe_unlocked(r):
+				order.append(r)
+		var head := _label("Здесь, %s:" % names.get(_craft_station, _craft_station), 19, WOOD, false)
+		body.add_child(head)
+		if order.is_empty():
+			body.add_child(_label("Пока нечего — рецепты для этого места откроются по сюжету", 15, INK, false))
+	var rest_start := order.size()
 	for r in Data.RECIPES:
+		if not order.has(r):
+			order.append(r)
+	for oi in order.size():
+		var r: Dictionary = order[oi]
+		if oi == rest_start and _craft_station != "":
+			body.add_child(_label("Остальные рецепты:", 19, WOOD, false))
 		if not Game.recipe_unlocked(r):
 			continue
 		var station: String = r["station"]
