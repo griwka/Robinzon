@@ -7,6 +7,7 @@ signal new_game_pressed
 signal resume_pressed
 signal save_pressed
 signal to_main_menu_pressed
+signal to_camp_pressed                # «Вернуться в лагерь»: если герой где-то застрял
 signal load_slot_pressed(n: int)      # загрузить игру из ячейки n
 signal save_slot_pressed(n: int)      # сохранить текущую игру в ячейку n
 signal new_game_slot_pressed(n: int)  # начать новую игру в ячейке n
@@ -50,8 +51,8 @@ func _ready() -> void:
 func _button(text: String, cb: Callable, color := HUD.GREEN) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(340, 62)
-	b.add_theme_font_size_override("font_size", 26)
+	b.custom_minimum_size = Vector2(340, 54)
+	b.add_theme_font_size_override("font_size", 24)
 	if color != HUD.GREEN:
 		b.add_theme_stylebox_override("normal", hud._box(color, color.darkened(0.45), 12, 4, 10))
 		b.add_theme_stylebox_override("hover", hud._box(color.lightened(0.12), color.darkened(0.45), 12, 4, 10))
@@ -160,6 +161,7 @@ func _build_pause() -> void:
 	v.add_child(save_btn)
 	v.add_child(_button("Сохранить в другую ячейку", func(): open_slots("save", show_pause), HUD.WOOD_LIGHT))
 	v.add_child(_button("Загрузить игру", func(): open_slots("load", show_pause), HUD.WOOD_LIGHT))
+	v.add_child(_button("Вернуться в лагерь", func(): to_camp_pressed.emit(), HUD.WOOD_LIGHT))
 	v.add_child(_button("Настройки", func(): open_settings(show_pause), HUD.WOOD_LIGHT))
 	v.add_child(_button("Главное меню", func(): to_main_menu_pressed.emit(), Color("e0a23a")))
 	v.add_child(_button("Выйти из игры", func():

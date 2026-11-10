@@ -55,6 +55,8 @@ var build_aim := false               # строим: камера смотрит
 var force_indoor := false             # внутри башни (Великий маяк): камера ближе, как в бункере
 var ext_push := Vector3.ZERO          # ветер на открытом балконе толкает героя
 var near_climb: Climbable = null
+const GRASS_SLOW := 0.6
+var in_grass := false          # идём сквозь густую траву или папоротник — медленнее
 var near_climb_down := false   # стоим у верха подъёма — Пробел: спуститься по нему (с балкона маяка, яруса, ледника)
 var _climb_side := Vector3.FORWARD
 var _climb_phase := 0.0
@@ -72,7 +74,7 @@ var _popup_t := 0.0
 func _ready() -> void:
 	add_to_group("player")
 	collision_layer = 16
-	collision_mask = 1 | 2 | 4
+	collision_mask = 1 | 2 | 4 | ResourceNode.CAP_LAYER   # + «крышки» над преградами: на них не запрыгнуть
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.3
@@ -341,6 +343,8 @@ func _physics_process(delta: float) -> void:
 	var speed := SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
 	if _swing_t > 0.0:
 		speed *= 0.4
+	if in_grass:
+		speed *= GRASS_SLOW   # густая трава не стена, но идти сквозь неё труднее
 	if Game.frozen():
 		speed = WALK_SPEED * 0.5   # замёрз: еле идёшь
 
@@ -772,10 +776,20 @@ func _find_target() -> void:
 	var best_score := INF
 	var forward := -Basis(Vector3.UP, model.rotation.y).z
 	var me := global_position
+	var grass := false
+	var moving := Vector2(velocity.x, velocity.z).length() > 0.8
 	for n in get_tree().get_nodes_in_group("interactable"):
 		# быстрый отсев по расстоянию — объектов на острове больше тысячи
 		if (n as Node3D).global_position.distance_squared_to(me) > 49.0:
 			continue
+		# стоим в густой траве? (она не мешает пройти, но замедляет)
+		if n is ResourceNode and (n as ResourceNode).kind in ResourceNode.SOFT:
+			var gp: Vector3 = (n as Node3D).global_position
+			var gr: float = ResourceNode.KINDS[(n as ResourceNode).kind]["radius"] + 0.2
+			if absf(gp.y - me.y) < 1.2 and Vector2(gp.x - me.x, gp.z - me.z).length_squared() < gr * gr:
+				grass = true
+				if moving:
+					(n as ResourceNode).brush()
 		# бабочек и светлячков без сачка не ловят — не делаем их целью
 		if (n is Critters.Butterfly or n.is_in_group("firefly")) and not Game.has_tool("net"):
 			continue
@@ -803,6 +817,7 @@ func _find_target() -> void:
 		if score < best_score:
 			best_score = score
 			best = n
+	in_grass = grass
 	if best != target:
 		target = best
 		_update_tool()
@@ -838,8 +853,18 @@ func _update_highlight() -> void:
 			(m as MeshInstance3D).material_overlay = _hl_mat
 
 
+## Жест без цели: герой делает движение работы (полил из круга действий — взмах лейкой).
+func gesture(kind := "hands") -> void:
+	swing_kind = kind
+	_whoosh_done = false
+	_swing_t = SWING_TIME
+
+
 func try_interact() -> void:
 	if _swing_t > 0.0 or target == null:
+		return
+	# у грядки и загона дел несколько — открываем круг действий (если выбирать не из чего, действуем сразу)
+	if target.has_method("wheel_request") and target.wheel_request(self):
 		return
 	# умный выбор: нужный инструмент есть в сумке — герой сам берёт его в руку (подсветка ячейки переходит).
 	# Пальму не трогаем: с пустыми руками её трясут, с топором — рубят, это решает игрок.
@@ -861,6 +886,27 @@ func try_interact() -> void:
 			t.interact(self))
 
 
+## Подсказка про подъём рядом (лиана, стена, лестница) — её видно всегда, даже если рядом есть чем заняться.
+func _climb_hint() -> String:
+	if near_climb.locked_hint != "":
+		return near_climb.locked_hint
+	if near_climb_down:
+		var what := "по лестнице" if near_climb.ladder else ("по ледяной стене" if near_climb.ice else ("по выступам" if near_climb.holds != "" or near_climb.rock else "по лиане"))
+		var need := near_climb.ladder or Game.has_tool("climbing_gloves") and (not near_climb.ice or Game.has_tool("ice_pick"))
+		return ("[Пробел]  Спуститься " + what) if need else ("Спуститься " + what + " (нужны перчатки лазальщика)")
+	if near_climb.ice:
+		return "[Пробел]  Лезть по ледяной стене" if Game.has_tool("ice_pick") and Game.has_tool("climbing_gloves") \
+			else "Ледяная стена (нужны ледоруб и перчатки лазальщика)"
+	if near_climb.holds != "":
+		return "[Пробел]  Лезть по выступам стены маяка" if Game.has_tool("climbing_gloves") 				else "Стена маяка (нужны перчатки лазальщика)"
+	if near_climb.rock:
+		return "[Пробел]  Лезть по выступам базальта (на стене жарко!)" if Game.has_tool("climbing_gloves") \
+			else "Стена кратера (нужны перчатки лазальщика)"
+	if near_climb.ladder:
+		return "[Пробел]  Лезть по лестнице"
+	return "[Пробел]  Лезть по лиане" if Game.has_tool("climbing_gloves") else "Лиана (нужны перчатки лазальщика)"
+
+
 func get_hint() -> String:
 	if climbing:
 		if climbing.wind and GreatLighthouse.gust > 0.5:
@@ -869,26 +915,9 @@ func get_hint() -> String:
 			var rest := climbing.at_rest(global_position.y - climbing.world_bottom().y)
 			return "W — вверх,  S — вниз,  Пробел — спрыгнуть" + (("   ·   %s: повиси, отдышись" % ("зарубка" if climbing.ice else "уступ")) if rest else ",  Q — поесть")
 		return "W — вверх,  S — вниз,  Пробел — спрыгнуть" + ("" if climbing.ladder else ",  Q — поесть")
-	if near_climb and (target == null or not is_instance_valid(target)):
-		if near_climb.locked_hint != "":
-			return near_climb.locked_hint
-		if near_climb_down:
-			var what := "по лестнице" if near_climb.ladder else ("по ледяной стене" if near_climb.ice else ("по выступам" if near_climb.holds != "" or near_climb.rock else "по лиане"))
-			var need := near_climb.ladder or Game.has_tool("climbing_gloves") and (not near_climb.ice or Game.has_tool("ice_pick"))
-			return ("[Пробел]  Спуститься " + what) if need else ("Спуститься " + what + " (нужны перчатки лазальщика)")
-		if near_climb.ice:
-			return "[Пробел]  Лезть по ледяной стене" if Game.has_tool("ice_pick") and Game.has_tool("climbing_gloves") \
-				else "Ледяная стена (нужны ледоруб и перчатки лазальщика)"
-		if near_climb.holds != "":
-			return "[Пробел]  Лезть по выступам стены маяка" if Game.has_tool("climbing_gloves") 				else "Стена маяка (нужны перчатки лазальщика)"
-		if near_climb.rock:
-			return "[Пробел]  Лезть по выступам базальта (на стене жарко!)" if Game.has_tool("climbing_gloves") \
-				else "Стена кратера (нужны перчатки лазальщика)"
-		if near_climb.ladder:
-			return "[Пробел]  Лезть по лестнице"
-		return "[Пробел]  Лезть по лиане" if Game.has_tool("climbing_gloves") else "Лиана (нужны перчатки лазальщика)"
+	# подъём рядом: подсказку про него показываем всегда — и отдельной строкой, если рядом есть ещё и дело
+	var climb := _climb_hint() if near_climb else ""
 	if target == null or not is_instance_valid(target):
-		return ""
-	if target is ResourceNode and (target as ResourceNode).key_hint() != "":
-		return (target as ResourceNode).key_hint()
-	return "[ЛКМ / E]  " + target.get_hint()
+		return climb
+	var act := (target as ResourceNode).key_hint() if target is ResourceNode and (target as ResourceNode).key_hint() != "" else "[ЛКМ / E]  " + str(target.get_hint())
+	return act if climb == "" else climb + "\n" + act

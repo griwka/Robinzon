@@ -76,6 +76,11 @@
   - суставы персонажа: `Body`, `Head`, `ArmL`/`ArmR`, `LegL`/`LegR`, `HandR`;
   - листва: `Crown` и `*_leaf` (ветер и прозрачность у камеры);
   - остальное: `Fruit`, `Lid`, `DoorL`/`DoorR`, `Handle`, `FirePoint`, `Perch`, `Soil`.
+- **Действия у грядок и загонов** — круг действий: `wheel_request(player)` / `wheel_options()` у `GardenBed`, `AnimalPen`, `Animal`,
+  сигнал `Game.wheel_requested`, рисует `HUD.show_wheel()`. `interact()` по-прежнему делает главное дело сразу (его зовут автотесты).
+- **Ячейки инструментов:** `Game.BAR_SIZE` (4), `Game.bar`, `hold_slots()`, `hold(id)` вытесняет давно не нужный инструмент.
+- **Преграды:** густая трава (`ResourceNode.SOFT`) — слой 8, замедляет (`Player.in_grass`); над преградами с инструментом —
+  невидимая «крышка» (`CAP_LAYER` = 32), чтобы на них не запрыгивали.
 - **Сохранение:** версия `SAVE_VERSION` в `game.gd`. Новые флаги для старых сохранений — через миграцию в `load_game`.
   Ячейки: `Game.SLOTS`, `slot_path(n)`, `use_slot(n)`, `slot_info(n)`; ячейка 1 — прежний `save.json`, у тестов свои `save_dev*.json`.
 
@@ -145,6 +150,7 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 - `--pose=stone_axe:0.32` — застывшая поза работы (фаза 0..1), `--face=0` — куда смотрит герой (с `--yaw=1.57` — вид сбоку);
 - `--fxtest` — все эффекты перед кадром;
 - `--climb=N:h` — герой на лиане N на высоте h (0..1); `--slots=load|new|save|pauseload` — список ячеек сохранения;
+- `--demo --wheel=pen|bed|seeds` — круг действий; `--panel=build|craft|inv` — окно (всё открыто); `--farline=marta` — реплика издалека;
 - `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO.
 
 Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для музыки и фона — ffmpeg в PATH;

@@ -122,6 +122,7 @@ func _ready() -> void:
 		Game.use_slot(n)
 		_new_game())
 	menu.load_slot_pressed.connect(_load_slot)
+	menu.to_camp_pressed.connect(to_camp)
 	menu.save_slot_pressed.connect(func(n: int):
 		Game.use_slot(n)
 		_save())
@@ -667,6 +668,21 @@ func _spawn_postgame() -> void:
 		lv.rotation.y = atan2(lp.x - c.x, lp.z - c.z)
 		add_child(lv)
 		island.poi_extra["lyova"] = lp
+
+
+## «Вернуться в лагерь» из паузы: герой застрял (за камнем, в яме, в воде) — переносим его к месту высадки.
+## Ничего не теряется и ничего не стоит: это страховка, а не наказание.
+func to_camp() -> void:
+	_resume()
+	player.controls_enabled = false
+	hud.fade_through(func():
+		if player.climbing:
+			player._stop_climb()
+		player.velocity = Vector3.ZERO
+		player.global_position = island.spawn_point + Vector3(0, 0.4, 0)
+		player.cam_rig.global_position = player.global_position + Vector3(0, 1.4, 0)
+		player.controls_enabled = true
+		hud.toast("Ты снова в лагере", Color("ffe08a")))
 
 
 ## Загрузить игру из другой ячейки: всё начинается с чистого листа и читается из её файла.

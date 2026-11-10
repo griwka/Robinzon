@@ -91,6 +91,46 @@ func _process(_delta: float) -> void:
 				p.global_position = c.global_position + Vector3(1.4, 0.4, 0.6)
 				p.model.rotation.y = atan2(p.global_position.x - c.global_position.x, p.global_position.z - c.global_position.z)
 				p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+	if _frames == 30 and args.has("wheel"):   # для скриншотов: круг действий (--demo --wheel=pen|bed|seeds)
+		var wm := str(args["wheel"])
+		for b in get_tree().get_nodes_in_group("building"):
+			if wm == "pen" and b is AnimalPen and b.id == "coop":
+				Game.inventory["corn"] = 3
+				b.fed = false
+				b.product_ready = false
+				b.wheel_request(p)
+				break
+			if wm == "bed" and b is GardenBed and b.crop != "" and b.stage() != 3:
+				Game.inventory["watering_can"] = 1
+				Game.inventory["fertilizer"] = 2
+				b.watered = false
+				b.wheel_request(p)
+				break
+			if wm == "seeds" and b is GardenBed:
+				b.crop = ""
+				b.progress = 0.0
+				b._refresh()
+				Game.inventory["seed_carrot"] = 3
+				Game.inventory["seed_corn"] = 2
+				Game.inventory["seed_tomato"] = 1
+				b.wheel_request(p)
+				break
+	if _frames == 30 and args.has("panel"):   # для скриншотов: окно (--panel=build|craft|inv)
+		Game.inventory["wood"] = 12
+		Game.inventory["fiber"] = 3
+		for bid in Data.BUILDINGS:
+			Game.unlocked[bid] = true
+		for r in Data.RECIPES:
+			Game.unlocked[r["id"]] = true
+		Game.inventory_changed.emit()
+		match str(args["panel"]):
+			"build": main.hud.open_build()
+			"craft": main.hud.open_craft()
+			"inv": main.hud.open_inventory()
+	if _frames == 30 and args.has("farline"):   # для скриншотов: реплика жителя с другого острова
+		main.hud.show_dialogue([[str(args["farline"]), "Суп готов. Возвращайся, пока не остыл."]], Callable())
+	if _frames == 30 and args.has("pausemenu"):   # для скриншотов: меню паузы
+		main._pause()
 	if _frames == 4 and args.has("slots"):   # для скриншотов: список ячеек (--slots=load|new|save|pauseload)
 		Game.use_slot(2)
 		main._save()
@@ -409,7 +449,7 @@ func _test_palm() -> void:
 	palm.interact(p)
 	_check(palm.hp == hp0 - 1, "с топором в руке пальму рубят")
 	Game.inventory["machete"] = 1
-	_check(Game.hold_slots() == ["machete", "stone_axe"], "в ячейках внизу — инструменты по порядку")
+	_check(Game.hold_slots().has("machete") and Game.hold_slots().has("stone_axe"), "новый инструмент сам занимает свободную ячейку внизу")
 	var bush: ResourceNode = null
 	for n in get_tree().get_nodes_in_group("interactable"):
 		if n is ResourceNode and n.kind == "thicket" and n.active:
@@ -448,6 +488,96 @@ func _test_slots() -> void:
 	_check(not Game.slot_used(3), "ячейку можно очистить")
 	Game.use_slot(1)
 	_check(Game.save_path == Game.slot_path(1), "вернулись в первую ячейку")
+
+
+## Правки по списку от игрока: трава без стены, круг действий, четыре ячейки, реплики издалека.
+func _test_friend_list() -> void:
+	var p: Player = main.player
+	var inv: Dictionary = Game.inventory.duplicate()
+	var held0 := Game.held
+	var pos0 := p.global_position
+	# 1. густая трава: не стена, но замедляет
+	var grass: ResourceNode = null
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is ResourceNode and n.kind == "tall_grass" and n.active:
+			grass = n
+			break
+	_check(grass != null and grass.collision_layer == 8, "густая трава — не стена (сквозь неё проходят)")
+	if grass:
+		p.global_position = grass.global_position + Vector3(0, 0.2, 0)
+		p._find_target()
+		_check(p.in_grass, "в густой траве герой идёт медленнее")
+		p.global_position = main.island.spawn_point
+		p._find_target()
+		_check(not p.in_grass, "на чистом месте — обычная скорость")
+	# 5. круг действий у грядки и загона
+	var got := []
+	var on_wheel := func(title: String, info: String, options: Array): got.append([title, info, options])
+	Game.wheel_requested.connect(on_wheel)
+	var c: Vector3 = main.island.camp_center
+	var bed := main.build.spawn_building("garden_bed", c + Vector3(30, 0, 30), 0.0) as GardenBed
+	Game.inventory = {"seed_carrot": 2, "seed_corn": 1}
+	_check(bed.wheel_request(p) and got.size() == 1 and got[0][2].size() == 2, "пустая грядка: круг с семенами на выбор")
+	if not got.is_empty():
+		(got[0][2][0]["callback"] as Callable).call()
+	_check(bed.crop != "", "выбор в круге сажает семена (%s)" % bed.crop)
+	got.clear()
+	Game.inventory["watering_can"] = 1
+	_check(not bed.wheel_request(p) and got.is_empty(), "дело одно (полить) — круга нет, оно делается сразу")
+	bed.interact(p)
+	_check(bed.watered, "грядка полита")
+	Game.inventory["fertilizer"] = 1
+	_check(bed.wheel_request(p) and got.size() == 1 and not got[0][2][0].get("enabled", true) and got[0][2][1].get("enabled", true),
+		"полито, есть удобрение: в круге «полить» погашено, «удобрить» доступно")
+	if not got.is_empty():
+		(got[0][2][1]["callback"] as Callable).call()
+	_check(bed.fertilized and Game.count("fertilizer") == 0, "выбор в круге удобряет грядку")
+	got.clear()
+	var coop := main.build.spawn_building("coop", c + Vector3(34, 0, 30), 0.0) as AnimalPen
+	Game.inventory["corn"] = 3
+	_check(coop.wheel_request(p) and got.size() == 1 and got[0][2].size() == 2 and str(got[0][2][0]["text"]) == "Покормить"
+		and str(got[0][2][1]["text"]) == "Погладить", "курятник: круг «покормить / погладить»")
+	if not got.is_empty():
+		(got[0][2][0]["callback"] as Callable).call()
+	_check(coop.fed, "выбор в круге кормит кур")
+	got.clear()
+	Game.inventory.erase("corn")
+	coop.fed = false
+	coop.wheel_request(p)
+	_check(got.size() == 1 and not got[0][2][0].get("enabled", true), "корма нет: «покормить» погашено, видно, сколько нужно (%s)" % (str(got[0][2][0]["note"]) if not got.is_empty() else "—"))
+	Game.wheel_requested.disconnect(on_wheel)
+	for a in coop.animals:
+		if is_instance_valid(a):
+			a.queue_free()
+	coop.queue_free()
+	bed.queue_free()
+	# 6. четыре ячейки инструментов
+	Game.inventory = {"machete": 1, "stone_axe": 1, "pickaxe": 1, "shovel": 1, "fishing_rod": 1, "net": 1}
+	Game.bar = []
+	Game._bar_recent = []
+	Game.held = ""
+	_check(Game.hold_slots().size() == Game.BAR_SIZE, "внизу четыре ячейки инструментов, остальные — в сумке")
+	var out := ""
+	for id in ["machete", "stone_axe", "pickaxe", "shovel", "fishing_rod", "net"]:
+		if not Game.bar.has(id):
+			out = id
+			break
+	Game.hold(Game.bar[1])
+	Game.hold(Game.bar[2])
+	Game.hold(Game.bar[3])
+	var oldest: String = Game.bar[0]
+	Game.hold(out)
+	_check(Game.held_tool() == out and Game.bar.has(out) and not Game.bar.has(oldest) and Game.bar.size() == Game.BAR_SIZE,
+		"инструмент из сумки занимает ячейку того, которым дольше всех не пользовались")
+	# 11. реплики издалека
+	_check(main.hud.speaker_far("marta") and not main.hud.speaker_far("parrot") and not main.hud.speaker_far("narrator"),
+		"Марта на другом острове — её слова приходят издалека; Румба и рассказчик — рядом")
+	Game.inventory = inv
+	Game.bar = []
+	Game._bar_recent = []
+	Game.held = held0
+	p.global_position = pos0
+	Game.inventory_changed.emit()
 
 
 func _test_unique() -> void:
@@ -2281,6 +2411,7 @@ func _autotest() -> void:
 		_test_quest_places()
 		_test_palm()
 		_test_unique()
+		_test_friend_list()
 		_test_slots()
 		_test_mistakes()
 		Game.start_current_quest()

@@ -365,6 +365,20 @@ def i_tomato():
     return img
 
 
+def i_act_pet():
+    """Сердечко — «погладить» в круге действий у загона."""
+    img, d = new()
+    pts = []
+    for i in range(72):
+        t = i / 72 * 2 * math.pi
+        x = 16 * math.sin(t) ** 3
+        y = 13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)
+        pts.append((256 + x * 12.5, 245 - y * 12.5))
+    poly(d, pts, rgb("f0607a"))
+    shine(d, 185, 180, 40, 22)
+    return img
+
+
 def i_cabbage():
     img, d = new()
     for ang in (-1.0, 1.0, -0.45, 0.45):
@@ -1287,6 +1301,7 @@ def main():
              "cabbage": i_cabbage, "watermelon": i_watermelon}
     fruits = {"banana": i_banana, "mango": i_mango, "lemon": i_lemon, "coconut": i_coconut}
     icons = {
+        "act_pet": i_act_pet,
         "wood": i_wood, "stone": i_stone, "fiber": i_fiber, "leaf": i_leaf, "rope": i_rope,
         "plank": i_plank, "shell": i_shell, "sail": i_sail,
         "egg": i_egg, "milk": i_milk, "fried_egg": i_fried_egg, "baked_potato": i_baked_potato,

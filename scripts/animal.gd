@@ -107,10 +107,21 @@ func get_hint() -> String:
 	return pet
 
 
+## Круг действий: у животного из загона — те же дела, что у самого загона, а «погладить» — именно его.
+func wheel_request(player: Node) -> bool:
+	if pen and is_instance_valid(pen) and pen.has_method("wheel_request"):
+		return pen.wheel_request(player, self)
+	return false
+
+
 func interact(player: Node) -> void:
 	if pen and is_instance_valid(pen) and pen.needs_care():
 		pen.interact(player)
 		return
+	pet()
+
+
+func pet() -> void:
 	if _pet_cooldown > 0.0:
 		return
 	_pet_cooldown = 1.0

@@ -107,6 +107,46 @@ func needs_care() -> bool:
 	return product_ready or (not fed and id != "lightning_rod")
 
 
+## Что можно сделать у загона — для круга действий: собрать, покормить, погладить.
+func wheel_options(player: Node = null, animal: Animal = null) -> Array:
+	var cfg: Dictionary = Data.PENS[id]
+	var opts := []
+	if product_ready:
+		opts.append({"text": "Собрать", "note": "%s ×%d" % [Game.item_name(cfg["product"]), cfg["amount"]], "icon": cfg["product"],
+			"callback": interact.bind(player)})
+	elif not fed:
+		var feed_id: String = cfg["feed"].keys()[0]
+		opts.append({"text": "Повесить" if id == "lightning_rod" else "Покормить",
+			"note": "%s %d/%d" % [Game.item_name(feed_id), Game.count(feed_id), int(cfg["feed"][feed_id])], "icon": feed_id,
+			"enabled": Game.can_afford(cfg["feed"]), "callback": interact.bind(player)})
+	if animal == null:
+		for a in animals:
+			if is_instance_valid(a):
+				animal = a
+				break
+	if animal != null:
+		opts.append({"text": "Погладить", "note": "", "icon": "act_pet", "callback": animal.pet})
+	return opts
+
+
+## Круг действий по E (у загона или у его животного). true — круг открыт.
+## У улья и громоотвода гладить некого — там дело одно, и оно делается сразу.
+func wheel_request(player: Node, animal: Animal = null) -> bool:
+	var opts := wheel_options(player, animal)
+	if opts.size() < 2:
+		return false
+	var cfg: Dictionary = Data.PENS[id]
+	var info := ""
+	if product_ready:
+		info = "можно собирать"
+	elif not fed:
+		info = "голодны"
+	else:
+		info = "сыты · %s %s" % [Game.item_name(cfg["product"]).to_lower(), time_left_text()]
+	Game.wheel_requested.emit(cfg["animal_name"], info, opts)
+	return true
+
+
 func interact(_player: Node) -> void:
 	var cfg: Dictionary = Data.PENS[id]
 	if product_ready:

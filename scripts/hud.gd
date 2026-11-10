@@ -77,6 +77,7 @@ func _ready() -> void:
 	choice_panel = _make_window("Выбор", 460)
 	shop_panel = _make_window("Лавка", 640)
 	_build_help()
+	_build_wheel()
 	_build_dialogue()
 	fade_rect = ColorRect.new()
 	fade_rect.color = Color(0.02, 0.03, 0.08, 0)
@@ -91,6 +92,7 @@ func _ready() -> void:
 	Game.dialogue_requested.connect(show_dialogue)
 	Game.shop_requested.connect(open_shop)
 	Game.choice_requested.connect(show_choices)
+	Game.wheel_requested.connect(show_wheel)
 	Game.collection_changed.connect(func(_c, _i, _n): if col_panel.visible: _fill_collections())
 	Game.time_changed.connect(func(_t, _d):
 		clock_label.text = Game.clock_text()
@@ -393,11 +395,11 @@ func _on_inventory_changed() -> void:
 		hotbar.remove_child(c)
 		c.queue_free()
 	var shown := 0
-	# инструменты: ячейки с номерами 1–0, взятый в руку — подсвечен
+	# инструменты: четыре ячейки с номерами 1–4, взятый в руку — подсвечен; остальные инструменты — в сумке
 	var slots := Game.hold_slots()
 	for i in slots.size():
-		var cell := _item_slot(slots[i], 1)
-		var key := _label(str((i + 1) % 10), 15, Color("fff6dc"))
+		var cell := _item_slot(slots[i], 1, false, 72)
+		var key := _label(str(i + 1), 15, Color("fff6dc"))
 		key.position = Vector2(6, 2)
 		cell.get_child(0).get_child(0).add_child(key)
 		if slots[i] == Game.held_tool():
@@ -412,7 +414,9 @@ func _on_inventory_changed() -> void:
 		hotbar.add_child(sep)
 	for id in HOTBAR_MATERIALS:
 		if Game.count(id) > 0:
-			hotbar.add_child(_item_slot(id, Game.count(id)))
+			var mc := _item_slot(id, Game.count(id), false, 56)
+			mc.size_flags_vertical = Control.SIZE_SHRINK_END
+			hotbar.add_child(mc)
 			shown += 1
 	if shown == 0:
 		hotbar.add_child(_label("  Инвентарь пуст — исследуй остров!  "))
@@ -429,8 +433,10 @@ func _on_inventory_changed() -> void:
 
 ## Ячейка предмета: светлая карточка, крупная иконка, количество — бейджем в углу.
 ## big = true — для окна инвентаря (с подписью под иконкой).
-func _item_slot(id: String, n: int, big := false) -> Control:
+func _item_slot(id: String, n: int, big := false, px := 0) -> Control:
 	var size := 96 if big else 80
+	if px > 0:
+		size = px
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
 	box.tooltip_text = Game.item_name(id)
@@ -711,6 +717,15 @@ func _show_line() -> void:
 	var line: Array = _dlg_lines[0]
 	var sp: Dictionary = Data.SPEAKERS.get(line[0], Data.SPEAKERS["narrator"])
 	var nm: String = sp["name"]
+	# житель на другом острове: его слова приходят по рации, а пока рации нет — их приносит Румба
+	var far := speaker_far(str(line[0]))
+	if far and not str(line[1]).begins_with("(в рации") and not str(line[1]).begins_with("(по рации"):
+		var short := nm.split(",")[0]
+		if Game.has_tool("radio_set"):
+			nm = short + " — по рации"
+			Audio.play("radio", -10.0, 0.05)
+		else:
+			nm = short + " — весточку принесла Румба"
 	dlg_name.text = nm
 	var face := FX.icon_texture("portrait_" + str(line[0]))
 	dlg_face.texture = face
@@ -730,6 +745,19 @@ func _show_line() -> void:
 	_type_tw.tween_property(dlg_text, "visible_ratio", 1.0, clampf(str(line[1]).length() * 0.016, 0.25, 1.6))
 	Audio.play("blip", -6.0, 0.1)
 	dlg_text.add_theme_color_override("font_color", INK if nm != "" else Color("6b4524"))
+
+
+## Говорит ли житель издалека: он человек (или зверь) из команды, а на этом острове его сейчас нет.
+func speaker_far(who: String) -> bool:
+	if not (who in REMOTE_SPEAKERS) or not is_inside_tree():
+		return false
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is NPCPerson and (n as NPCPerson).npc_id == who:
+			return false
+	return true
+
+
+const REMOTE_SPEAKERS := ["marta", "stepa", "timur", "ingrid", "vera", "misha", "renata", "gosha", "petya", "pasha", "lyova"]
 
 
 func advance_dialogue() -> void:
@@ -793,7 +821,7 @@ func _fill_craft() -> void:
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(info)
 		info.add_child(_label("%s ×%d   (%s)" % [Game.item_name(out_id), r["out"][out_id], names.get(station, station)], 20))
-		info.add_child(_label(_cost_text(r["in"]), 15, Color("c9f59b") if Game.can_afford(r["in"]) else Color("ffb199")))
+		info.add_child(_cost_row(r["in"]))
 		var b := Button.new()
 		var have_it: bool = Game.owned_unique(out_id) and not r["in"].has(out_id)
 		b.text = "Есть ✓" if have_it else ("Создать" if near else "Далеко")
@@ -810,6 +838,22 @@ func _cost_text(cost: Dictionary) -> String:
 	for id in cost:
 		parts.append("%s %d/%d" % [Game.item_name(id), Game.count(id), cost[id]])
 	return ", ".join(parts)
+
+
+const HAVE := Color("b6f07a")    # материала хватает
+const LACK := Color("ffa38a")    # не хватает
+
+
+## Цена построчно: каждый материал своим цветом — зелёный, если его хватает, красноватый, если нет.
+func _cost_row(cost: Dictionary) -> Control:
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 12)
+	flow.add_theme_constant_override("v_separation", 0)
+	flow.custom_minimum_size = Vector2(420, 0)
+	for id in cost:
+		var ok: bool = Game.count(id) >= int(cost[id])
+		flow.add_child(_label("%s %d/%d%s" % [Game.item_name(id), Game.count(id), cost[id], " ✓" if ok else ""], 15, HAVE if ok else LACK))
+	return flow
 
 
 func open_build() -> void:
@@ -874,8 +918,7 @@ func _build_row(title: String, desc: String, cost: Dictionary, id: String, varia
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.custom_minimum_size = Vector2(430, 0)
 	info.add_child(d)
-	info.add_child(_label(_cost_text(cost) if not cost.is_empty() else "бесплатно", 15,
-		Color("c9f59b") if Game.can_afford(cost) else Color("ffb199")))
+	info.add_child(_cost_row(cost) if not cost.is_empty() else _label("бесплатно", 15, HAVE))
 	var b := Button.new()
 	b.text = "Строить"
 	b.custom_minimum_size = Vector2(120, 44)
@@ -1009,10 +1052,25 @@ func _fill_inventory() -> void:
 		grid.add_theme_constant_override("v_separation", 6)
 		for id in Data.ITEMS:
 			if Data.ITEMS[id]["cat"] == cat and Game.count(id) > 0:
-				grid.add_child(_item_slot(id, Game.count(id), true))
+				var cell := _item_slot(id, Game.count(id), true)
+				if id in Game.HOLD_TOOLS:
+					var slot := cell.get_child(0) as PanelContainer
+					slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+					if id == Game.held_tool():
+						slot.add_theme_stylebox_override("panel", _box(Color("fff2b0"), Color("f2a93a"), 12, 5, 3))
+					slot.gui_input.connect(func(ev: InputEvent):
+						if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+							Game.hold(id)
+							Audio.play("click", -6.0, 0.05))
+				grid.add_child(cell)
 		if grid.get_child_count() > 0:
 			any = true
 			body.add_child(_label(cats[cat], 18, INK, false))
+			if cat == "tool":
+				var tip := _label("Нажми на инструмент — герой возьмёт его в руку. Внизу экрана четыре ячейки (клавиши 1–4): туда попадают те, которыми ты пользуешься.", 14, WOOD, false)
+				tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				tip.custom_minimum_size = Vector2(640, 0)
+				body.add_child(tip)
 			body.add_child(grid)
 		else:
 			grid.queue_free()
@@ -1111,7 +1169,8 @@ func _build_help() -> void:
 	body.add_child(_label("""WASD — ходить,  Shift — бег,  Пробел — прыжок
 Мышь — камера,  колёсико — приблизить/отдалить
 ЛКМ или E — собирать / рубить / использовать
-1–9, 0 — взять инструмент в руку (ещё раз — убрать). Нужный инструмент герой берёт и сам.
+1–4 — взять инструмент из ячейки внизу (ещё раз — убрать). Нужный инструмент герой берёт и сам; остальные — в сумке (Tab), клик по инструменту берёт его в руку.
+У грядки и загона E открывает круг действий: выбери мышью, цифрой или нажми E ещё раз.
 Пальма: пустыми руками — потрясти (кокосы), с топором в руке — срубить
 C — крафт,  B — строительство,  Tab — инвентарь
 J — журнал заданий,  K — коллекции,  Q — поесть,  T — рация (когда появится)
@@ -1136,7 +1195,7 @@ func show_help() -> void:
 
 
 func any_open() -> bool:
-	if dialogue_panel.visible or (credits and credits.visible):
+	if dialogue_panel.visible or (credits and credits.visible) or (wheel and wheel.visible):
 		return true
 	for w in windows:
 		if w.visible:
@@ -1147,7 +1206,146 @@ func any_open() -> bool:
 func close_all() -> void:
 	for w in windows:
 		w.visible = false
+	if wheel:
+		wheel.visible = false
 	panels_changed.emit(any_open())
+
+
+# ================================================================== Круг действий
+var wheel: Control
+var _wheel_hub: Control
+var _wheel_opts: Array = []
+var _wheel_btns: Array = []
+var _wheel_sel := -1
+
+
+func _build_wheel() -> void:
+	wheel = Control.new()
+	wheel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	wheel.visible = false
+	root.add_child(wheel)
+	var shade := ColorRect.new()
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color(0.05, 0.03, 0.0, 0.28)
+	shade.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed:
+			close_all())
+	wheel.add_child(shade)
+	_wheel_hub = Control.new()
+	_wheel_hub.set_anchors_preset(Control.PRESET_CENTER)
+	wheel.add_child(_wheel_hub)
+
+
+## Круг действий: в середине — что это и в каком оно состоянии, вокруг — действия.
+## options: [{"text", "icon", "callback", "note" (мелкая подпись), "enabled" (по умолчанию true)}].
+## Выбор: мышью, цифрой 1..N или E / Enter — подсвеченное (первое доступное). Esc или клик мимо — закрыть.
+func show_wheel(title: String, info: String, options: Array) -> void:
+	for w in windows:
+		w.visible = false
+	for c in _wheel_hub.get_children():
+		_wheel_hub.remove_child(c)
+		c.queue_free()
+	_wheel_opts = options
+	_wheel_btns = []
+	_wheel_sel = -1
+	var n := options.size()
+	var radius := 200.0 if n <= 4 else 240.0
+	# середина
+	var hub := PanelContainer.new()
+	var hs := _box(PAPER, WOOD, 105, 7, 16)
+	hs.shadow_size = 6
+	hub.add_theme_stylebox_override("panel", hs)
+	hub.custom_minimum_size = Vector2(210, 210)
+	hub.position = Vector2(-105, -105)
+	hub.mouse_filter = Control.MOUSE_FILTER_STOP
+	_wheel_hub.add_child(hub)
+	var hv := VBoxContainer.new()
+	hv.alignment = BoxContainer.ALIGNMENT_CENTER
+	hv.add_theme_constant_override("separation", 4)
+	hub.add_child(hv)
+	var tl := _label(title, 21, INK, false)
+	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tl.custom_minimum_size = Vector2(160, 0)
+	hv.add_child(tl)
+	if info != "":
+		var il := _label(info, 14, WOOD, false)
+		il.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		il.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		il.custom_minimum_size = Vector2(160, 0)
+		hv.add_child(il)
+	var kl := _label("E — выбрать  ·  Esc — закрыть", 12, WOOD_LIGHT, false)
+	kl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hv.add_child(kl)
+	# действия по кругу: два — слева и справа, больше — с верхней точки по часовой стрелке
+	for i in n:
+		var o: Dictionary = options[i]
+		var ang := (PI if i == 0 else 0.0) if n == 2 else -PI / 2 + TAU * i / n
+		var on: bool = o.get("enabled", true)
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(168, 132)
+		b.size = Vector2(168, 132)
+		b.position = Vector2(cos(ang), sin(ang)) * radius * Vector2(1.25, 1.0) - Vector2(84, 66)
+		b.disabled = not on
+		b.focus_mode = Control.FOCUS_NONE
+		for st in ["normal", "hover", "pressed", "disabled"]:
+			b.add_theme_stylebox_override(st, _box(CARD, CARD_EDGE, 16, 4, 6))
+		b.modulate.a = 1.0 if on else 0.6
+		var v := VBoxContainer.new()
+		v.set_anchors_preset(Control.PRESET_FULL_RECT)
+		v.alignment = BoxContainer.ALIGNMENT_CENTER
+		v.add_theme_constant_override("separation", 0)
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(v)
+		var ic := _item_icon(str(o.get("icon", "")), 60)
+		ic.custom_minimum_size = Vector2(60, 60)
+		ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(ic)
+		var tx := _label(str(o["text"]), 18, INK, false)
+		tx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(tx)
+		var note := str(o.get("note", ""))
+		if note != "":
+			var nl := _label(note, 13, WOOD if on else Color("b0503a"), false)
+			nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			v.add_child(nl)
+		var key := _label(str(i + 1), 14, Color("fff6dc"))
+		key.position = Vector2(8, 3)
+		b.add_child(key)
+		b.pressed.connect(_wheel_run.bind(i))
+		b.mouse_entered.connect(_wheel_select.bind(i))
+		_wheel_hub.add_child(b)
+		_wheel_btns.append(b)
+		if on and _wheel_sel < 0:
+			_wheel_sel = i
+	_wheel_select(_wheel_sel)
+	wheel.visible = true
+	wheel.modulate.a = 0.0
+	wheel.create_tween().tween_property(wheel, "modulate:a", 1.0, 0.12)
+	Audio.play("open", -6.0, 0.05)
+	panels_changed.emit(true)
+
+
+func _wheel_select(i: int) -> void:
+	if i < 0 or i >= _wheel_btns.size() or not _wheel_opts[i].get("enabled", true):
+		return
+	_wheel_sel = i
+	for k in _wheel_btns.size():
+		var sel := k == i
+		var sb := _box(Color("fff2b0") if sel else CARD, Color("f2a93a") if sel else CARD_EDGE, 16, 6 if sel else 4, 6)
+		sb.shadow_size = 5 if sel else 3
+		for st in ["normal", "hover", "pressed", "disabled"]:
+			(_wheel_btns[k] as Button).add_theme_stylebox_override(st, sb)
+
+
+func _wheel_run(i: int) -> void:
+	if i < 0 or i >= _wheel_opts.size() or not _wheel_opts[i].get("enabled", true):
+		return
+	var cb: Callable = _wheel_opts[i]["callback"]
+	close_all()
+	Audio.play("click", -6.0, 0.05)
+	cb.call()
 
 
 # ================================================================== Титры
@@ -1246,6 +1444,16 @@ func close_credits() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if wheel and wheel.visible and event is InputEventKey and event.pressed and not event.echo:
+		var kc: int = (event as InputEventKey).physical_keycode
+		if kc >= KEY_1 and kc <= KEY_9:
+			_wheel_run(kc - KEY_1)
+			get_viewport().set_input_as_handled()
+			return
+		if event.is_action("interact") or event.is_action("ui_accept"):
+			_wheel_run(_wheel_sel)
+			get_viewport().set_input_as_handled()
+			return
 	if credits and credits.visible and event.is_pressed() and not event.is_echo() 			and (event is InputEventMouseButton or event.is_action("interact") or event.is_action("ui_cancel") or event.is_action("ui_accept")):
 		close_credits()
 		get_viewport().set_input_as_handled()

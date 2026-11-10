@@ -144,8 +144,29 @@ func _ready() -> void:
 		cs.shape = shape
 	cs.position.y = cfg["height"] * 0.5
 	add_child(cs)
-	if kind in ["pebble", "shell", "driftwood", "clay", "sand", "blueberry", "lingonberry", "aloe"]:
-		collision_layer = 8  # мелочь не мешает ходить
+	if kind in ["pebble", "shell", "driftwood", "clay", "sand", "blueberry", "lingonberry", "aloe"] or kind in SOFT:
+		collision_layer = 8  # мелочь не мешает ходить; сквозь траву идут, только медленнее (Player)
+	elif cfg["tool"] != "" and float(cfg["height"]) < CAP_TOP:
+		# невидимая «крышка» над преградой: на камень или завал нельзя запрыгнуть (со склона, с бревна) и перелезть
+		# за него без инструмента. Свой слой: героя держит, а камеру не трогает
+		_cap = StaticBody3D.new()
+		_cap.collision_layer = CAP_LAYER
+		_cap.collision_mask = 0
+		var ccs := CollisionShape3D.new()
+		var ch := CAP_TOP - float(cfg["height"])
+		if cfg.has("long"):
+			var cbx := BoxShape3D.new()
+			cbx.size = Vector3(cfg["long"] * 2.0, ch, cfg["radius"] * 1.6)
+			ccs.shape = cbx
+			ccs.rotation.y = visual.rotation.y
+		else:
+			var ccy := CylinderShape3D.new()
+			ccy.radius = cfg["radius"]
+			ccy.height = ch
+			ccs.shape = ccy
+		ccs.position.y = float(cfg["height"]) + ch * 0.5
+		_cap.add_child(ccs)
+		add_child(_cap)
 
 
 func _setup_visibility() -> void:
@@ -158,6 +179,28 @@ func _setup_visibility() -> void:
 		gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 		if kind in ["tall_grass", "fern", "pebble", "shell", "driftwood", "heather", "sand", "moss"]:
 			gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+const CAP_TOP := 4.5      # докуда поднимается невидимая «крышка» над преградой
+const CAP_LAYER := 32     # слой «крышек»: с ним сталкивается только герой
+var _cap: StaticBody3D
+
+
+## Густая трава и папоротник: не стена. Сквозь них идут (медленнее), они шуршат и качаются.
+const SOFT := ["tall_grass", "fern", "heather", "moss"]
+var _brush_t := 0.0
+
+
+## Герой идёт сквозь траву: она качнулась и зашуршала.
+func brush() -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	if not active or now - _brush_t < 0.45 or (_hit_tw and _hit_tw.is_valid() and _hit_tw.is_running()):
+		return
+	_brush_t = now
+	Audio.play("rustle", -12.0, 0.25, global_position)
+	_hit_tw = create_tween()
+	_hit_tw.tween_property(visual, "scale", _base_scale * Vector3(1.1, 0.86, 1.1), 0.1)
+	_hit_tw.tween_property(visual, "scale", _base_scale, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func is_obstacle() -> bool:
@@ -329,6 +372,8 @@ func _deplete() -> void:
 	remove_from_group("interactable")
 	var saved_layer := collision_layer
 	collision_layer = 0
+	if _cap:
+		_cap.collision_layer = 0
 	if _hit_tw and _hit_tw.is_valid():
 		_hit_tw.kill()
 	var cfg: Dictionary = KINDS[kind]
@@ -399,5 +444,7 @@ func _respawn(layer: int) -> void:
 	var tw := create_tween()
 	tw.tween_property(visual, "scale", _base_scale, 1.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	collision_layer = layer
+	if _cap:
+		_cap.collision_layer = CAP_LAYER
 	active = true
 	add_to_group("interactable")

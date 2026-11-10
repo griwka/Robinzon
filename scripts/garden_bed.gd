@@ -111,20 +111,85 @@ func interact(_player: Node) -> void:
 		3:
 			_harvest()
 		_:
-			if watered and not fertilized and Game.count("fertilizer") > 0:
-				Game.pay({"fertilizer": 1})
-				fertilized = true
-				Audio.play("plant", -2.0, 0.1, global_position)
-				FX.burst(self, Vector3(0, 0.5, 0), Color("7a5a3a"), 12)
-				Game.notified.emit("Удобрено: теперь растёт вдвое быстрее", Color("c9f59b"))
-			elif not watered and Game.has_tool("watering_can"):
-				watered = true
-				Game.bump("watered", "bed")
-				Audio.play("water", -3.0, 0.1, global_position)
-				FX.burst(self, Vector3(0, 0.5, 0), Color("6fc3ff"), 16)
-				_refresh()
+			if watered and can_fertilize():
+				fertilize()
+			elif can_water():
+				water()
 			else:
 				Game.notified.emit("%s созреет через ~%d c" % [Data.CROPS[crop]["name"], int(_time_left())], Color("ffe08a"))
+
+
+func can_water() -> bool:
+	return crop != "" and progress < 1.0 and not watered and Game.has_tool("watering_can")
+
+
+func can_fertilize() -> bool:
+	return crop != "" and progress < 1.0 and not fertilized and Game.count("fertilizer") > 0
+
+
+func water() -> void:
+	if not can_water():
+		return
+	watered = true
+	Game.bump("watered", "bed")
+	Audio.play("water", -3.0, 0.1, global_position)
+	FX.burst(self, Vector3(0, 0.5, 0), Color("6fc3ff"), 16)
+	_refresh()
+
+
+func fertilize() -> void:
+	if not can_fertilize():
+		return
+	Game.pay({"fertilizer": 1})
+	fertilized = true
+	Audio.play("plant", -2.0, 0.1, global_position)
+	FX.burst(self, Vector3(0, 0.5, 0), Color("7a5a3a"), 12)
+	Game.notified.emit("Удобрено: теперь растёт вдвое быстрее", Color("c9f59b"))
+
+
+## Что можно сделать с грядкой сейчас — для круга действий. Пусто — выбирать не из чего.
+func wheel_options(player: Node = null) -> Array:
+	var opts := []
+	match stage():
+		0:
+			for c in Data.CROPS:
+				var seed_id := _seed_for(c)
+				if Game.count(seed_id) > 0 and can_grow(c):
+					opts.append({"text": Data.CROPS[c]["name"], "note": "семян: %d · ~%d с" % [Game.count(seed_id), int(Data.CROPS[c]["time"])],
+						"icon": seed_id, "callback": plant.bind(c)})
+			return opts
+		3:
+			return []
+	if not can_grow(crop):
+		return []
+	var w_note := "уже полито" if watered else ("ускорит рост" if Game.has_tool("watering_can") else "нужна лейка")
+	opts.append({"text": "Полить", "note": w_note, "icon": "watering_can", "enabled": can_water(), "callback": func():
+		if player and player.has_method("gesture"):
+			Game.hold("watering_can")
+			player.gesture("watering_can")
+		water()})
+	var f_note := "уже удобрено" if fertilized else ("вдвое быстрее · есть: %d" % Game.count("fertilizer") if Game.count("fertilizer") > 0 else "нет удобрения")
+	opts.append({"text": "Удобрить", "note": f_note, "icon": "fertilizer", "enabled": can_fertilize(), "callback": fertilize})
+	return opts
+
+
+## Круг действий по E: семена на выбор или «полить / удобрить». true — круг открыт.
+## Когда доступно одно-единственное дело (собрать урожай, полить) — круга нет, оно делается сразу.
+func wheel_request(player: Node) -> bool:
+	var opts := wheel_options(player)
+	if opts.is_empty() or opts.size() > 8:
+		return false
+	if stage() == 0:
+		Game.wheel_requested.emit("Что посадить?", "", opts)
+		return true
+	var on := 0
+	for o in opts:
+		if o.get("enabled", true):
+			on += 1
+	if on == 0 or (on == 1 and opts[0].get("enabled", true)):
+		return false
+	Game.wheel_requested.emit(Data.CROPS[crop]["name"], "растёт: %d%% · ещё ~%d с" % [int(progress * 100), int(_time_left())], opts)
+	return true
 
 
 func _seed_for(c: String) -> String:

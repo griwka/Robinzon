@@ -13,6 +13,7 @@ signal time_changed(time_of_day: float, day: int)
 signal shop_requested(shop_id: String)
 signal choice_requested(title: String, options: Array)
 signal held_changed
+signal wheel_requested(title: String, info: String, options: Array)   # меню действий по кругу (грядка, загон)
 
 const SAVE_PATH := "user://save.json"
 ## Куда сохраняется игра. Автотесты, проверка и скриншоты пишут в отдельный файл и никогда
@@ -58,12 +59,22 @@ const HOLD_TOOLS := ["machete", "stone_axe", "pickaxe", "iron_pickaxe", "shovel"
 
 
 ## Ячейки внизу: инструменты, которые есть в сумке (по порядку; ячейка k — клавиша k, десятая — 0).
+## Ячейки инструментов внизу экрана: их всего BAR_SIZE. Остальные инструменты лежат в сумке (Tab);
+## стоит взять такой в руку (сам герой — когда он нужен, или игрок — кликом в сумке), и он занимает ячейку
+## того инструмента, который дольше всех не был в руке.
+const BAR_SIZE := 4
+var bar: Array = []
+var _bar_recent: Array = []   # кто недавно был в руке: первым — самый свежий
+
+
 func hold_slots() -> Array:
-	var out := []
+	bar = bar.filter(func(id): return id in HOLD_TOOLS and has_tool(id))
 	for id in HOLD_TOOLS:
-		if has_tool(id):
-			out.append(id)
-	return out
+		if bar.size() >= BAR_SIZE:
+			break
+		if has_tool(id) and not bar.has(id):
+			bar.append(id)
+	return bar
 
 
 ## Что сейчас в руке ("" — руки свободны).
@@ -72,7 +83,25 @@ func held_tool() -> String:
 
 
 func hold(id: String) -> void:
-	if id == held:
+	var bar_changed := false
+	if id != "" and id in HOLD_TOOLS and has_tool(id):
+		_bar_recent.erase(id)
+		_bar_recent.push_front(id)
+		hold_slots()
+		if not bar.has(id):
+			# ячейки заняты: уступает место тот, кого дольше всех не брали
+			var worst := 0
+			var worst_rank := -1
+			for i in bar.size():
+				var r := _bar_recent.find(bar[i])
+				if r < 0:
+					r = 999
+				if r > worst_rank:
+					worst_rank = r
+					worst = i
+			bar[worst] = id
+			bar_changed = true
+	if id == held and not bar_changed:
 		return
 	held = id
 	held_changed.emit()
@@ -666,7 +695,7 @@ func save_game(extra: Dictionary) -> void:
 		"collections": collections, "chapter": chapter, "quest_index": quest_index,
 		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags, "cleared": cleared.keys(),
 		"time_of_day": time_of_day, "day": day, "world_time": world_time,
-		"location": location, "held": held,
+		"location": location, "held": held, "bar": bar,
 		"saved_at": Time.get_datetime_string_from_system(false, true),
 	}
 	# данные текущего острова кладём к остальным островам
@@ -718,6 +747,10 @@ func load_game() -> Dictionary:
 	world_time = float(data.get("world_time", 0.0))
 	location = data.get("location", "home")
 	held = str(data.get("held", ""))
+	bar = []
+	for b in data.get("bar", []):
+		bar.append(str(b))
+	_bar_recent = []
 	# глава дописана после того, как игрок её закончил: открываем следующую
 	if quest_index >= Data.CHAPTERS[mini(chapter, Data.CHAPTERS.size() - 1)]["quests"].size() and chapter + 1 < Data.CHAPTERS.size():
 		chapter += 1
@@ -767,6 +800,8 @@ func reset_state() -> void:
 	cleared = {}
 	location = "home"
 	held = ""
+	bar = []
+	_bar_recent = []
 	loc_data = {}
 	time_of_day = 0.3
 	day = 1
