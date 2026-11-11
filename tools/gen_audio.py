@@ -605,108 +605,307 @@ def sfx_rock():
     return normalize(x)
 
 
-def sfx_rustle():
-    n = int(0.45 * SR)
+# ============================================================ мягкие звуки событий
+# Всё, что звучит «когда что-то произошло» (подобрал, собрал урожай, сделал вещь, задание, монеты, кнопки),
+# сделано в одном уютном ключе:
+#  - тон — калимба и деревянные бруски: основной тон сильный, призвуки тихие и быстро гаснут;
+#  - средний регистр (до ~1.6 кГц основного тона), всё выше 4–5 кГц срезано — ничего не звенит и не шипит;
+#  - мягкая атака 4–6 мс (без щелчка) и короткий тёплый хвост;
+#  - ноты — из до мажора, как музыка игры (высоту звука в игре не «качаем» — Audio.TONAL);
+#  - ровная громкость на слух (level): частые звуки тише, редкие (задание, находка) — заметнее;
+#  - у частых звуков по 3–4 варианта, чтобы не надоедали.
+
+
+def soft_attack(x, ms=5.0):
+    n = max(2, int(ms / 1000 * SR))
+    x = x.copy()
+    x[:n] *= 0.5 - 0.5 * np.cos(np.linspace(0, np.pi, n))
+    return x
+
+
+def fade_end(x, ms=12.0):
+    n = max(2, int(ms / 1000 * SR))
+    x = x.copy()
+    x[-n:] *= np.linspace(1, 0, n)
+    return x
+
+
+def level(x, loud_db, peak_db=-3.0):
+    """Ровная громкость на слух: самый громкий кусок (50 мс, без низа) — на loud_db; пик — не выше peak_db."""
+    w = int(0.05 * SR)
+    k = highpass(x, 150)
+    sq = np.convolve(k * k, np.ones(w) / w, "same")
+    loud = np.sqrt(sq.max()) + 1e-9
+    g = 10 ** (loud_db / 20) / loud
+    cap = 10 ** (peak_db / 20)
+    pk = np.abs(x).max() * g
+    if pk > cap:
+        g *= cap / pk
+    return fade_end(x * g)
+
+
+def kalimba(freq, dur=1.0, decay=0.45, tine=0.05):
+    """Калимба: чистый основной тон, тихая октава и короткий призвук язычка в самом начале."""
+    t = t_axis(dur)
+    x = np.sin(2 * np.pi * freq * t) * np.exp(-t / decay)
+    x += 0.16 * np.sin(2 * np.pi * freq * 2.0 * t + 0.4) * np.exp(-t / (decay * 0.35))
+    x += tine * np.sin(2 * np.pi * freq * 5.93 * t) * np.exp(-t / 0.016)
+    return fade_end(lowpass(soft_attack(x, 4.0), 4500), 40)   # нота не обрывается щелчком
+
+
+def wood(freq, dur=0.22, decay=0.05, body=0.0):
+    """Деревянный брусок: тёплый «тук» — несколько собственных тонов и чуть-чуть шороха удара."""
+    r = np.random.default_rng(int(freq * 7) % 9973)
+    t = t_axis(dur)
+    x = np.sin(2 * np.pi * freq * t) * np.exp(-t / decay)
+    x += 0.35 * np.sin(2 * np.pi * freq * 2.57 * t) * np.exp(-t / (decay / 2.3))
+    x += 0.12 * np.sin(2 * np.pi * freq * 4.3 * t) * np.exp(-t / (decay / 4))
+    if body:
+        x += body * np.sin(2 * np.pi * freq * 0.5 * t) * np.exp(-t / (decay * 1.4))
+    x += lowpass(r.standard_normal(len(t)), 2200) * np.exp(-t / 0.004) * 0.25
+    return fade_end(lowpass(soft_attack(x, 1.5), 4000), 20)
+
+
+def bubble(f0, f1, dur=0.09, amp=1.0):
+    """«Чпок»: тон быстро скользит вверх и гаснет — как пузырёк или пробка."""
+    t = t_axis(dur)
+    f = f0 * (f1 / f0) ** np.clip(t / (dur * 0.6), 0, 1)
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / (dur / 3.5))
+    return fade_end(soft_attack(x, 3.0), 10) * amp
+
+
+def leaves(dur, seed, lo=450, hi=3000):
+    """Шорох листьев: мягкий шум средних частот, «дрожит» — листочки задевают друг друга."""
+    r = np.random.default_rng(seed)
+    n = int(dur * SR)
     t = np.arange(n) / SR
-    flutter = 0.5 + 0.5 * np.sin(2 * np.pi * 23 * t) * np.sin(2 * np.pi * 7 * t)
-    x = bandpass(rng.standard_normal(n), 1500, 7000) * flutter * adsr(n, 0.03, 0.1, 0.6, 0.25)
-    return normalize(x, 0.7)
+    fl = 0.55 + 0.45 * np.abs(np.sin(2 * np.pi * r.uniform(14, 22) * t + r.uniform(0, 6))) * (0.6 + 0.4 * np.sin(2 * np.pi * r.uniform(4, 8) * t))
+    x = bandpass(r.standard_normal(n), lo, hi) * fl
+    env = np.clip(t / 0.035, 0, 1) * np.exp(-t / (dur * 0.38))
+    return lowpass(x * env, 3500)
 
 
-def sfx_pickup():
+def soil(seed, amp=1.0):
+    """Мягкий хлопок земли: глухой, без звона."""
+    r = np.random.default_rng(seed)
     t = t_axis(0.16)
-    f = np.linspace(600, 1400, len(t))
-    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * env_exp(len(t), 0.05, 0.003)
-    return normalize(x, 0.6)
+    x = lowpass(r.standard_normal(len(t)), 650) * np.exp(-t / 0.035) * 2.2
+    x += np.sin(2 * np.pi * 95 * t) * np.exp(-t / 0.04) * 0.5
+    return fade_end(soft_attack(x, 2.0), 20) * amp
 
 
-def sfx_harvest():
+PICK_NOTES = ["E5", "G5", "A5", "C6"]
+
+
+def sfx_pickup(seed=0):
+    """Подобрал: тихий «чпок» и одна нота калимбы."""
+    x = np.zeros(int(0.5 * SR))
+    k = 1.0 + seed * 0.06
+    place(x, bubble(330 * k, 640 * k, 0.08, 0.5), 0.0)
+    place(x, kalimba(note_hz(PICK_NOTES[seed % 4]), 0.45, 0.17) * 0.8, 0.018)
+    return level(reverb(x, 0.5, 0.12, 3500), -20)
+
+
+def sfx_harvest(seed=0):
+    """Собрал урожай: листья шуршат, корешок выходит из земли («чпок»), две ноты вверх."""
+    pairs = [("C5", "G5"), ("D5", "A5"), ("E5", "C6"), ("G4", "D5")]
+    a, b = pairs[seed % 4]
+    x = np.zeros(int(0.95 * SR))
+    place(x, leaves(0.28, 500 + seed) * 0.5, 0.0)
+    place(x, bubble(170, 310, 0.1, 0.55), 0.05)
+    place(x, kalimba(note_hz(a), 0.6, 0.25) * 0.75, 0.08)
+    place(x, kalimba(note_hz(b), 0.7, 0.32) * 0.75, 0.19)
+    return level(reverb(x, 0.8, 0.18, 3500), -16)
+
+
+def sfx_plant(seed=0):
+    """Посадил: две мягкие похлопывания по земле и низкая тихая нота."""
+    x = np.zeros(int(0.65 * SR))
+    place(x, soil(610 + seed), 0.0)
+    place(x, soil(620 + seed, 0.65), 0.12)
+    place(x, kalimba(note_hz(["C4", "D4", "E4", "G4"][seed % 4]), 0.5, 0.25) * 0.4, 0.15)
+    return level(reverb(x, 0.5, 0.12, 3000), -18)
+
+
+def sfx_eat(seed=0):
+    """Поел: два-три сочных хруста и довольная тёплая нота."""
+    r = np.random.default_rng(800 + seed)
+    x = np.zeros(int(0.8 * SR))
+    for i, at in enumerate((0.0, 0.15, 0.29)):
+        n = int(0.07 * SR)
+        tt = np.arange(n) / SR
+        g = np.zeros(n)
+        for _ in range(9):   # хруст — пачка коротких щелчков, не сплошной шум
+            m = int(r.integers(80, 260))
+            c = bandpass(r.standard_normal(m), 500, 2400) * np.hanning(m)
+            place(g, c * r.uniform(0.4, 1.0), r.uniform(0, 0.045))
+        g *= np.exp(-tt / 0.03)
+        place(x, lowpass(g, 3000) * (1.0 - i * 0.25), at)
+    place(x, kalimba(note_hz(["C5", "D5", "E5"][seed % 3]), 0.4, 0.2) * 0.3, 0.4)
+    return level(x, -18)
+
+
+def sfx_craft(seed=0):
+    """Сделал вещь: два деревянных «тук-тук» и мягкий аккорд вверх."""
+    chords = [("C5", "E5", "G5"), ("F4", "A4", "C5"), ("G4", "B4", "D5")]
+    x = np.zeros(int(1.0 * SR))
+    place(x, wood(540, 0.2), 0.0)
+    place(x, wood(660, 0.2) * 0.85, 0.1)
+    for i, n in enumerate(chords[seed % 3]):
+        place(x, kalimba(note_hz(n), 0.7, 0.3) * 0.6, 0.22 + i * 0.065)
+    return level(reverb(x, 0.8, 0.18, 3500), -17)
+
+
+def sfx_build(seed=0):
+    """Поставил постройку: три глухих удара по дереву и тёплый низкий аккорд."""
+    x = np.zeros(int(1.3 * SR))
+    base = [300, 280, 320][seed % 3]
+    for i in range(3):
+        place(x, wood(base + i * 30, 0.3, 0.07, body=0.6) * (1.0 - i * 0.12), i * 0.15)
+    chord = [("C4", "G4", "E5"), ("F3", "C4", "A4"), ("G3", "D4", "B4")][seed % 3]
+    for n, g in zip(chord, (0.5, 0.4, 0.3)):
+        place(x, kalimba(note_hz(n), 0.85, 0.4) * g, 0.47)
+    return level(reverb(x, 0.9, 0.2, 3000), -15)
+
+
+def clink(freq, amp=1.0):
+    """Монетка о монетку: короткий мягкий звон (без резкого верха)."""
+    t = t_axis(0.35)
+    x = np.sin(2 * np.pi * freq * t) * np.exp(-t / 0.16)
+    x += 0.3 * np.sin(2 * np.pi * freq * 2.76 * t) * np.exp(-t / 0.05)
+    x += 0.08 * np.sin(2 * np.pi * freq * 5.4 * t) * np.exp(-t / 0.015)
+    return fade_end(lowpass(soft_attack(x, 2.0), 5500), 30) * amp
+
+
+def sfx_coins(seed=0):
+    """Монеты: мешочек мягко плюхнул, две-три монетки звякнули."""
+    r = np.random.default_rng(900 + seed)
     x = np.zeros(int(0.6 * SR))
-    for i, n in enumerate(["G5", "C6", "E6"]):
-        place(x, marimba(note_hz(n), 0.5) * (0.7 + i * 0.1), i * 0.06)
-    place(x, sfx_rustle()[: int(0.2 * SR)] * 0.4, 0)
-    return normalize(reverb(x, 0.6, 0.15), 0.75)
+    place(x, soil(930 + seed, 0.5), 0.0)
+    at = 0.02
+    for k in range(3 - (seed % 2)):
+        place(x, clink(r.uniform(1300, 1900), r.uniform(0.5, 0.8)), at)
+        at += r.uniform(0.05, 0.09)
+    return level(reverb(x, 0.5, 0.12, 4000), -20)
 
 
-def sfx_plant():
+def sfx_click(seed=0):
+    """Кнопка: короткий тихий деревянный «тук»."""
+    return level(wood([880, 980, 1040, 930][seed % 4], 0.08, 0.018), -24)
+
+
+def sfx_open(seed=0):
+    """Открыл окно: мягкий бумажный «фух» и еле слышная нота."""
+    r = np.random.default_rng(950 + seed)
     n = int(0.3 * SR)
     t = np.arange(n) / SR
-    x = lowpass(rng.standard_normal(n), 900) * np.exp(-t / 0.05)
-    x2 = lowpass(rng.standard_normal(n), 900) * np.exp(-np.maximum(t - 0.12, 0) / 0.04) * (t > 0.12)
-    return normalize(x + x2 * 0.8, 0.7)
+    x = lowpass(r.standard_normal(n), 1500) * np.sin(np.pi * np.clip(t / 0.16, 0, 1)) ** 2 * 0.5
+    place(x, bubble(240, 420, 0.12, 0.35), 0.0)
+    place(x, kalimba(note_hz(["G5", "E5", "A5"][seed % 3]), 0.28, 0.12) * 0.25, 0.05)
+    return level(x, -22)
 
 
-def sfx_water():
-    n = int(0.9 * SR)
-    t = np.arange(n) / SR
-    x = np.zeros(n)
-    for k in range(18):
-        at = rng.uniform(0, 0.6)
-        d = 0.05
-        tt = t_axis(d)
-        f = rng.uniform(700, 1600) * (1 + tt * 8)
-        drop = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt / 0.015)
-        place(x, drop * rng.uniform(0.2, 0.5), at)
-    x += bandpass(rng.standard_normal(n), 1500, 6000) * adsr(n, 0.05, 0.2, 0.5, 0.4) * 0.25
-    return normalize(reverb(x, 0.5, 0.15), 0.7)
-
-
-def sfx_build():
-    x = np.zeros(int(0.9 * SR))
-    for i in range(3):
-        n = int(0.2 * SR)
-        t = np.arange(n) / SR
-        knock = np.sin(2 * np.pi * (300 - i * 20) * t) * np.exp(-t / 0.04) + bandpass(rng.standard_normal(n), 1000, 3000) * np.exp(-t / 0.01) * 0.5
-        place(x, knock, i * 0.22)
-    place(x, marimba(note_hz("C6"), 0.6) * 0.4, 0.66)
-    return normalize(reverb(x, 0.6, 0.12), 0.8)
-
-
-def sfx_craft():
-    x = np.zeros(int(0.7 * SR))
-    for i in range(4):
-        n = int(0.05 * SR)
-        t = np.arange(n) / SR
-        place(x, bandpass(rng.standard_normal(n), 2000, 6000) * np.exp(-t / 0.01) * 0.5, i * 0.07)
-    place(x, marimba(note_hz("E6"), 0.5) * 0.6, 0.3)
-    place(x, marimba(note_hz("A6"), 0.5) * 0.5, 0.38)
-    return normalize(reverb(x, 0.6, 0.15), 0.7)
+def sfx_blip(seed=0):
+    """Подсказка или пустой улов: одна тихая нота."""
+    x = kalimba(note_hz(["E5", "G5", "A5"][seed % 3]), 0.35, 0.14)
+    return level(x, -21)
 
 
 def sfx_quest():
-    x = np.zeros(int(1.8 * SR))
+    """Задание выполнено: тёплое арпеджио калимбы вверх и мягкий аккорд с «подушкой»."""
+    x = np.zeros(int(2.2 * SR))
     for i, n in enumerate(["C5", "E5", "G5", "C6"]):
-        place(x, marimba(note_hz(n), 1.0) * 0.6, i * 0.11)
-        place(x, musicbox(note_hz(n) * 2, 1.2) * 0.25, i * 0.11 + 0.01)
-    for n in ("C5", "E5", "G5"):
-        place(x, pluck(note_hz(n), 1.3) * 0.25, 0.5)
-    return normalize(reverb(x, 1.2, 0.25), 0.8)
+        place(x, kalimba(note_hz(n), 1.0, 0.5) * 0.7, i * 0.1)
+    for n in ("C4", "G4", "E5"):
+        place(x, kalimba(note_hz(n), 1.6, 0.8) * 0.4, 0.46)
+    place(x, pad([note_hz("C4"), note_hz("E4"), note_hz("G4")], 1.6) * 0.9, 0.42)
+    return level(reverb(x, 1.4, 0.24, 4000), -14)
 
 
 def sfx_rare():
-    x = np.zeros(int(1.2 * SR))
-    for i, n in enumerate(["E6", "G6", "B6", "E7"]):
-        place(x, musicbox(note_hz(n), 0.8) * 0.5, i * 0.05)
-    return normalize(reverb(x, 1.0, 0.3), 0.6)
+    """Находка: россыпь светлых нот, но не выше ре третьей октавы, и тихая «подушка» под ними."""
+    x = np.zeros(int(1.6 * SR))
+    for i, n in enumerate(["G5", "B5", "D6", "G6"]):
+        place(x, kalimba(note_hz(n), 0.9, 0.42, tine=0.03) * (0.75 - i * 0.08), i * 0.075)
+    place(x, pad([note_hz("G4"), note_hz("D5")], 1.3) * 0.7, 0.1)
+    return level(reverb(x, 1.2, 0.26, 4500), -16)
 
 
-def sfx_click():
-    n = int(0.05 * SR)
+def sfx_sleep():
+    x = np.zeros(int(2.6 * SR))
+    for i, n in enumerate(["E5", "C5", "A4", "E4"]):
+        place(x, kalimba(note_hz(n), 1.6, 0.7) * 0.6, i * 0.3)
+    place(x, pad([note_hz("A3"), note_hz("E4")], 2.2) * 0.6, 0.2)
+    return level(reverb(x, 1.8, 0.35, 3500), -16)
+
+
+def sfx_water(seed=0):
+    """Полил: мягкое журчание и тихие пузырьки (низкие, без писка)."""
+    r = np.random.default_rng(970 + seed)
+    n = int(0.95 * SR)
     t = np.arange(n) / SR
-    x = np.sin(2 * np.pi * 1600 * t) * np.exp(-t / 0.008) + bandpass(rng.standard_normal(n), 2000, 7000) * np.exp(-t / 0.004) * 0.3
-    return normalize(x, 0.5)
+    am = 0.6 + 0.4 * np.abs(lowpass(r.standard_normal(n), 18) * 6)
+    x = bandpass(r.standard_normal(n), 300, 2200) * np.clip(am, 0, 1.4) * adsr(n, 0.06, 0.2, 0.6, 0.45) * 0.4
+    for _ in range(12):
+        f0 = r.uniform(280, 620)
+        place(x, bubble(f0, f0 * 1.7, r.uniform(0.04, 0.07), r.uniform(0.15, 0.35)), r.uniform(0.02, 0.7))
+    return level(lowpass(reverb(x, 0.6, 0.15, 3000), 4000), -17)
 
 
-def sfx_open():
-    n = int(0.25 * SR)
+def sfx_rustle(seed=0):
+    """Куст или заросли: мягкий шорох листвы (без шипения)."""
+    return level(leaves(0.42, 400 + seed), -19)
+
+
+def sfx_pull(seed=0):
+    """Выдернуть траву: шорох стеблей, тихий треск корешков и мягкий «чпок» земли."""
+    r = np.random.default_rng(700 + seed)
+    d = 0.5
+    n = int(d * SR)
     t = np.arange(n) / SR
-    x = bandpass(rng.standard_normal(n), 600, 3000) * np.sin(np.pi * t / 0.25) ** 2
-    x += marimba(note_hz("G5"), 0.25)[:n] * 0.4
-    return normalize(x, 0.45)
+    x = leaves(d, 710 + seed, 500, 2800) * 0.8
+    for _ in range(int(r.integers(10, 16))):
+        m = int(r.integers(60, 160))
+        c = bandpass(r.standard_normal(m), 600, 2400) * np.hanning(m)
+        place(x, c * r.uniform(0.1, 0.25), 0.03 + r.exponential(0.05))
+    place(x, soil(720 + seed, 0.6), r.uniform(0.09, 0.13))
+    x *= np.clip((d - t) / 0.05, 0, 1)
+    return level(lowpass(x, 3500), -19)
 
 
-def sfx_blip():
-    return normalize(marimba(note_hz("A5"), 0.12) * env_exp(int(0.12 * SR), 0.04), 0.35)
+def sfx_shake():
+    x = np.concatenate([sfx_rustle(0), sfx_rustle(1) * 0.6])
+    thump = np.zeros_like(x)
+    t = t_axis(0.2)
+    place(thump, np.sin(2 * np.pi * 120 * t) * np.exp(-t / 0.05), 0.35)
+    return level(x + thump * 0.05, -16)
+
+
+# имя -> (функция, вариантов); 0 — один файл без номера
+COZY = {
+    "pickup": (sfx_pickup, 4), "harvest": (sfx_harvest, 4), "plant": (sfx_plant, 4), "eat": (sfx_eat, 3),
+    "craft": (sfx_craft, 3), "build": (sfx_build, 3), "coins": (sfx_coins, 3), "click": (sfx_click, 4),
+    "open": (sfx_open, 3), "blip": (sfx_blip, 3), "quest": (sfx_quest, 0), "rare": (sfx_rare, 0),
+    "sleep": (sfx_sleep, 0), "water": (sfx_water, 3), "rustle": (sfx_rustle, 4), "pull": (sfx_pull, 3),
+    "shake": (sfx_shake, 0),
+}
+
+
+def write_cozy(names=None):
+    """Записать мягкие звуки событий; прежние файлы этого звука (и записи Kenney с тем же именем) — убрать."""
+    import glob
+    for name, (fn, nvar) in COZY.items():
+        if names and name not in names:
+            continue
+        for old in glob.glob(os.path.join(OUT, "sfx_%s.wav" % name)) + glob.glob(os.path.join(OUT, "sfx_%s[0-9].wav" % name)):
+            os.remove(old)
+            if os.path.exists(old + ".import"):
+                os.remove(old + ".import")
+        if nvar == 0:
+            write_wav("sfx_" + name, fn())
+        else:
+            for i in range(nvar):
+                write_wav("sfx_%s%d" % (name, i), fn(i))
 
 
 def sfx_step(kind, seed=0):
@@ -781,22 +980,6 @@ def sfx_squawk():
     s = np.sin(2 * np.pi * np.cumsum(freq) / SR + mod)
     s = bandpass(s + 0.3 * rng.standard_normal(len(tt)), 700, 4000) * adsr(len(tt), 0.01, 0.05, 0.7, 0.12)
     return normalize(s, 0.6)
-
-
-def sfx_sleep():
-    x = np.zeros(int(2.5 * SR))
-    for i, n in enumerate(["E5", "C5", "A4", "E4"]):
-        place(x, musicbox(note_hz(n), 1.6) * 0.5, i * 0.28)
-    return normalize(reverb(x, 1.8, 0.4), 0.6)
-
-
-def sfx_shake():
-    x = sfx_rustle()
-    x = np.concatenate([x, x * 0.6])
-    thump = np.zeros_like(x)
-    t = t_axis(0.2)
-    place(thump, np.sin(2 * np.pi * 120 * t) * np.exp(-t / 0.05), 0.35)
-    return normalize(x + thump * 0.8, 0.75)
 
 
 # ============================================================ глава 4 — Грозовой остров
@@ -960,7 +1143,7 @@ def sfx_steam():
     d = 1.1
     t = t_axis(d)
     env = np.minimum(1, t / 0.04) * np.exp(-t / 0.35)
-    return normalize(bandpass(r.standard_normal(len(t)), 2500, 9000) * env, 0.55)
+    return level(lowpass(bandpass(r.standard_normal(len(t)), 900, 4000) * env, 4500), -20)
 
 
 def sfx_hammer():
@@ -1044,9 +1227,9 @@ def sfx_cheer():
         v = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * tt / dd)
         place(x, bandpass(v, 300, 2500) * 0.4, r.uniform(0.0, 0.5))
     for k in range(10):
-        c = highpass(r.standard_normal(int(0.02 * SR)), 1500) * np.exp(-t_axis(0.02) / 0.004)
+        c = bandpass(r.standard_normal(int(0.02 * SR)), 700, 3000) * np.exp(-t_axis(0.02) / 0.004)
         place(x, c, r.uniform(0.3, 1.5))
-    return normalize(x, 0.6)
+    return level(lowpass(x, 4000), -16)
 
 
 def sfx_gust():
@@ -1078,28 +1261,6 @@ def sfx_fire_out():
     return normalize(x, 0.6)
 
 
-def sfx_pull(seed=0):
-    """Выдернуть траву с корнем: шорох стеблей, треск рвущихся корешков и мягкий «чпок» земли."""
-    r = np.random.default_rng(700 + seed)
-    d = 0.5
-    n = int(d * SR)
-    t = np.arange(n) / SR
-    swish_env = np.clip(t / 0.04, 0, 1) * np.exp(-t / 0.16)
-    swish = bandpass(r.standard_normal(n), 1200, 6500) * swish_env * 0.35
-    x = swish.copy()
-    for _ in range(int(r.integers(26, 40))):          # корешки рвутся: густые сухие щелчки
-        at = 0.03 + r.exponential(0.05)
-        m = int(r.integers(25, 90))
-        c = bandpass(r.standard_normal(m), 900, 5000) * np.exp(-np.arange(m) / (m / 4))
-        place(x, c * r.uniform(0.15, 0.45), at)
-    m = int(0.09 * SR)
-    tt = np.arange(m) / SR
-    pop = lowpass(r.standard_normal(m), 350) * np.exp(-tt / 0.02) * 1.4
-    place(x, pop, r.uniform(0.09, 0.13))
-    x *= np.clip((d - t) / 0.05, 0, 1)
-    return normalize(x, 0.6)
-
-
 def main():
     import sys
     os.makedirs(OUT, exist_ok=True)
@@ -1111,12 +1272,14 @@ def main():
                  "step_snow": sfx_step_snow, "lava": sfx_lava, "steam": sfx_steam, "hammer": sfx_hammer,
                  "tortoise": sfx_tortoise, "rumble": sfx_rumble, "frog": sfx_frog, "creak": sfx_creak, "sail": sfx_sail,
                  "cheer": sfx_cheer, "gust": sfx_gust, "fire_out": sfx_fire_out}
+        cozy = [n for n in only if n in COZY]
+        if cozy:
+            write_cozy(cozy)
+            only = [n for n in only if n not in COZY]
         for i in range(4):
             table["step_sand%d" % i] = (lambda k: lambda: sfx_step("sand", k))(i)
 
         table["chop"] = sfx_chop
-        for i in range(3):
-            table["pull%d" % i] = (lambda k: lambda: sfx_pull(k))(i)
         table["whoosh"] = sfx_whoosh
         music = {"eye": music_eye, "meeting": music_meeting, "sea": music_sea, "keeper": music_keeper}
         for name in only:
@@ -1127,12 +1290,9 @@ def main():
         print("audio:", only)
         return
     sfx = {
-        "chop": sfx_chop(), "rock": sfx_rock(), "rustle": sfx_rustle(), "pickup": sfx_pickup(),
-        "harvest": sfx_harvest(), "plant": sfx_plant(), "water": sfx_water(), "build": sfx_build(),
-        "craft": sfx_craft(), "quest": sfx_quest(), "rare": sfx_rare(), "click": sfx_click(),
-        "open": sfx_open(), "blip": sfx_blip(),
-        "cluck": sfx_cluck(), "bleat": sfx_bleat(), "squawk": sfx_squawk(), "oink": sfx_oink(), "sleep": sfx_sleep(),
-        "shake": sfx_shake(), "thud": sfx_thud(),
+        "chop": sfx_chop(), "rock": sfx_rock(),
+        "cluck": sfx_cluck(), "bleat": sfx_bleat(), "squawk": sfx_squawk(), "oink": sfx_oink(),
+        "thud": sfx_thud(),
         "thunder0": sfx_thunder(0), "thunder1": sfx_thunder(1), "thunder2": sfx_thunder(2),
         "radio": sfx_radio(), "honk": sfx_honk(), "metal": sfx_metal(),
         "wind": sfx_wind(), "ice": sfx_ice(), "penguin": sfx_penguin(), "snore": sfx_snore(), "drip": sfx_drip(),
@@ -1144,10 +1304,9 @@ def main():
         sfx["bird%d" % i] = bird(100 + i)
         sfx["step_sand%d" % i] = sfx_step("sand", i)
         # шаги по траве и удары топора — записи Kenney (tools/import_sounds.py), здесь не синтезируем
-        if i < 3:
-            sfx["pull%d" % i] = sfx_pull(i)
     for name, x in sfx.items():
         write_wav("sfx_" + name, x)
+    write_cozy()   # мягкие звуки событий (подобрал, урожай, крафт, задание, кнопки…)
     amb_ocean()
     amb_night()
     amb_rain()

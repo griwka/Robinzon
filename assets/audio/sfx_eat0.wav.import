@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://c5dtla050kmgo"
-path="res://.godot/imported/sfx_rustle.wav-375910fd4226ec2c66a7120103af2752.sample"
+uid="uid://ctuhc20757d4t"
+path="res://.godot/imported/sfx_eat0.wav-6482ef4c7bf78e7f46078e33fe75ceb6.sample"
 
 [deps]
 
-source_file="res://assets/audio/sfx_rustle.wav"
-dest_files=["res://.godot/imported/sfx_rustle.wav-375910fd4226ec2c66a7120103af2752.sample"]
+source_file="res://assets/audio/sfx_eat0.wav"
+dest_files=["res://.godot/imported/sfx_eat0.wav-6482ef4c7bf78e7f46078e33fe75ceb6.sample"]
 
 [params]
 

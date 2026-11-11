@@ -103,8 +103,15 @@ func apply_volumes() -> void:
 		AudioServer.set_bus_mute(i, v <= 0.001)
 
 
+## Звуки с нотами (калимба в до мажоре, как музыка): высоту не «качаем» — иначе фальшивят на фоне музыки.
+## Разнообразие у них — свои варианты записей (sfx_pickup0…3 и т. п.).
+const TONAL := ["pickup", "harvest", "plant", "eat", "craft", "build", "open", "blip", "quest", "rare", "sleep"]
+
+
 ## Проиграть эффект. pos — точка в мире (звук тише, если далеко от игрока).
 func play(name_: String, volume_db := 0.0, pitch_var := 0.08, pos = null) -> void:
+	if name_ in TONAL:
+		pitch_var = 0.0
 	# у звука может быть несколько записей (sfx_cluck0, sfx_cluck1, …) — берём случайную; иначе — одиночный
 	var n := _variants(name_)
 	var s := _stream("sfx_%s%d" % [name_, randi() % n]) if n > 0 else _stream("sfx_" + name_)

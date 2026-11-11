@@ -488,7 +488,7 @@ func eat_item(id: String) -> int:
 	hunger = minf(100.0, hunger + v)
 	_hunger_check()
 	notified.emit("Съеден %s: +%d сытости, +%d сил" % [item_name(id).to_lower(), v, v * 2], Color("ffe08a"))
-	Audio.play("pickup", -4.0)
+	Audio.play("eat", -2.0)
 	ate.emit(v)
 	return v
 

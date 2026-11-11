@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://bjk6lkfcl28yu"
-path="res://.godot/imported/sfx_water.wav-9339038aba9d4c59712a50bf92092e55.sample"
+uid="uid://du8hkn0gnpgux"
+path="res://.godot/imported/sfx_blip2.wav-758ac2abaf4ead146a5193a55b446719.sample"
 
 [deps]
 
-source_file="res://assets/audio/sfx_water.wav"
-dest_files=["res://.godot/imported/sfx_water.wav-9339038aba9d4c59712a50bf92092e55.sample"]
+source_file="res://assets/audio/sfx_blip2.wav"
+dest_files=["res://.godot/imported/sfx_blip2.wav-758ac2abaf4ead146a5193a55b446719.sample"]
 
 [params]
 

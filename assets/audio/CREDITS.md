@@ -4,11 +4,12 @@
 Часть звуков — готовые записи со свободной лицензией.
 
 ## Действия — наборы Kenney (CC0, общественное достояние)
-Удары топора по дереву (`sfx_chop*`), кирки по камню (`sfx_rock*`), стройка (`sfx_build*`), молот кузницы (`sfx_hammer*`),
-металл (`sfx_metal*`), лёд (`sfx_ice*`), посадка и сбор урожая (`sfx_plant*`, `sfx_harvest*`), шаги по траве и снегу
-(`sfx_step_grass*`, `sfx_step_snow*`), крафт (`sfx_craft*`), монеты (`sfx_coins*`), скрип (`sfx_creak*`),
-щелчки и окна интерфейса (`sfx_click*`, `sfx_open*`), подбор предмета (`sfx_pickup*`).
-Источник: Kenney Vleugels, [kenney.nl](https://kenney.nl) — наборы «RPG Audio», «Impact Sounds», «Interface Sounds».
+Удары топора по дереву (`sfx_chop*`), кирки по камню (`sfx_rock*`), молот кузницы (`sfx_hammer*`),
+металл (`sfx_metal*`), лёд (`sfx_ice*`), шаги по траве и снегу (`sfx_step_grass*`, `sfx_step_snow*`), скрип (`sfx_creak*`).
+Источник: Kenney Vleugels, [kenney.nl](https://kenney.nl) — наборы «RPG Audio», «Impact Sounds».
+
+Звуки событий — подбор, урожай, посадка, еда, крафт, стройка, монеты, кнопки, окна, задание, находка, полив, шорох
+листвы — синтезированы (`tools/gen_audio.py`, раздел «мягкие звуки событий»).
 Лицензия: [CC0 1.0](http://creativecommons.org/publicdomain/zero/1.0/). Импорт — `tools/import_sounds.py`.
 
 ## Голоса животных — Wikimedia Commons

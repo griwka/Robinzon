@@ -565,6 +565,136 @@ func _test_hunger() -> void:
 	Game.inventory_changed.emit()
 
 
+## Инструмент в руке не входит в тело героя: ни когда его несут (стоя и на ходу), ни на всём замахе.
+## Тело — по меркам модели героя (tools/blender/models_characters.py): туловище — тело вращения,
+## голова — шар головы и шапка волос, ноги — капсулы. Руки не считаем: инструмент в них и держат.
+const TORSO_R := [[-0.15, 0.27], [-0.05, 0.285], [0.1, 0.27], [0.3, 0.25], [0.45, 0.24], [0.55, 0.2], [0.6, 0.09]]
+
+
+static func _torso_r(y: float) -> float:
+	if y < TORSO_R[0][0] or y > TORSO_R[TORSO_R.size() - 1][0]:
+		return -1.0
+	for i in range(1, TORSO_R.size()):
+		if y <= TORSO_R[i][0]:
+			var f: float = (y - TORSO_R[i - 1][0]) / (TORSO_R[i][0] - TORSO_R[i - 1][0])
+			return lerpf(TORSO_R[i - 1][1], TORSO_R[i][1], f)
+	return -1.0
+
+
+## Насколько глубоко (м) точки инструмента заходят в тело; где — в подписи.
+func _clip_depth(p: Player, pts: PackedVector3Array) -> Array:
+	var worst := 0.0
+	var where := ""
+	var tb := p.body_pivot.global_transform.affine_inverse()
+	var th := p.head.global_transform.affine_inverse()
+	var tl := p.leg_l.global_transform.affine_inverse()
+	var tr := p.leg_r.global_transform.affine_inverse()
+	for w in pts:
+		var b := tb * w
+		var r := _torso_r(b.y)
+		if r > 0.0:
+			var d := r - Vector2(b.x, b.z).length()
+			if d > worst:
+				worst = d
+				where = "туловище"
+		var h := th * w
+		for s in [[Vector3(0, 0.28, 0), 0.33], [Vector3(0, 0.35, 0.04), 0.33]]:
+			var d2: float = float(s[1]) - h.distance_to(s[0])
+			if d2 > worst:
+				worst = d2
+				where = "голова"
+		for t in [tl, tr]:
+			var l: Vector3 = t * w
+			var y := clampf(l.y, -0.38, 0.0)
+			var d3 := 0.1 - l.distance_to(Vector3(0, y, 0))
+			if d3 > worst:
+				worst = d3
+				where = "нога"
+	return [worst, where]
+
+
+func _tool_points(n: Node) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	var meshes: Array = []
+	for c in n.get_children():
+		if not c.is_queued_for_deletion():   # прежний инструмент ещё не удалён до конца кадра
+			meshes.append_array(c.find_children("*", "MeshInstance3D", true, false))
+			if c is MeshInstance3D:
+				meshes.append(c)
+	for mi in meshes:
+		var m := mi as MeshInstance3D
+		if m.mesh == null:
+			continue
+		var faces := m.mesh.get_faces()
+		var step := maxi(1, faces.size() / 600)
+		for i in range(0, faces.size(), step):
+			out.append(m.global_transform * faces[i])
+	return out
+
+
+func _test_tool_clip() -> void:
+	var p: Player = main.player
+	var inv: Dictionary = Game.inventory.duplicate()
+	var bar: Array = Game.bar.duplicate()
+	var keep_kind := p.swing_kind
+	var bad: Array = []
+	var report: Array = []
+	for id in Game.HOLD_TOOLS:
+		Game.inventory[id] = 1
+		Game.hold(id)
+		p._update_tool()
+		var worst := 0.0
+		var at := ""
+		# несёт: стоя, на ходу и бегом (рука качается вперёд и назад, корпус наклонён вперёд — как в игре)
+		var poses: Array = [["несёт", -1.0, 0.0, 0.0]]
+		for ph in [PI / 2, -PI / 2]:
+			poses.append(["идёт", -1.0, ph, Player.WALK_SPEED])
+			poses.append(["бежит", -1.0, ph, Player.SPRINT_SPEED])
+		for k in 51:
+			poses.append(["замах %.2f" % (k / 50.0), k / 50.0, 0.0, 0.0])
+			poses.append(["замах на ходу %.2f" % (k / 50.0), k / 50.0, 0.0, Player.WALK_SPEED])
+		for ps in poses:
+			p.swing_kind = id
+			p.pose_hold = float(ps[1])
+			p._walk_phase = float(ps[2])
+			var spd := float(ps[3])
+			p.velocity = -p.model.global_basis.z.normalized() * spd
+			var lv: Vector3 = p.model.global_transform.basis.inverse() * p.velocity
+			p._lean = Vector2(lv.z, lv.x) * 0.04   # наклон, к которому корпус приходит на этой скорости
+			p._head_lag = Vector3.ZERO
+			for rep in 3:   # поза ложится за пару кадров (инструмент ставится от корпуса, корпус наклоняется после)
+				p._animate(0.0, spd)
+			var res := _clip_depth(p, _tool_points(p.hand_tool))
+			if float(res[0]) > worst:
+				worst = float(res[0])
+				at = "%s, %s" % [ps[0], res[1]]
+		report.append("%s %.0f см%s" % [id, worst * 100.0, (" (" + at + ")") if worst > 0.0 else ""])
+		if worst > 0.03:
+			bad.append("%s — %s на %.0f см" % [Data.ITEMS[id]["name"], at, worst * 100.0])
+	p.pose_hold = -1.0
+	p.swing_kind = keep_kind
+	p._walk_phase = 0.0
+	p.velocity = Vector3.ZERO
+	p._lean = Vector2.ZERO
+	print("    инструмент в теле: ", ", ".join(report))
+	_check(bad.is_empty(), "инструменты в руке не проходят сквозь героя%s" % ((": " + "; ".join(bad)) if not bad.is_empty() else ""))
+	# за спиной — тоже снаружи
+	var back_bad: Array = []
+	for id in ["stone_axe", "iron_axe", "machete", "iron_machete", "pickaxe", "iron_pickaxe"]:
+		Game.inventory = {id: 1, "net": 1}
+		Game.hold("net")
+		p._update_tool()
+		p._animate(0.0, 0.0)
+		var res := _clip_depth(p, _tool_points(p.back_tool))
+		if float(res[0]) > 0.03:
+			back_bad.append("%s — %s на %.0f см" % [Data.ITEMS[id]["name"], res[1], float(res[0]) * 100.0])
+	_check(back_bad.is_empty(), "инструмент за спиной не входит в героя%s" % ((": " + "; ".join(back_bad)) if not back_bad.is_empty() else ""))
+	Game.inventory = inv
+	Game.bar = bar
+	Game.inventory_changed.emit()
+	p._update_tool()
+
+
 ## Станции крафта (верстак, костёр, печь для обжига, печка, кузница): у каждой E открывает крафт с её рецептами
 ## наверху, а рецепт «у станции» работает, когда стоишь рядом.
 func _test_stations() -> void:
@@ -2678,6 +2808,14 @@ func _autotest() -> void:
 		_check(not _reachable(poi_id), "к месту «%s» не пройти без инструментов" % poi_id)
 
 	var ch := int(args.get("chapter", "1")) - 1
+	if args.has("cliponly"):   # быстро: только проверка, что инструменты не входят в героя
+		for i in 120:   # герой стоит на земле (в прыжке руки разведены — проверка была бы мягче)
+			if p.is_on_floor():
+				break
+			await get_tree().physics_frame
+		_test_tool_clip()
+		get_tree().quit(1 if not fails.is_empty() else 0)
+		return
 	if ch == 0:
 		_validate()
 		_test_quest_places()
@@ -2689,6 +2827,7 @@ func _autotest() -> void:
 		await _test_tide_and_spots()
 		_test_stations()
 		_test_slots()
+		_test_tool_clip()
 		_test_mistakes()
 		Game.start_current_quest()
 		_flush()

@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://b5rr7h5wn72ju"
-path="res://.godot/imported/sfx_build3.wav-087e8fd2365f3d2dfff3b37630ed3508.sample"
+uid="uid://caxvusm1ieo06"
+path="res://.godot/imported/sfx_coins2.wav-6e05e84388e1c00542674dfbbd987eb0.sample"
 
 [deps]
 
-source_file="res://assets/audio/sfx_build3.wav"
-dest_files=["res://.godot/imported/sfx_build3.wav-087e8fd2365f3d2dfff3b37630ed3508.sample"]
+source_file="res://assets/audio/sfx_coins2.wav"
+dest_files=["res://.godot/imported/sfx_coins2.wav-6e05e84388e1c00542674dfbbd987eb0.sample"]
 
 [params]
 

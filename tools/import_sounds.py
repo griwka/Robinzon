@@ -23,23 +23,17 @@ SR = 44100
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "audio")
 
 # имя в игре -> (набор, шаблон файлов, громкость пика)
+# Звуки событий (подобрал, урожай, посадка, крафт, стройка, монеты, кнопки, окна) — свои, мягкие:
+# tools/gen_audio.py (COZY). Здесь их нет, чтобы импорт не вернул прежние резкие записи.
 KENNEY = {
     "chop": ("impact-sounds", "impactWood_heavy_00*.ogg", 0.85),
     "rock": ("impact-sounds", "impactMining_00*.ogg", 0.8),
-    "build": ("impact-sounds", "impactPlank_medium_00*.ogg", 0.8),
     "hammer": ("impact-sounds", "impactMetal_medium_00*.ogg", 0.7),
     "metal": ("impact-sounds", "impactMetal_light_00*.ogg", 0.6),
     "ice": ("impact-sounds", "impactGlass_medium_00*.ogg", 0.6),
-    "plant": ("impact-sounds", "impactSoft_medium_00*.ogg", 0.7),
-    "harvest": ("impact-sounds", "impactSoft_heavy_00*.ogg", 0.7),
     "step_grass": ("impact-sounds", "footstep_grass_00*.ogg", 0.32),
     "step_snow": ("impact-sounds", "footstep_snow_00*.ogg", 0.35),
-    "craft": ("rpg-audio", ["handleSmallLeather*.ogg", "beltHandle*.ogg"], 0.7),
-    "coins": ("rpg-audio", "handleCoins*.ogg", 0.7),
     "creak": ("rpg-audio", "creak*.ogg", 0.6),
-    "click": ("interface-sounds", "click_00*.ogg", 0.5),
-    "open": ("interface-sounds", "open_00*.ogg", 0.5),
-    "pickup": ("interface-sounds", "pluck_00*.ogg", 0.55),
 }
 
 
