@@ -192,22 +192,144 @@ def bamboo_clump():
 
 # ------------------------------------------------------------------ поваленный ствол (топор)
 def fallen_log():
-    rr = rnd(71)
-    lg = tube("fl", [(-1.6, 0, 0.35), (-0.5, 0.08, 0.38), (0.6, -0.05, 0.36), (1.6, 0.02, 0.32)], [0.4, 0.42, 0.4, 0.36], 14)
-    displace(lg, 0.06, 0.25)
-    subsurf(lg, 1)
-    paint(lg, BARK_J, ao=0.35, ao_h=0.3, noise_amt=0.14, nscale=5,
-          fn=lambda co, n: hexcol("5f9a3e") if n.z > 0.55 else (0.8 if math.sin(co.x * 10 + math.atan2(co.y, co.z - 0.35) * 4) > 0.75 else None))
+    _fallen_log(71, True)
+
+
+def fallen_log_b():
+    _fallen_log(72, False)
+
+
+def _fallen_log(seed, rooted):
+    """Упавшее дерево: кора с бороздами; с одного конца — вывороченные корни (или ровный срез топором),
+    с другого — обломанный неровный торец с годовыми кольцами и щепой; обломанные сучья, мох, трутовики, грибы."""
+    from kit import BARK, bark_fn, bark_trunk, splinters, wood_cap
+    rr = rnd(seed)
+    if rooted:
+        path = [(-1.3, 0.0, 0.42), (-1.0, 0.03, 0.40), (-0.6, 0.07, 0.38), (0.2, -0.04, 0.36), (0.95, 0.05, 0.34), (1.45, 0.0, 0.33)]
+        radii = [0.52, 0.43, 0.39, 0.37, 0.34, 0.31]
+        bark_col = BARK
+    else:
+        path = [(-1.35, 0.0, 0.36), (-0.6, -0.06, 0.35), (0.2, 0.05, 0.33), (0.95, -0.03, 0.32), (1.4, 0.0, 0.3)]
+        radii = [0.37, 0.36, 0.35, 0.33, 0.3]
+        bark_col = hexcol("6e5a48")
+    lg, first, last, fa, fb = bark_trunk("fl", path, radii, segs=22, seed=seed - 64, furrows=11, bump=0.08)
+    paint(lg, bark_col, ao=0.35, ao_h=0.35, noise_amt=0.1, nscale=6,
+          fn=bark_fn((0, 0, 0.37), (1, 0, 0), moss=0.45 if rooted else 0.75, seed=3 + seed, moss_up=0.5))
     parts = [lg]
-    for end in (-1.6, 1.6):
-        cap = cyl("cap", (end, 0, 0.35), 0.38, 0.38, 0.02, (0, math.pi / 2, 0), 16)
-        paint(cap, hexcol("d9b07a"), ao=0.0, fn=lambda co, n, end=end: 0.82 if int(math.hypot(co.y, co.z - 0.35) * 40) % 2 else None)
-        parts.append(cap)
-    for k in range(5):
-        m = sphere("mu", (rr.uniform(-1.3, 1.3), rr.uniform(-0.3, 0.3), 0.7), 0.06, (1, 1, 0.5), segs=10, rings=6)
-        paint(m, hexcol("e8d0a0"), ao=0.0)
-        parts.append(m)
+    # обломанный конец (+X): утопленный неровный скол с кольцами и щепа по краю
+    parts.append(wood_cap("cap_b", last, fb[0] + fb[1] * 0.02, fb[1], radii[-1], seed=seed + 11, depth=0.07, rough=0.04))
+    parts += splinters("spl", last, fb[1], seed=seed + 5, count=11, length=(0.05, 0.26), width=0.15)
+    if rooted:
+        parts += _log_roots(rr, first, fa)
+    else:
+        # ровный срез топором: светлый торец с кольцами
+        parts.append(wood_cap("cap_a", first, fa[0] - fa[1] * 0.01, -fa[1], radii[0], seed=seed + 5, depth=0.01, rough=0.008))
+    parts += _log_details(rr, radii[2])
     join(parts, "FallenLog")
+    # папоротнички у ствола (и росток на бревне без корней) — листвой, качаются на ветру
+    leaves = []
+    spots = ((0.1, -0.5, 6, 0.34), (1.3, 0.45, 5, 0.26), (-0.8, 0.52, 4, 0.24)) if rooted else ((-0.4, -0.45, 6, 0.3), (1.1, 0.42, 5, 0.24))
+    for (cx, cy, n_, ln) in spots:
+        for k in range(n_):
+            a = 2 * math.pi * k / n_ + rr.uniform(-0.3, 0.3)
+            lf = leaf("fl_leaf", (cx, cy, 0.02), (math.cos(a), math.sin(a), 0.9), ln, 0.06, droop=0.5, segs=5)
+            paint(lf, shade(JG2 if k % 2 else OLIVE, 0.9 + 0.12 * rr.random()), ao=0.0)
+            leaves.append(lf)
+    if not rooted:
+        top = radii[2] * 2 - 0.02
+        st = tube("sprout_leaf", [(0.35, 0.0, top - 0.04), (0.36, 0.01, top + 0.08)], 0.014, 5)
+        paint(st, OLIVE, ao=0.0)
+        leaves.append(st)
+        for k in range(5):
+            a = 2 * math.pi * k / 5
+            lf = leaf("fl_leaf", (0.36, 0.01, top + 0.08), (math.cos(a), math.sin(a), 1.0), 0.2, 0.07, droop=0.45, segs=5)
+            paint(lf, shade(JG2, 0.95 + 0.1 * rr.random()), ao=0.0)
+            leaves.append(lf)
+    join(leaves, "FallenLog_leaf")
+
+
+def _log_roots(rr, first, fa):
+    """Комель: тёмный торец с землёй, корни звездой расходятся и уходят в землю, комья земли, взрыхлённая земля."""
+    from kit import BARK_D, smooth_path, wood_cap
+    x0 = fa[0].x
+    parts = []
+    root_cap = wood_cap("cap_a", first, fa[0] - fa[1] * 0.02, -fa[1], 0.46, seed=12, depth=-0.1, rough=0.06, heart=hexcol("5e4432"))
+    paint(root_cap, hexcol("5e4532"), ao=0.0, noise_amt=0.25, nscale=7,
+          fn=lambda co, n: hexcol("7d6446") if noise_v(co * 4) > 0.3 else None)
+    parts.append(root_cap)
+    for k in range(9):
+        a = 2 * math.pi * k / 9 + rr.uniform(-0.18, 0.18)
+        cy, cz = math.cos(a), math.sin(a)
+        ln = rr.uniform(0.55, 0.95)
+        r0 = 0.4
+        p0 = Vector((x0 + 0.35, cy * r0 * 0.85, 0.42 + cz * r0 * 0.85))
+        p1 = Vector((x0 - 0.02, cy * (r0 + 0.12), 0.42 + cz * (r0 + 0.12)))
+        p2 = Vector((x0 - 0.25 - ln * 0.25, cy * (r0 + 0.25 + ln * 0.3), 0.42 + cz * (r0 + 0.2 + ln * 0.25)))
+        pts = [p0, p1, p2]
+        if p2.z < 0.55:   # нижние корни загибаются в землю
+            pts.append(Vector((p2.x - 0.25, p2.y * 1.15, max(-0.2, p2.z - 0.45))))
+        else:             # верхние торчат вверх и назад, тонко
+            pts.append(p2 + Vector((-0.3, cy * 0.12, 0.06)))
+        sp, sr = smooth_path([tuple(q) for q in pts], [0.16, 0.12, 0.06, 0.018], 4)
+        root = tube("rt", sp, sr, 9)
+        displace(root, 0.02, 0.08)
+        paint(root, BARK_D, ao=0.0, noise_amt=0.15, nscale=8,
+              fn=lambda co, n: hexcol("6a5440") if co.z < 0.12 else (shade(BARK_D, 1.25) if n.z > 0.55 else None))
+        parts.append(root)
+        if k % 3 != 1:   # тонкие отростки
+            q = pts[2]
+            tw = tube("rt2", [tuple(q), tuple(q + Vector((-0.18, cy * 0.2, cz * 0.1 - 0.06))), tuple(q + Vector((-0.28, cy * 0.3, cz * 0.12 - 0.2)))],
+                      [0.035, 0.02, 0.008], 6)
+            paint(tw, BARK_D, ao=0.0)
+            parts.append(tw)
+    for k in range(5):   # комья земли и камешки, застрявшие в корнях
+        a = rr.uniform(0, 2 * math.pi)
+        rad = rr.uniform(0.2, 0.45)
+        clod = ico("cl", (x0 - rr.uniform(0.05, 0.2), math.cos(a) * rad, 0.42 + math.sin(a) * rad), rr.uniform(0.08, 0.14), (0.8, 1, 0.9), sub=1)
+        displace(clod, 0.03, 0.1)
+        paint(clod, hexcol("8f8a80") if k % 3 == 0 else hexcol("6b4f38"), ao=0.0, noise_amt=0.2, nscale=9)
+        parts.append(clod)
+    dirt = ico("dr", (x0 - 0.35, 0.0, -0.05), 0.55, (1.0, 1.3, 0.25), sub=2)   # взрыхлённая земля под корнями
+    displace(dirt, 0.06, 0.3)
+    paint(dirt, hexcol("6f5238"), ao=0.0, noise_amt=0.2, nscale=6, fn=lambda co, n: hexcol("86684a") if noise_v(co * 5) > 0.2 else None)
+    parts.append(dirt)
+    return parts
+
+
+def _log_details(rr, r):
+    """Обломанные сучья (косые, толстые у ствола), трутовики-полочки на боку и грибы рядом."""
+    from kit import BARK, bark_fn, splinters, wood_cap
+    parts = []
+    for (x, a, ln) in ((-0.55, 1.15, 0.38), (0.45, -0.95, 0.32), (1.0, 2.25, 0.26), (-0.1, 2.0, 0.22)):
+        base = Vector((x, math.cos(a) * (r - 0.04), r + math.sin(a) * (r - 0.04)))
+        out = Vector((0.55, math.cos(a), math.sin(a) * 0.8)).normalized()
+        tip = base + out * ln
+        br = tube("br", [tuple(base - out * 0.1), tuple(base + out * ln * 0.45), tuple(tip)], [0.12, 0.085, 0.07], 10)
+        paint(br, BARK, ao=0.0, noise_amt=0.1, fn=bark_fn(tuple(base), tuple(out), seed=int(x * 10)))
+        parts.append(br)
+        o1 = out.orthogonal().normalized()
+        o2 = out.cross(o1)
+        rim = [tip + (o1 * math.cos(t) + o2 * math.sin(t)) * 0.07 for t in [2 * math.pi * i / 10 for i in range(10)]]
+        parts.append(wood_cap("bc", rim, tip, out, 0.07, seed=int(x * 7) + 20, depth=0.02, rough=0.012))
+        parts += splinters("bs", rim, out, seed=int(x * 9) + 30, count=4, length=(0.04, 0.14), width=0.05)
+    for (x, a, sz) in ((-0.25, -0.45, 0.12), (-0.08, -0.7, 0.09), (0.2, -0.5, 0.1), (0.85, 2.5, 0.11)):
+        y, z = math.cos(a) * (r + 0.01), r + math.sin(a) * (r + 0.01)
+        sh = sphere("fg", (x, y, z + 0.03), sz, (1.0, 0.7, 0.26), (0, 0, 0), segs=14, rings=7)
+        paint(sh, hexcol("e0b46e"), ao=0.0, noise_amt=0.06,
+              fn=lambda co, n: hexcol("f6e6c4") if n.z < -0.2 else (hexcol("b5793e") if n.z > 0.55 else None))
+        parts.append(sh)
+    for (x, y, h) in ((-1.85, -0.75, 0.14), (-1.7, -0.92, 0.09), (1.3, 0.55, 0.11), (1.42, 0.48, 0.07)):
+        st = cyl("ms", (x, y, -0.02), 0.022, 0.017, h + 0.02, segs=8)
+        paint(st, hexcol("efe4cc"), ao=0.0)
+        cp = sphere("mc", (x, y, h), 0.06, (1, 1, 0.55), segs=12, rings=6)
+        paint(cp, hexcol("c8643a"), ao=0.0, fn=lambda co, n: hexcol("f2e0c0") if n.z < 0 else None)
+        parts += [st, cp]
+    return parts
+
+
+def noise_v(co):
+    from mathutils import noise
+    return noise.noise(co)
 
 
 # ------------------------------------------------------------------ каменная гряда (кирка)
@@ -358,6 +480,6 @@ def lighthouse_ruin():
 
 
 BUILDERS = {"jungle_tree_a": jungle_tree_a, "jungle_tree_b": jungle_tree_b, "fern_a": fern_a, "fern_b": fern_b,
-            "tall_grass": tall_grass, "thicket": thicket, "bamboo_clump": bamboo_clump, "fallen_log": fallen_log,
+            "tall_grass": tall_grass, "thicket": thicket, "bamboo_clump": bamboo_clump, "fallen_log": fallen_log, "fallen_log_b": fallen_log_b,
             "cliff_a": cliff_a, "cliff_b": cliff_b, "flower_patch": flower_patch,
             "old_camp": old_camp, "lifeboat": lifeboat, "lighthouse_ruin": lighthouse_ruin}

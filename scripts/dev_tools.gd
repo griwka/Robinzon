@@ -37,6 +37,8 @@ func _ready() -> void:
 		_walktest.call_deferred()
 	if args.has("validate"):
 		_validate_only.call_deferred()
+	if args.has("colcheck"):
+		_colcheck.call_deferred()
 
 
 func _process(_delta: float) -> void:
@@ -315,6 +317,8 @@ func _process(_delta: float) -> void:
 			"settings":
 				main._pause()
 				main.menu.open_settings(main.menu.show_pause)
+	if _gcam and is_instance_valid(_gcam) and not _gcam.current:
+		_gcam.current = true
 	if args.has("gallery") and _frames > 2:
 		p.cam_rig.global_position = main.island.camp_center + Vector3(0, float(args.get("camy", "0.8")), 0)
 	if args.has("fxtest") and _frames == int(args.get("frames", "90")) - int(args.get("fxlead", "2")):
@@ -339,6 +343,9 @@ func _process(_delta: float) -> void:
 	if args.has("shot") and _frames == int(args.get("frames", "90")):
 		get_viewport().get_texture().get_image().save_png(args["shot"])
 		print("screenshot saved: ", args["shot"])
+		if args.has("gallery"):
+			var vc := get_viewport().get_camera_3d()
+			print("  камера: ", vc.name, " ", vc.global_position, " центр ", main.island.camp_center)
 		get_tree().quit()
 
 
@@ -355,11 +362,16 @@ func _gallery(names: PackedStringArray) -> void:
 	var isl: Island = main.island
 	var c: Vector3 = isl.camp_center
 	var p: Player = main.player
-	p.visible = names.has("player") == false
+	p.visible = false
 	var spacing := float(args.get("spacing", "1.6"))
 	var root := Node3D.new()
 	main.add_child(root)
 	var right := Vector3(1, 0, 0)
+	var half_w := spacing * names.size() * 0.5 + 2.5
+	for n in get_tree().get_nodes_in_group("obstacle"):
+		if (n is ResourceNode or n is FruitTree) and absf((n as Node3D).global_position.x - c.x) < half_w \
+				and (n as Node3D).global_position.z - c.z > -6.0 and (n as Node3D).global_position.z - c.z < 14.0:
+			(n as Node3D).visible = false   # заросли не загораживают ряд моделей
 	for i in names.size():
 		var m := Models.glb(names[i])
 		if m == null:
@@ -370,11 +382,27 @@ func _gallery(names: PackedStringArray) -> void:
 		pos.y = isl.height_at(pos.x, pos.z)
 		m.global_position = pos
 		m.rotation.y = float(args.get("rot", "0.5"))
-	p.global_position = c + Vector3(0, 0, 4.0)
+	p.global_position = c + Vector3(0, 0.5, -7.0)
 	p.cam_rig.global_position = c + Vector3(0, 0.8, 0)
 	p.camera_yaw = 0.0
 	p.controls_enabled = false
 	main.hud.visible = false
+	# своя камера: ряд моделей целиком, чуть сверху (--dist= — отъезд, --camy= — высота точки взгляда, --gpitch= — наклон)
+	var width := spacing * names.size()
+	var dist := float(args.get("dist", str(maxf(4.0, width * 0.85 + 2.0))))
+	var pitch := float(args.get("gpitch", "0.32"))
+	var look := c + Vector3(0, float(args.get("camy", "0.8")), 0)
+	look.y = isl.height_at(c.x, c.z) + float(args.get("camy", "0.8"))
+	var cam := Camera3D.new()
+	main.add_child(cam)
+	cam.global_position = look + Vector3(0, sin(pitch), cos(pitch)) * dist
+	cam.look_at(look)
+	cam.fov = 40.0
+	cam.current = true
+	_gcam = cam
+
+
+var _gcam: Camera3D   # камера галереи: игра после меню включает свою — возвращаем каждый кадр
 
 
 # ------------------------------------------------------------------ Демо-лагерь
@@ -2953,3 +2981,117 @@ func _autotest() -> void:
 
 	print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
 	get_tree().quit(0 if fails.is_empty() else 1)
+
+
+# ------------------------------------------------------------------ Проверка столкновений (--colcheck)
+## Ищет крупные видимые сетки, сквозь которые проходит герой: на поверхности сетки нет ни одного столкновения
+## (слои 1, 2, 4 — те, что держат героя). Проверяет остров (--location=) и все постройки игрока.
+## Листва, трава и то, что нарочно проходимо (группа "walk_through"), не считаются.
+const COLCHECK_MIN_AREA := 0.6     # м² непокрытой поверхности, с которых сетка попадает в отчёт
+const COLCHECK_MIN_FRAC := 0.3     # и доля непокрытого от всей поверхности
+
+
+func _colcheck() -> void:
+	print("=== COLCHECK %s ===" % main.island.loc)
+	_flush()
+	Game.flags["restored_generator"] = true
+	# все постройки — рядом, высоко над островом, чтобы их не перекрывало ничего чужого
+	var base := Vector3(0, 60, 0)
+	var ids: Array = [] if args.has("nobuild") else Data.BUILDINGS.keys()
+	for i in ids.size():
+		var b: Building = main.build.spawn_building(ids[i], base + Vector3((i % 6) * 14.0, 0, (i / 6) * 14.0), 0.0)
+		b.set_meta("colcheck_root", true)
+	for i in 90:
+		await get_tree().physics_frame
+	var space := (main as Node3D).get_world_3d().direct_space_state
+	var sphere := SphereShape3D.new()
+	sphere.radius = 0.22
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = sphere
+	q.collision_mask = 1 | 2 | 4
+	var found := 0
+	var checked := 0
+	var report: Array = []
+	var meshes: Array = main.island.find_children("*", "MeshInstance3D", true, false)
+	for b in get_tree().get_nodes_in_group("building"):
+		if not main.island.is_ancestor_of(b):
+			meshes.append_array((b as Node).find_children("*", "MeshInstance3D", true, false))
+	for mi in meshes:
+		var m := mi as MeshInstance3D
+		if not m.is_visible_in_tree() or m.mesh == null or _colcheck_skip(m):
+			continue
+		var aabb := m.global_transform * m.get_aabb()
+		if aabb.get_longest_axis_size() < 0.6:
+			continue
+		var faces := m.mesh.get_faces()
+		var tri := faces.size() / 3
+		if tri == 0:
+			continue
+		checked += 1
+		var stride := maxi(1, tri / 300)
+		var total := 0.0
+		var open := 0.0
+		var open_hi := -INF
+		var xf := m.global_transform
+		var k := 0
+		while k < tri:
+			var a: Vector3 = xf * faces[k * 3]
+			var b2: Vector3 = xf * faces[k * 3 + 1]
+			var c: Vector3 = xf * faces[k * 3 + 2]
+			k += stride
+			var area := (b2 - a).cross(c - a).length() * 0.5
+			if area < 1e-5:
+				continue
+			var ctr := (a + b2 + c) / 3.0
+			total += area
+			q.transform = Transform3D(Basis.IDENTITY, ctr)
+			if space.intersect_shape(q, 1).is_empty():
+				open += area
+				open_hi = maxf(open_hi, ctr.y - main.island.height_at(ctr.x, ctr.z))
+		if open * stride >= COLCHECK_MIN_AREA and (open / maxf(total, 1e-4) >= COLCHECK_MIN_FRAC or open * stride >= 3.0):
+			report.append([open * stride, "%-60s непокрыто %.1f м² (%.0f%%), размер %s, выше земли до %.1f м" % [
+				_colcheck_path(m), open * stride, 100.0 * open / maxf(total, 1e-4), str(aabb.size.snapped(Vector3.ONE * 0.1)), open_hi]])
+	report.sort_custom(func(x, y): return x[0] > y[0])
+	for r in report:
+		print("  ДЫРА: ", r[1])
+		found += 1
+	print("=== COLCHECK: проверено сеток %d, без столкновений %d ===" % [checked, found])
+	get_tree().quit(0 if found == 0 else 1)
+
+
+func _colcheck_skip(m: MeshInstance3D) -> bool:
+	var nm := String(m.name).to_lower()
+	if nm.contains("leaf") or nm.contains("frond") or nm.contains("crown_l"):
+		return true
+	var n: Node = m
+	while n != null and n != main:
+		if n.is_in_group("walk_through") or n is Player or n is MultiMeshInstance3D:
+			return true
+		if n is ResourceNode and (n.kind in ResourceNode.SOFT or (n as ResourceNode).collision_layer == 8):
+			return true
+		if n is Building and (n as Building).collision_layer == 8:
+			return true   # грядки, загоны, мостки, дорожки — по ним ходят нарочно
+		if n is Climbable:
+			return true
+		if n is NPCParrot or n is NPCPerson or n is Animal or n is Pickup:
+			return true
+		if n.name == "Terrain" or n.name == "Water" or n.name.begins_with("Cloud") or n.name == "Decor":
+			return true
+		n = n.get_parent()
+	return false
+
+
+func _colcheck_path(m: Node) -> String:
+	var parts: Array[String] = []
+	var n: Node = m
+	while n != null and n != main and parts.size() < 5:
+		var label := String(n.name)
+		if n is Building:
+			label = "Постройка:" + (n as Building).id
+		elif n is StoryPlace:
+			label = "Место:" + (n as StoryPlace).id
+		elif n is ResourceNode:
+			label = "Ресурс:" + (n as ResourceNode).kind
+		parts.push_front(label)
+		n = n.get_parent()
+	return "/".join(parts)

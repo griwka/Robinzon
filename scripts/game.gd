@@ -185,7 +185,7 @@ func storm_active() -> bool:
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
-		if a in ["--autotest", "--validate", "--gallery", "--walktest"] or a.begins_with("--shot=") or a.begins_with("--gallery="):
+		if a in ["--autotest", "--validate", "--gallery", "--walktest", "--colcheck"] or a.begins_with("--shot=") or a.begins_with("--gallery="):
 			_dev_save = true
 	# в автотестах и скриншотах голод стоит (своя проверка включает его сама); --hunger — включить
 	hunger_on = not _dev_save or "--hunger" in OS.get_cmdline_user_args()

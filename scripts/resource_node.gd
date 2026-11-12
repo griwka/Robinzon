@@ -78,7 +78,7 @@ const KINDS := {
 		"verb": "Срубить мангр (доски не гниют)", "radius": 0.7, "height": 4.5},
 }
 const MODEL_NAMES := {"tall_grass": ["tall_grass"], "fern": ["fern_a", "fern_b"], "thicket": ["thicket"],
-	"bamboo": ["bamboo_clump"], "jungle_tree": ["jungle_tree_a", "jungle_tree_b"], "fallen_log": ["fallen_log"],
+	"bamboo": ["bamboo_clump"], "jungle_tree": ["jungle_tree_a", "jungle_tree_b"], "fallen_log": ["fallen_log", "fallen_log_b"],
 	"cliff": ["cliff_a", "cliff_b"], "liana_curtain": ["liana_curtain"], "clay": ["clay_pit"],
 	"heather": ["heather_a", "heather_b"], "blueberry": ["blueberry_bush"], "crooked_tree": ["crooked_tree_a", "crooked_tree_b"],
 	"scrap_pile": ["scrap_pile"], "sand": ["sand_pit"], "rockfall": ["rockfall"],
