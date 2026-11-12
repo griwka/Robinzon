@@ -114,6 +114,9 @@ func _make_collision() -> void:
 			_add_box(Vector3(1.3, 0.8, 0.15), Vector3(0, 0.4, 0), 0.0)
 		_:
 			_add_cyl(r * 0.8, 2.0)
+	# точное столкновение по модели: крыша, мачта, скамьи, навес — нигде не пройти насквозь
+	if collision_layer == 4 and not id in ["torch", "lightning_rod", "fence"]:
+		Models.add_trimesh(self, visual)
 
 
 func _add_box(size: Vector3, pos: Vector3, rot_y: float) -> void:

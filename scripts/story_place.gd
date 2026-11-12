@@ -160,6 +160,7 @@ const PLACES := {
 
 var id := "old_camp"
 var visual: Node3D
+var _solids: Array[CollisionShape3D] = []
 var fire: Node3D
 
 
@@ -182,6 +183,7 @@ func _ready() -> void:
 	cs.shape = c
 	cs.position.y = c.height * 0.5
 	add_child(cs)
+	_solids = Models.add_trimesh(self, visual)   # башни, крыши, борта выше цилиндра — тоже твёрдые
 	if cfg.has("restore") and Game.flags.get("restored_" + id, false):
 		_swap_model(false)
 	if cfg.has("fuel") and Game.flags.get(_lit_flag(), false):
@@ -336,6 +338,9 @@ func _swap_model(animate: bool) -> void:
 	visual.queue_free()
 	visual = m
 	add_child(m)
+	for o in _solids:
+		o.queue_free()
+	_solids = Models.add_trimesh(self, m)
 	if animate:
 		m.scale = Vector3(0.05, 0.05, 0.05)
 		create_tween().tween_property(m, "scale", Vector3.ONE, 0.6).set_trans(Tween.TRANS_BACK)

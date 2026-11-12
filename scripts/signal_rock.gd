@@ -25,6 +25,7 @@ func _ready() -> void:
 	cs.position.y = 1.0
 	body.add_child(cs)
 	add_child(body)
+	Models.add_trimesh(body, m)
 	var fp := m.find_child("FirePoint", true, false) as Node3D if m else null
 	Models.flame(self, fp.position if fp else Vector3(0, 2.1, 0), 0.8, 2.6, 10.0)
 	var misha := NPCPerson.new()

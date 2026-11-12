@@ -102,7 +102,7 @@ func _build_wall() -> void:
 
 # ------------------------------------------------------------------ наверху
 func _build_top() -> void:
-	_model("observatory", _on_top(-3.2, 0.0), atan2(fwd.x, fwd.z))
+	Models.add_trimesh(_body, _model("observatory", _on_top(-3.2, 0.0), atan2(fwd.x, fwd.z)))
 	var cs := CollisionShape3D.new()
 	var cyl := CylinderShape3D.new()
 	cyl.radius = 2.9
@@ -143,7 +143,7 @@ func _build_top() -> void:
 	sx.rotation.y = atan2(fwd.x, fwd.z)
 	add_child(sx)
 	# поленница и сани — для уюта
-	_model("woodpile", _on_top(-1.2, -3.6), atan2(right.x, right.z))
+	Models.add_trimesh(_body, _model("woodpile", _on_top(-1.2, -3.6), atan2(right.x, right.z)))
 
 
 # ------------------------------------------------------------------ подножие: подъём и морж

@@ -31,6 +31,10 @@ uniform vec4 snow_col : source_color = vec4(0.96, 0.98, 1.0, 1.0);
 uniform vec4 snow_shade : source_color = vec4(0.8, 0.88, 0.97, 1.0);
 uniform vec4 ice_col : source_color = vec4(0.6, 0.84, 0.94, 1.0);
 uniform float camp_radius = 5.5;
+// расчищенная игроком мелкая трава (GrassField): там газон ровный и ухоженный
+uniform sampler2D clear_mask : filter_linear, repeat_disable;
+uniform vec2 mask_origin = vec2(-100.0, -100.0);
+uniform float mask_size = 200.0;
 
 global uniform float g_rain;
 
@@ -77,6 +81,12 @@ void fragment() {
 	gcol = mix(gcol, grass_warm.rgb, aastep(0.6, big + (mid - 0.5) * 0.35) * 0.75);
 	gcol = mix(gcol, grass_dark.rgb, aastep(0.68, mid) * (1.0 - aastep(0.5, big)) * 0.8);
 	gcol = mix(gcol, grass_light.rgb, aastep(0.84, fine) * 0.5);
+	// расчищенный газон: ровный свежий цвет, без пятен, с мягкой полосой «как скошено»
+	float cl = texture(clear_mask, (p - mask_origin) / mask_size).r;
+	cl = smoothstep(0.25, 0.75, cl + (fine - 0.5) * 0.35);
+	float stripe = aastep(0.0, sin(dot(p, vec2(0.35, 0.2)) * 6.2832));
+	vec3 neat = mix(grass.rgb, grass_light.rgb, 0.3 + 0.1 * stripe);
+	gcol = mix(gcol, neat, cl * 0.8);
 	// кромка газона чуть темнее — как обводка
 	float rim = g * (1.0 - aastep(1.2 + edge_noise, h));
 	gcol = mix(gcol, grass_dark.rgb * 0.92, rim * 0.9);

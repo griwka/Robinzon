@@ -193,7 +193,7 @@ func _build_puzzle() -> void:
 		bs.position = at(BOWL, 0.5)
 		_body.add_child(bs)
 	for c in COLD:
-		_model("cold_stone", at(c), randf() * TAU)
+		Models.add_trimesh(_body, _model("cold_stone", at(c), randf() * TAU))
 	var lever := TempleLever.new()
 	lever.temple = self
 	lever.position = at(Vector2(1.2, 0.5))

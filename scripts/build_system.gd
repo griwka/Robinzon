@@ -249,6 +249,10 @@ func spawn_building(id: String, pos: Vector3, rot: float, variant := "", state :
 	b.position = pos
 	b.rotation.y = rot
 	buildings_root.add_child(b)
+	# под постройкой мелкая трава не растёт: расчищаем её (и это сохраняется)
+	var isl := get_tree().get_first_node_in_group("island") as Island
+	if isl and isl.grass_field and pos.y > -5.0:
+		isl.grass_field.clear_at(pos, float(Data.BUILDINGS[id]["radius"]) + 0.3, true)
 	if not state.is_empty():
 		b.apply_state(state)
 	return b

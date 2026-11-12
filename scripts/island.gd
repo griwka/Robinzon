@@ -236,15 +236,24 @@ func _lava_field(x: float, z: float) -> bool:
 
 ## Ледяной остров ещё скован холодом.
 var cold := false
+var grass_field: GrassField   # мелкая трава и цветы, которые можно расчистить
 
 
 func _build_grass() -> void:
 	cold = mix == "ice" and not Game.flags.get("ice_thawed", false)
-	for old in ["Grass", "Flowers"]:
+	for old in ["Grass", "Flowers", "GrassField"]:
 		var n := get_node_or_null(old)
 		if n:
 			remove_child(n)
 			n.queue_free()
+	# мелкая трава и цветы — кусками, их можно расчистить (GrassField)
+	grass_field = GrassField.new()
+	grass_field.setup(self)
+	add_child(grass_field)
+	if terrain_mat:
+		terrain_mat.set_shader_parameter("clear_mask", grass_field.mask_texture())
+		terrain_mat.set_shader_parameter("mask_origin", Vector2(-GrassField.HALF, -GrassField.HALF))
+		terrain_mat.set_shader_parameter("mask_size", GrassField.HALF * 2.0)
 	# пучок из 5 широких травинок
 	var tuft := SurfaceTool.new()
 	tuft.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -282,7 +291,9 @@ func _build_grass() -> void:
 		var s := g.randf_range(0.8, 1.6)
 		tr.append(Transform3D(Basis(Vector3.UP, g.randf() * TAU).scaled(Vector3(s, s * g.randf_range(0.8, 1.3), s)), Vector3(x, h - 0.03, z)))
 		cols.append(Color.WHITE.lerp(Color("e8ffb0"), g.randf() * 0.4))
-	_add_multimesh("Grass", tuft_mesh, tr, cols, _grass_mat())
+	for i in tr.size():
+		grass_field.add("Grass", tr[i], cols[i])
+	grass_field.commit("Grass", tuft_mesh, _grass_mat(), 60.0)
 	if cold:
 		return   # цветы распустятся в оттепель
 
@@ -314,7 +325,9 @@ func _build_grass() -> void:
 	fmat.set_shader_parameter("use_vertex_color", true)
 	fmat.set_shader_parameter("rim_amount", 0.0)
 	fmat.set_shader_parameter("paint_amount", 0.0)
-	_add_multimesh("Flowers", Models.flower_mesh(), ft, fc, fmat, true)
+	for i in ft.size():
+		grass_field.add("Flowers", ft[i], fc[i])
+	grass_field.commit("Flowers", Models.flower_mesh(), fmat, 50.0)
 
 
 func _grass_mat() -> ShaderMaterial:

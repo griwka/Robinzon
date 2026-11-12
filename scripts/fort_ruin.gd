@@ -190,6 +190,7 @@ func _build_cellar() -> void:
 			slab.rotation.y = cy           # лицом ко входу в подвал
 			slab.scale = Vector3(0.52, 0.8, 1.0)
 			add_child(slab)
+			Models.add_trimesh(_body, slab)
 		var pic := Sprite3D.new()
 		pic.texture = FX.icon_texture("fresco_" + ["light", "storm", "map"][i])
 		pic.pixel_size = 1.6 / 1024.0

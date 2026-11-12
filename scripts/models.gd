@@ -66,6 +66,7 @@ static func clear_caches() -> void:
 	_mat_cache.clear()
 	_outline_cache.clear()
 	_unshaded_cache.clear()
+	_trimesh_cache.clear()
 	FX.clear_caches()
 
 
@@ -155,6 +156,76 @@ static func flame(root: Node3D, pos: Vector3, size := 1.0, light_energy := 2.0, 
 	root.add_child(light)
 	FX.fire_smoke(fire, Vector3(0, 0.4 * size, 0), size)
 	return fire
+
+
+static var _trimesh_cache: Dictionary = {}
+const NO_SOLID := ["leaf", "frond", "crown_l", "flame", "smoke", "glow", "lens", "fruit", "apples", "coconut"]
+
+
+## Точное столкновение по самой модели: каждая сетка visual (кроме листвы, огня и плодов) становится
+## формой trimesh внутри body. Так у построек и сюжетных мест нет частей, сквозь которые проходит герой
+## (мачта на крыше, крыша, скамьи, полки). Формы одинаковых сеток общие (кэш). Вызывать до анимации масштаба.
+static func add_trimesh(body: CollisionObject3D, visual: Node3D, min_size := 0.25, exclude: Node = null) -> Array[CollisionShape3D]:
+	var out: Array[CollisionShape3D] = []
+	if body == null or visual == null:
+		return out
+	for n in visual.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		var nm := String(mi.name).to_lower()
+		var skip := false
+		for w in NO_SOLID:
+			if nm.contains(w):
+				skip = true
+				break
+		var up: Node = mi.get_parent()
+		while up != null and up != visual.get_parent() and not skip:
+			skip = up.name == "Fire"   # языки пламени (Models.flame)
+			up = up.get_parent()
+		if exclude and (mi == exclude or exclude.is_ancestor_of(mi)):
+			skip = true   # подвижная часть (дверь) — у неё своё столкновение
+		if skip or mi.get_aabb().get_longest_axis_size() < min_size:
+			continue
+		var rel := _rel_xform(mi, body)
+		var cs := CollisionShape3D.new()
+		cs.name = "Solid_" + mi.name
+		if (rel.basis.get_scale() - Vector3.ONE).length() > 0.01:
+			# масштаб (особенно неравномерный) форма столкновения не переносит — запекаем его в треугольники
+			var faces := mi.mesh.get_faces().duplicate()   # своя копия: сетку делят все одинаковые модели
+			for i in faces.size():
+				faces[i] = rel * faces[i]
+			var cp := ConcavePolygonShape3D.new()
+			cp.backface_collision = true
+			cp.set_faces(faces)
+			cs.shape = cp
+		else:
+			var shape: Shape3D = _trimesh_cache.get(mi.mesh)
+			if shape == null:
+				shape = mi.mesh.create_trimesh_shape()
+				(shape as ConcavePolygonShape3D).backface_collision = true   # изнутри тоже не выйти
+				_trimesh_cache[mi.mesh] = shape
+			cs.shape = shape
+			cs.transform = rel
+		body.add_child(cs)
+		out.append(cs)
+	return out
+
+
+## Положение узла в системе другого узла (без обращения к дереву сцены: работает и до add_child,
+## если у них общий корень).
+static func _rel_xform(node: Node3D, other: Node) -> Transform3D:
+	return _to_root(other).affine_inverse() * _to_root(node)
+
+
+static func _to_root(node: Node) -> Transform3D:
+	var t := Transform3D.IDENTITY
+	var n: Node = node
+	while n != null:
+		if n is Node3D:
+			t = (n as Node3D).transform * t
+		n = n.get_parent()
+	return t
 
 
 static func unshaded(color: Color) -> StandardMaterial3D:

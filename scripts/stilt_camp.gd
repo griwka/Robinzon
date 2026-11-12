@@ -157,6 +157,7 @@ class AlbatrosShip extends Node3D:
 				hull = Node3D.new()
 			hull.name = want
 			add_child(hull)
+			_solid_hull(hull)
 		var tilt := 0.0 if fixed else 0.14
 		if animate:
 			create_tween().tween_property(self, "rotation:z", tilt, 2.0).set_trans(Tween.TRANS_SINE)
@@ -169,6 +170,10 @@ class AlbatrosShip extends Node3D:
 				if m:
 					add_child(m)
 					parts[p[0]] = m
+					var pb := StaticBody3D.new()
+					pb.collision_layer = 4
+					m.add_child(pb)
+					Models.add_trimesh(pb, m)
 					if p[0] == "albatros_lights":
 						for lp in m.find_children("Lamp*", "Node3D", true, false):
 							var l := OmniLight3D.new()
@@ -179,6 +184,13 @@ class AlbatrosShip extends Node3D:
 					if animate:
 						m.scale = Vector3(0.05, 0.05, 0.05)
 						create_tween().tween_property(m, "scale", Vector3.ONE, 0.8).set_trans(Tween.TRANS_BACK)
+
+	## Борт твёрдый: в корпус не войти с мостков (раньше «Альбатрос» был без столкновений).
+	func _solid_hull(h: Node3D) -> void:
+		var hb := StaticBody3D.new()
+		hb.collision_layer = 4
+		h.add_child(hb)
+		Models.add_trimesh(hb, h)
 
 	func ready_to_sail() -> bool:
 		for p in StiltCamp.PARTS:

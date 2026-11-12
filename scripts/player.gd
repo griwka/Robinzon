@@ -422,7 +422,7 @@ func _physics_process(delta: float) -> void:
 		var pressed := Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("interact")
 		var held := Input.is_action_pressed("attack") or Input.is_action_pressed("interact")
 		# ресурсы можно добывать, удерживая кнопку; постройки — по одному нажатию
-		if (target is ResourceNode and held) or (not (target is ResourceNode) and pressed):
+		if ((target is ResourceNode or target is GrassField.Spot) and held) or (not (target is ResourceNode or target is GrassField.Spot) and pressed):
 			try_interact()
 	if _swing_t > 0.0:
 		_swing_t -= delta
@@ -834,6 +834,14 @@ func _find_target() -> void:
 			best_score = score
 			best = n
 	in_grass = grass
+	# ничего рядом нет, а под ногами и впереди — мелкая трава: её можно вырвать (держишь кнопку — рвёт дальше)
+	if best == null and controls_enabled and is_on_floor() and not build_aim:
+		var isl := get_tree().get_first_node_in_group("island") as Island
+		if isl and isl.grass_field and isl.grass_field.spot:
+			var ahead := me + forward * 0.9
+			if isl.grass_field.count_near(ahead, 0.8) > 0:
+				isl.grass_field.spot.global_position = Vector3(ahead.x, isl.height_at(ahead.x, ahead.z), ahead.z)
+				best = isl.grass_field.spot
 	if best != target:
 		target = best
 		_update_tool()
@@ -894,6 +902,8 @@ func try_interact() -> void:
 	swing_kind = "hands"
 	if need != "" and Game.held_tool() in [need, real]:
 		swing_kind = Game.held_tool()
+	if target is GrassField.Spot and Game.held_tool() in ["machete", "iron_machete"]:
+		swing_kind = Game.held_tool()   # траву косят мачете, если оно в руке
 	_whoosh_done = false
 	_swing_t = SWING_TIME
 	var t := target

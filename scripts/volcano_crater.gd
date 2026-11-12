@@ -145,6 +145,7 @@ func _build_top() -> void:
 		var m := _model("basalt_a" if k % 2 == 0 else "basalt_b", Vector3(cos(a) * 6.8, top - 0.05, sin(a) * 6.8), a)
 		if m:
 			m.scale = Vector3(0.7, 0.6, 0.7)
+			Models.add_trimesh(_body, m)
 
 
 func _smoke_ramp() -> Gradient:

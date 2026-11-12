@@ -59,6 +59,7 @@ func _ready() -> void:
 		rock.rotation.y = atan2(-back.x, -back.z)
 		add_child(rock)
 		door = rock.find_child("Door", true, false) as Node3D
+		Models.add_trimesh(body, rock, 0.25, door)
 	var rcs := CollisionShape3D.new()
 	var rb := BoxShape3D.new()
 	rb.size = Vector3(5.0, 3.6, 1.0)

@@ -47,6 +47,11 @@ func _decor(model: String, local: Vector3, yaw: float, trunk_r: float) -> void:
 	m.position = _ground(local)
 	m.rotation.y = yaw
 	add_child(m)
+	if model in ["grandpa_bench", "perch"]:   # скамейка и насест твёрдые
+		var sb := StaticBody3D.new()
+		sb.collision_layer = 4
+		m.add_child(sb)
+		Models.add_trimesh(sb, m)
 	if trunk_r > 0.0:
 		var body := StaticBody3D.new()
 		body.collision_layer = 2

@@ -58,6 +58,7 @@ func _build_surface() -> void:
 		cs.position = Vector3(0, 1.4, 0)
 		hb.add_child(cs)
 		house.add_child(hb)
+		Models.add_trimesh(hb, house)   # мачта антенны на крыше, будка с градусниками, шкаф — тоже твёрдые
 	# люк в бункер — в паре шагов от домика
 	var hatch := Hatch.new()
 	hatch.station = self
@@ -125,7 +126,7 @@ func _build_shaft() -> void:
 		var yaw := side * PI / 2.0
 		var n := Vector3(sin(yaw), 0, cos(yaw))
 		_box(Vector3(12.8 if side % 2 == 0 else 0.6, h, 0.6 if side % 2 == 0 else 12.8), n * (HALF + 0.3) + Vector3(0, bottom + h * 0.5, 0))
-		var levels := int(ceil(h / STEP))
+		var levels := int(floor(h / STEP + 0.05))   # верхний кусок стены не торчит над потолком
 		for i in levels:
 			_model("bunker_wall", n * HALF + Vector3(0, bottom + i * STEP, 0), yaw + PI)
 	_box(Vector3(12.8, 0.6, 12.8), Vector3(0, top + 0.3, 0))
@@ -227,7 +228,8 @@ func _build_deck(k: int) -> void:
 		6: [["bunker_shelves", Vector3(2.4, 0, 5.2), PI]],
 		1: [["bunker_crates", Vector3(4.2, 0, -4.6), 0.3]]}
 	for pr in props.get(k, []):
-		_model(pr[0], (pr[1] as Vector3) + Vector3(0, y, 0), pr[2])
+		var m := _model(pr[0], (pr[1] as Vector3) + Vector3(0, y, 0), pr[2])
+		Models.add_trimesh(_body, m)   # в полки и ящики не входят
 
 
 func light_ok(k: int) -> bool:

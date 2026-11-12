@@ -82,6 +82,10 @@ func _ready() -> void:
 	if fb:
 		fb.position = top + Vector3(0, 0.05, 0)
 		add_child(fb)
+		var fbb := StaticBody3D.new()   # чаша твёрдая: сквозь неё не пройти
+		fbb.collision_layer = 4
+		fb.add_child(fbb)
+		Models.add_trimesh(fbb, fb)
 	# тот же огонь, что у костров и маяков: светящиеся языки, дым, угольки, мерцающий свет
 	bowl_fire = Node3D.new()
 	bowl_fire.position = top + Vector3(0, 1.2, 0)

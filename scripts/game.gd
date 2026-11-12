@@ -40,6 +40,7 @@ var quest_baseline: Dictionary = {}    # "kind:target" -> значение ст�
 var quest_started := false             # показано ли вступление
 var flags: Dictionary = {}             # разные одноразовые события
 var cleared: Dictionary = {}           # номера расчищенных преград (заросли, деревья, гряды)
+var grass: Dictionary = {}             # остров -> битовая карта расчищенной мелкой травы (base64, см. GrassField)
 var location := "home"                 # остров, на котором сейчас игрок
 var loc_data: Dictionary = {}          # остров -> {buildings, player} для островов, где мы уже бывали
 var time_of_day := 0.3
@@ -85,6 +86,24 @@ func _bar_worthy(id: String) -> bool:
 
 
 ## Что сейчас в руке ("" — руки свободны).
+## Расчищенная мелкая трава острова: 1 бит на клетку 1 × 1 м (GrassField).
+func grass_bits(loc: String) -> PackedByteArray:
+	var want := 200 * 200 / 8   # GrassField.RES² бит
+	var b := PackedByteArray()
+	var s: String = grass.get(loc, "")
+	if s != "":
+		b = Marshalls.base64_to_raw(s)
+	if b.size() != want:
+		b = PackedByteArray()
+		b.resize(want)
+		b.fill(0)
+	return b
+
+
+func set_grass_bits(loc: String, bits: PackedByteArray) -> void:
+	grass[loc] = Marshalls.raw_to_base64(bits)
+
+
 func held_tool() -> String:
 	return held if held != "" and count(held) > 0 else ""
 
@@ -826,7 +845,7 @@ func save_game(extra: Dictionary) -> void:
 		"version": SAVE_VERSION,
 		"inventory": inventory, "stats": stats, "unlocked": unlocked.keys(),
 		"collections": collections, "chapter": chapter, "quest_index": quest_index,
-		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags, "cleared": cleared.keys(),
+		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags, "cleared": cleared.keys(), "grass": grass,
 		"time_of_day": time_of_day, "day": day, "world_time": world_time,
 		"location": location, "held": held, "bar": bar, "hunger": hunger, "wear": wear,
 		"saved_at": Time.get_datetime_string_from_system(false, true),
@@ -875,6 +894,11 @@ func load_game() -> Dictionary:
 	cleared = {}
 	for k in data.get("cleared", []):
 		cleared[k] = true
+	grass = {}
+	var gr = data.get("grass", {})   # в старых сохранениях травы нет — вся на месте
+	if typeof(gr) == TYPE_DICTIONARY:
+		for k in gr:
+			grass[str(k)] = str(gr[k])
 	time_of_day = float(data.get("time_of_day", 0.3))
 	day = int(data.get("day", 1))
 	world_time = float(data.get("world_time", 0.0))
@@ -934,6 +958,7 @@ func reset_state() -> void:
 	quest_started = false
 	flags = {}
 	cleared = {}
+	grass = {}
 	location = "home"
 	held = ""
 	hunger = 100.0

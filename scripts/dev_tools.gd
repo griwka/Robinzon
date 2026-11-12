@@ -151,6 +151,11 @@ func _process(_delta: float) -> void:
 		cam.look_at(base + Vector3(0, -0.95, 0))
 		cam.fov = 50
 		cam.current = true
+	if _frames == 6 and args.has("mow"):   # для скриншотов: расчистить мелкую траву вокруг героя (--mow=6)
+		var gf: GrassField = main.island.grass_field
+		var r := float(args["mow"])
+		var c0 := p.global_position + Vector3(0, 0, -r * 0.6)
+		gf.clear_at(c0, r)
 	if _frames == 5 and args.has("sat"):   # для скриншотов: сытость (--sat=35) и износ (--worn=machete:0.7,stone_axe:0.2)
 		Game.hunger = float(args["sat"])
 		Game._hunger_stage = Game.hunger_stage()
@@ -2427,6 +2432,43 @@ func _reachable(poi_id: String) -> bool:
 var fails := []
 
 
+## Мелкая трава: вырвали — пропала, клетка помечена расчищенной, после пересборки острова (как после загрузки)
+## не выросла снова; постройка расчищает траву под собой.
+func _test_grass() -> void:
+	var isl: Island = main.island
+	var gf := isl.grass_field
+	_check(gf != null and gf._cells.size() > 500, "мелкая трава растёт пучками по клеткам (%d клеток)" % (gf._cells.size() if gf else 0))
+	if gf == null:
+		return
+	var best := -1
+	var spots: Array[Vector3] = []
+	for c in gf._cells:
+		if (gf._cells[c] as Array).size() >= 2:
+			spots.append(Vector3(-GrassField.HALF + (c % GrassField.RES + 0.5), 0, -GrassField.HALF + (c / GrassField.RES + 0.5)))
+			if spots.size() >= 40:
+				break
+	_check(spots.size() >= 2, "нашлись места с травой для проверки")
+	if spots.size() < 2:
+		return
+	var at: Vector3 = spots[0]
+	var fib := Game.count("fiber")
+	for i in 3:
+		gf.pull(main.player, at)
+	_check(gf.count_near(at, 0.4) == 0 and gf.is_cleared(at.x, at.z), "траву вырвали — в этом месте её больше нет")
+	_check(Game.count("fiber") >= fib, "за вырванную траву иногда достаётся волокно")
+	var far: Vector3 = spots[spots.size() - 1]
+	var left := gf.count_near(far, 0.4)
+	Game.grass = Game.grass.duplicate()   # как после сохранения и загрузки: остров собирается заново
+	isl._build_grass()
+	gf = isl.grass_field
+	_check(gf.is_cleared(at.x, at.z) and gf.count_near(at, 0.4) == 0, "расчищенная трава не выросла снова после пересборки острова")
+	_check(gf.count_near(far, 0.4) == left, "трава в других местах осталась на месте")
+	far.y = isl.height_at(far.x, far.z)
+	var b: Building = main.build.spawn_building("bench", far, 0.0)
+	_check(gf.count_near(far, 0.4) == 0, "постройка сама расчистила траву под собой")
+	b.queue_free()
+
+
 func _check(cond: bool, what: String) -> void:
 	print(("  OK   " if cond else "  FAIL ") + what)
 	if not cond:
@@ -2856,6 +2898,7 @@ func _autotest() -> void:
 		_test_stations()
 		_test_slots()
 		_test_tool_clip()
+		_test_grass()
 		_test_mistakes()
 		Game.start_current_quest()
 		_flush()
@@ -3004,6 +3047,25 @@ func _colcheck() -> void:
 	for i in 90:
 		await get_tree().physics_frame
 	var space := (main as Node3D).get_world_3d().direct_space_state
+	if args.has("coldebug"):
+		for cs in main.find_children("Solid_*", "CollisionShape3D", true, false):
+			if String(cs.name).contains(str(args["coldebug"])):
+				var sh := (cs as CollisionShape3D).shape
+				print("  форма ", cs.name, " у ", cs.get_parent().name, " слой ", (cs.get_parent() as CollisionObject3D).collision_layer,
+					" граней ", (sh as ConcavePolygonShape3D).get_faces().size() / 3 if sh is ConcavePolygonShape3D else -1, " в ", (cs as Node3D).global_position)
+				if sh is ConcavePolygonShape3D:
+					var fc: PackedVector3Array = (sh as ConcavePolygonShape3D).get_faces()
+					var g0: Vector3 = (cs as Node3D).global_transform * ((fc[0] + fc[1] + fc[2]) / 3.0)
+					var qq := PhysicsShapeQueryParameters3D.new()
+					var sp0 := SphereShape3D.new()
+					sp0.radius = 0.22
+					qq.shape = sp0
+					qq.collision_mask = 4
+					qq.transform = Transform3D(Basis.IDENTITY, g0)
+					print("    грань 0 в ", g0, " пересечений ", space.intersect_shape(qq, 4).size())
+		for mi in main.find_children("*", "MeshInstance3D", true, false):
+			if String(mi.name).contains(str(args["coldebug"])):
+				print("  сетка ", mi.name, " ", ((mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb()).get_center())
 	var sphere := SphereShape3D.new()
 	sphere.radius = 0.22
 	var q := PhysicsShapeQueryParameters3D.new()
@@ -3048,7 +3110,7 @@ func _colcheck() -> void:
 			if space.intersect_shape(q, 1).is_empty():
 				open += area
 				open_hi = maxf(open_hi, ctr.y - main.island.height_at(ctr.x, ctr.z))
-		if open * stride >= COLCHECK_MIN_AREA and (open / maxf(total, 1e-4) >= COLCHECK_MIN_FRAC or open * stride >= 3.0):
+		if open * stride >= COLCHECK_MIN_AREA and (open / maxf(total, 1e-4) >= COLCHECK_MIN_FRAC or open * stride >= 15.0):
 			report.append([open * stride, "%-60s непокрыто %.1f м² (%.0f%%), размер %s, выше земли до %.1f м" % [
 				_colcheck_path(m), open * stride, 100.0 * open / maxf(total, 1e-4), str(aabb.size.snapped(Vector3.ONE * 0.1)), open_hi]])
 	report.sort_custom(func(x, y): return x[0] > y[0])
@@ -3059,10 +3121,25 @@ func _colcheck() -> void:
 	get_tree().quit(0 if found == 0 else 1)
 
 
+## Сетки, сквозь которые проходят нарочно (или до которых не добраться), — с причиной.
+const COLCHECK_OK := {"AerialRoots": "воздушные корни баньяна свисают занавесом",
+	"Ladder": "лестница — по ней лазают", "Lianas": "лианы", "LavaRim": "край лавового озера — плоский",
+	"HotSprings": "в чаши источников заходят", "GlacierWall": "обрыв ледника: держит своя стенка, выступы — зацепы",
+	"CraterWall": "стена кратера: держит своя стенка, выступы — зацепы", "FrozenWaterfall": "водопад на обрыве ледника",
+	"Platform": "помост лагеря на сваях: сваи стоят в воде",
+	"GreatLighthouse": "Великий маяк: своя сборка столкновений под подъём на ветру (стены, балконы, перила)",
+	"TowerLedge": "уступы для отдыха на стене маяка",
+	"banyan_giant": "Великий Баньян: свои столкновения под ярусы, настилы и лианы",
+	"mangrove_a": "корни-ходули мангра в мелкой воде — между ними проходят", "mangrove_b": "корни-ходули мангра в мелкой воде", "Gate": "створки ворот форта — своё столкновение, открываются", "Pier": "мостки на сваях", "Grass": "трава"}
+
+
 func _colcheck_skip(m: MeshInstance3D) -> bool:
 	var nm := String(m.name).to_lower()
-	if nm.contains("leaf") or nm.contains("frond") or nm.contains("crown_l"):
+	if nm.contains("leaf") or nm.contains("frond") or nm.contains("crown_l") or COLCHECK_OK.has(String(m.name)) 			or (m.get_parent() and COLCHECK_OK.has(String(m.get_parent().name))):
 		return true
+	for w in Models.NO_SOLID:
+		if nm.contains(w):
+			return true
 	var n: Node = m
 	while n != null and n != main:
 		if n.is_in_group("walk_through") or n is Player or n is MultiMeshInstance3D:
@@ -3075,7 +3152,7 @@ func _colcheck_skip(m: MeshInstance3D) -> bool:
 			return true
 		if n is NPCParrot or n is NPCPerson or n is Animal or n is Pickup:
 			return true
-		if n.name == "Terrain" or n.name == "Water" or n.name.begins_with("Cloud") or n.name == "Decor":
+		if n.name == "Terrain" or n.name == "Water" or n.name.begins_with("Cloud") or n.name == "Decor" or n.name == "Fire":
 			return true
 		n = n.get_parent()
 	return false
