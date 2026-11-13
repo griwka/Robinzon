@@ -63,23 +63,51 @@ func _process(delta: float) -> void:
 	var cfg: Dictionary = Data.TREES[tree_type]
 	if grow < 1.0:
 		grow = minf(1.0, grow + dt / cfg["grow"])
-		sapling_node.scale = Vector3.ONE * (1.0 + grow * 0.8)
 	elif fruit < 1.0:
 		fruit = minf(1.0, fruit + dt / cfg["regrow"])
 	if was_grown != (grow >= 1.0) or was_ripe != (fruit >= 1.0):
-		if grow >= 1.0 and not was_grown:
-			tree_node.scale = Vector3(0.3, 0.3, 0.3)
-			create_tween().tween_property(tree_node, "scale", Vector3.ONE, 0.8).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		_refresh()
+	elif absf(grow - _shown.x) > 0.002 or absf(fruit - _shown.y) > 0.003:
+		_grow_visual()
+
+
+# ------------------------------------------------------------------ плавный рост
+# Саженец в горшке подрастает, потом на его месте поднимается деревце и дорастает до взрослого — без скачка.
+# Плоды (узел Fruit: каждый плод — свой узел) завязываются маленькими и зелёными и наливаются до спелых.
+var _shown := Vector2(-1, -1)
+var _fruit_mat: ShaderMaterial
+const UNRIPE := Color(0.6, 0.85, 0.48)
+
+
+func _grow_visual() -> void:
+	_shown = Vector2(grow, fruit)
+	var sap := clampf(1.0 - (grow - 0.3) / 0.12, 0.0, 1.0)   # саженец уходит, когда деревце поднялось
+	sapling_node.visible = sap > 0.01
+	sapling_node.scale = Vector3.ONE * (1.0 + minf(grow, 0.3) * 2.0) * lerpf(0.4, 1.0, sap)
+	var t := smoothstep(0.26, 1.0, grow)
+	tree_node.visible = grow > 0.26
+	tree_node.scale = Vector3.ONE * lerpf(0.22, 1.0, t)
+	var f := tree_node.get_node_or_null("Fruit") as Node3D
+	if f == null:
+		return
+	var grown := grow >= 1.0
+	f.visible = grown and fruit > 0.05
+	var k := lerpf(0.25, 1.0, smoothstep(0.05, 0.9, fruit))
+	var items: Array = f.get_children().filter(func(c): return c is MeshInstance3D)
+	if items.is_empty() and f is MeshInstance3D:
+		items = [f]
+	if _fruit_mat == null and not items.is_empty():
+		_fruit_mat = (Models.model_mat(false).duplicate() as ShaderMaterial)
+	for it in items:
+		(it as MeshInstance3D).scale = Vector3.ONE * k
+		(it as MeshInstance3D).material_override = _fruit_mat
+	if _fruit_mat:
+		_fruit_mat.set_shader_parameter("albedo", UNRIPE.lerp(Color.WHITE, smoothstep(0.55, 1.0, fruit)))
 
 
 func _refresh() -> void:
 	var grown := grow >= 1.0
-	sapling_node.visible = not grown
-	tree_node.visible = grown
-	var f := tree_node.get_node_or_null("Fruit")
-	if f:
-		f.visible = grown and fruit >= 1.0
+	_grow_visual()
 	FX.set_marker(marker, grown and fruit >= 1.0 and not wild, Data.TREES[tree_type]["fruit"])
 	if marker:
 		marker.position.y = marker_height()

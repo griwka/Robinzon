@@ -704,7 +704,7 @@ def tool_iron_pickaxe():
 
 BUILDERS = {
     "vera": vera, "tortoise": tortoise, "tortoise_pen": tortoise_pen, "hot_springs": hot_springs, "clinic": clinic,
-    "aloe_plant": aloe_plant, "coffee_bush": coffee_bush, "crop_pepper": crop_pepper,
+    "aloe_plant": aloe_plant, "coffee_bush": coffee_bush, 
     "charred_tree_a": charred_tree_a, "charred_tree_b": charred_tree_b, "ore_vein": ore_vein, "obsidian_rock": obsidian_rock,
     "basalt_a": basalt_a, "basalt_b": basalt_b, "forge": forge, "stone_bridge": stone_bridge, "bridge_marker": bridge_marker,
     "crater_wall": crater_wall, "rock_holds": rock_holds, "lava_rim": lava_rim,

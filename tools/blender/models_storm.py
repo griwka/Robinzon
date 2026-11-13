@@ -1028,7 +1028,7 @@ BUILDERS = {
     "bunker_hatch_inner": bunker_hatch_inner, "generator_broken": generator_broken, "generator": generator,
     "station_desk": station_desk, "radio_broken": radio_broken, "radio": radio, "seaplane": seaplane, "graves": graves,
     "storm_tower_ruin": storm_tower_ruin, "storm_tower": storm_tower, "stepa_boat_wreck": stepa_boat_wreck,
-    "stepa_boat": stepa_boat, "crop_pumpkin": crop_pumpkin, "crooked_tree_a": crooked_tree_a,
+    "stepa_boat": stepa_boat, "crooked_tree_a": crooked_tree_a,
     "crooked_tree_b": crooked_tree_b, "heather_a": heather_a, "heather_b": heather_b, "blueberry_bush": blueberry_bush,
     "scrap_pile": scrap_pile, "sand_pit": sand_pit, "rockfall": rockfall, "fulgurite": fulgurite,
 }

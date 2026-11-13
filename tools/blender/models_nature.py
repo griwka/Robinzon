@@ -133,7 +133,7 @@ def banana_tree():
     paint(bud, hexcol("8a3a6a"), ao=0.0)
     parts.append(bud)
     fr = join(parts, "Fruit")
-    set_origin(fr, (0.3, 0, h - 0.5))
+    set_origin(fr, (0.3, 0, h - 0.1))   # гроздь «наливается» от черешка (игра масштабирует её при созревании)
 
 
 # ------------------------------------------------------------------ деревья с круглой кроной
@@ -170,11 +170,18 @@ def round_tree(seed, leaf_col, fruit_col, fruit_r, fruit_shape=(1, 1, 1.1)):
         a = 2 * math.pi * i / 11 + rr.uniform(-0.3, 0.3)
         zz = rr.uniform(-0.45, 0.4)
         dd = math.sqrt(max(0.0, 1.0 - zz * zz)) * 1.02
-        f = sphere("fr", (math.cos(a) * dd, math.sin(a) * dd, cz + zz), fruit_r, fruit_shape, segs=14, rings=10)
+        c = (math.cos(a) * dd, math.sin(a) * dd, cz + zz)
+        f = sphere("Fruit_%d" % i, c, fruit_r, fruit_shape, segs=14, rings=10)
         paint(f, fruit_col, ao=0.0, noise_amt=0.05, fn=lambda co, n: 1.15 if n.z > 0.4 else None)
-        fruits.append(f)
-    fr = join(fruits, "Fruit")
-    set_origin(fr, (0, 0, cz))
+        leafy = leaf("fl", (c[0], c[1], c[2] + fruit_r * fruit_shape[2] * 0.9), (math.cos(a), math.sin(a), 0.8), fruit_r * 0.9, fruit_r * 0.35, droop=0.2, segs=3)
+        paint(leafy, shade(leaf_col, 1.1), ao=0.0)
+        f = join([f, leafy], "Fruit_%d" % i)
+        fruits.append((f, c))
+    # каждый плод отдельно, точка вращения — в его центре: игра «наливает» плоды по одному
+    holder = empty("Fruit", (0, 0, cz))
+    for f, c in fruits:
+        set_origin(f, c)
+        set_parent(f, holder)
 
 
 def mango_tree():

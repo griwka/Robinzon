@@ -43,19 +43,83 @@ func _process(delta: float) -> void:
 		progress = minf(1.0, progress + dt * speed / Data.CROPS[crop]["time"])
 	if stage() != _stage:
 		_refresh()
+	elif absf(progress - _shown) > 0.0015:
+		_grow_visual()
+
+
+# ------------------------------------------------------------------ плавный рост
+# Модель культуры (crop_<вид>) — растения-узлы P0..P8; в каждом листья, стебель и плоды P<n>_fruit<k>.
+# Растение тянется из маленького ростка непрерывно по progress (у каждого — свой небольшой сдвиг),
+# плоды появляются со второй половины роста, наливаются и из зелёных становятся спелыми.
+# Стадии (stage) для заданий и сбора — прежние: это только вид.
+var _crop_built := ""
+var _plants: Array = []        # [Node3D растение, сдвиг 0..0.12, [MeshInstance3D плоды]]
+var _fruit_mat: ShaderMaterial
+var _shown := -1.0
+const UNRIPE := Color(0.62, 0.86, 0.5)   # цвет-множитель незрелых плодов
+
+
+func _build_crop() -> void:
+	if crop_node:
+		crop_node.queue_free()
+		crop_node = null
+	_plants.clear()
+	_crop_built = crop
+	if crop == "":
+		return
+	crop_node = Models.glb("crop_" + crop)
+	if crop_node == null:
+		crop_node = Models.crop(crop, 3)
+	visual.add_child(crop_node)
+	_fruit_mat = (Models.model_mat(false).duplicate() as ShaderMaterial)
+	var i := 0
+	for c in crop_node.find_children("P*", "Node3D", false, false):
+		var nm := String(c.name)
+		if nm.length() < 2 or not nm.substr(1).is_valid_int():
+			continue
+		var fruits: Array = []
+		for mi in (c as Node3D).find_children("*_fruit*", "MeshInstance3D", true, false):
+			(mi as MeshInstance3D).material_override = _fruit_mat
+			fruits.append(mi)
+		_plants.append([c, fposmod(i * 0.37, 1.0) * 0.12, fruits])
+		i += 1
+	_shown = -1.0
+	_grow_visual()
+
+
+func _grow_visual() -> void:
+	if crop_node == null:
+		return
+	_shown = progress
+	if _plants.is_empty():   # старая модель без растений-узлов — растёт целиком
+		var k := lerpf(0.15, 1.0, smoothstep(0.0, 1.0, progress))
+		crop_node.scale = Vector3(k, k, k)
+		return
+	for pl in _plants:
+		var g := clampf((progress - float(pl[1])) / (1.0 - float(pl[1])), 0.0, 1.0)
+		var body := smoothstep(0.0, 0.85, g)
+		var w := lerpf(0.14, 1.0, body)
+		var h := lerpf(0.08, 1.0, body * body * 0.4 + body * 0.6)   # сначала стелется, потом тянется вверх
+		(pl[0] as Node3D).scale = Vector3(w, h, w)
+		var fg := smoothstep(0.45, 1.0, g)
+		for mi in pl[2]:
+			var f := mi as MeshInstance3D
+			f.visible = fg > 0.02
+			# плод держим в натуральную величину независимо от высоты растения: «наливается» сам
+			var fk := lerpf(0.25, 1.0, fg)
+			f.scale = Vector3(fk, fk * w / maxf(h, 0.01), fk)   # растение растёт неровно (w, h, w) — плод не сплющиваем
+	_fruit_mat.set_shader_parameter("albedo", UNRIPE.lerp(Color.WHITE, smoothstep(0.7, 1.0, progress)))
 
 
 func _refresh() -> void:
 	_stage = stage()
-	if crop_node:
-		crop_node.queue_free()
-		crop_node = null
-	if _stage > 0:
-		crop_node = Models.crop(crop, _stage)
-		visual.add_child(crop_node)
-		if _stage == 3:
-			crop_node.scale = Vector3(0.7, 0.7, 0.7)
-			create_tween().tween_property(crop_node, "scale", Vector3.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	if crop != _crop_built:
+		_build_crop()
+	else:
+		_grow_visual()
+	if _stage == 3 and crop_node:
+		crop_node.scale = Vector3(0.92, 0.92, 0.92)   # созрело: мягкий «прыжок»
+		create_tween().tween_property(crop_node, "scale", Vector3.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	var soil := visual.get_node_or_null("Soil") as MeshInstance3D
 	if soil:
 		soil.material_override = Models.mat(Color("54331d") if watered else Color("7a4a2a"), false)

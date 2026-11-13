@@ -1114,6 +1114,6 @@ BUILDERS = {
     "ice_shelf": ice_shelf, "ice_hole": ice_hole, "ice_floe_a": ice_floe_a, "ice_floe_b": ice_floe_b,
     "moss_a": moss_a, "moss_b": moss_b, "lingonberry_bush": lingonberry_bush, "pine_a": pine_a, "pine_b": pine_b,
     "ice_block": ice_block, "ice_wall_a": ice_wall_a, "ice_wall_b": ice_wall_b,
-    "stove": stove, "greenhouse": greenhouse, "crop_cloudberry": crop_cloudberry,
+    "stove": stove, "greenhouse": greenhouse, 
     "wear_sweater": wear_sweater, "wear_jacket": wear_jacket, "wear_boots": wear_boots, "wear_mittens": wear_mittens,
 }   # инструменты — в models_tools.py

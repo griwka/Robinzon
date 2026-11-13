@@ -302,6 +302,7 @@ def set_origin(ob, pivot):
 
 
 def set_parent(child, parent):
+    bpy.context.view_layer.update()   # у только что созданных объектов matrix_world ещё не пересчитана
     mw = child.matrix_world.copy()
     child.parent = parent
     child.matrix_parent_inverse = parent.matrix_world.inverted()

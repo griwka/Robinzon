@@ -151,6 +151,27 @@ func _process(_delta: float) -> void:
 		cam.look_at(base + Vector3(0, -0.95, 0))
 		cam.fov = 50
 		cam.current = true
+	if _frames == 3 and args.has("growrow"):   # для скриншотов: грядки одной культуры на разных стадиях (--growrow=tomato)
+		var c0: Vector3 = main.island.camp_center
+		var crops_: PackedStringArray = str(args["growrow"]).split(",")
+		var steps := [0.04, 0.2, 0.4, 0.6, 0.8, 1.0]
+		for ci in crops_.size():
+			for i in steps.size():
+				var bp := c0 + Vector3((i - 2.5) * 2.0, 0, -1.5 + ci * 1.5)
+				bp.y = main.island.height_at(bp.x, bp.z)
+				main.build.spawn_building("garden_bed", bp, 0.0, "", {"crop": crops_[ci], "progress": steps[i], "watered": true})
+		for i in 4:
+			var tp := c0 + Vector3((i - 1.5) * 3.2, 0, -4.8)
+			tp.y = main.island.height_at(tp.x, tp.z)
+			main.build.spawn_building("fruit_tree", tp, 0.0, "mango", {"grow": [0.2, 0.5, 1.0, 1.0][i], "fruit": [0.0, 0.0, 0.4, 1.0][i]})
+		p.global_position = c0 + Vector3(0, 0.5, 9.0)
+		p.visible = false
+		var gc := Camera3D.new()
+		main.add_child(gc)
+		gc.global_position = c0 + Vector3(0, 4.2, 7.5 + crops_.size())
+		gc.look_at(c0 + Vector3(0, 0.3, 0.5))
+		gc.fov = 46.0
+		_gcam = gc
 	if _frames == 6 and args.has("mow"):   # для скриншотов: расчистить мелкую траву вокруг героя (--mow=6)
 		var gf: GrassField = main.island.grass_field
 		var r := float(args["mow"])
