@@ -6,7 +6,7 @@ from mathutils import Vector
 
 from kit import (box, cyl, displace, empty, hexcol, ico, join, lathe, leaf, mix, paint, remesh, rnd, set_origin,
                  set_parent, shade, sphere, subsurf, tube)
-from models_buildings import log, plank, rope_wrap
+from models_buildings import boards, log, plank, rope_wrap
 from models_jungle import JG, JG2, JG_D, OLIVE
 
 BARK = hexcol("7d6148")
@@ -266,7 +266,7 @@ def beehive():
         paint(bx, hexcol("f2c23a") if i % 2 == 0 else hexcol("e0a83a"), ao=0.0, fn=lambda co, n: 0.85 if abs(co.y) > 0.24 else None)
         parts.append(bx)
     roof = box("rf", (0, 0, 1.6), (0.78, 0.68, 0.1), (0, 0.0, 0), bev=0.03)
-    paint(roof, hexcol("a87342"), ao=0.0)
+    paint(roof, hexcol("a87342"), ao=0.0, fn=boards(9, axis=0), mat="wood")
     hole = box("hl", (0, 0.27, 0.68), (0.2, 0.02, 0.05))
     paint(hole, hexcol("2a1a10"), ao=0.0)
     parts += [roof, hole]
@@ -294,7 +294,7 @@ def sheep_pen():
             a0, a1 = d * s - right * s, d * s + right * s
             parts.append(log("rl", (a0.x, a0.y, z), (a1.x, a1.y, z), 0.04, col=hexcol("c9a467"), rings=False))
     shed = box("sh", (-0.9, 1.0, 0.6), (1.4, 1.0, 1.2), bev=0.04)
-    paint(shed, hexcol("c08a50"), ao=0.2, fn=lambda co, n: 0.85 if int(co.z * 7) % 2 else None)
+    paint(shed, hexcol("c08a50"), ao=0.2, fn=boards(7), mat="wood")
     roof = cyl("rf", (-0.9, 1.0, 1.2), 1.05, 0.05, 0.6, (0, 0, math.pi / 4), segs=4)
     paint(roof, hexcol("d6ad55"), ao=0.0, noise_amt=0.2, nscale=20)
     hay = box("hy", (0.9, 1.2, 0.15), (0.8, 0.5, 0.3), bev=0.06)

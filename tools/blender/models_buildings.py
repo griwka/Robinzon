@@ -20,8 +20,52 @@ BLUE = hexcol("4f8fd8")
 
 
 def grain(base):
-    """Узор древесных волокон."""
-    return lambda co, n: (0.84 if math.sin(co.x * 23 + co.y * 7 + math.sin(co.z * 9) * 2) > 0.72 else None)
+    """Узор древесных волокон — теперь его рисует запекание (texbake: вид "wood"), здесь ничего не меняем."""
+    return None
+
+
+def boards(per_m, axis=2, seam=0.07):
+    """Обшивка досками на ящике или стене: тёмный шов между досками, доски чуть разного тона.
+    per_m — досок на метр вдоль оси axis (2 — вагонка по высоте). Волокна рисует запекание ("wood")."""
+    def f(co, n):
+        if abs(n[axis]) > 0.8:
+            return None   # торцы досок — сверху и снизу
+        t = co[axis] * per_m
+        fr = t - math.floor(t)
+        if fr < seam:
+            return 0.6
+        if fr < seam * 2.2:
+            return 1.08   # светлая кромка над швом
+        return (0.9, 1.0, 0.95, 1.04)[int(math.floor(t)) % 4]
+    return f
+
+
+def masonry(base, course=0.17, block=0.34, mortar=None, around=None, seed=0):
+    """Кладка из камней или кирпичей: ряды высотой course, камни длиной block со смещением через ряд,
+    светлые швы раствора, у каждого камня свой тон. around=(x, y) — кольцевая кладка вокруг оси (колодец):
+    длина считается по дуге. Даёт fn(co, n) для paint."""
+    mort = mortar or mix(base, hexcol("e8e0d0"), 0.55)
+    from mathutils import noise as _nz
+
+    def f(co, n):
+        if abs(n.z) > 0.85 and around is None:
+            return None
+        row = math.floor(co.z / course)
+        fz = co.z / course - row
+        if around is not None:
+            u = math.atan2(co.y - around[1], co.x - around[0]) * math.hypot(co.x - around[0], co.y - around[1])
+        else:
+            u = co.x if abs(n.x) < abs(n.y) else co.y
+        u = u / block + 0.5 * (row % 2) + 0.12 * _nz.noise((co.x * 3.0, co.y * 3.0, row + seed))
+        fu = u - math.floor(u)
+        w = 0.07
+        if fz < w or fz > 1 - w * 0.5 or fu < w * 0.6:
+            return mort
+        k = 0.88 + 0.2 * (_nz.noise((math.floor(u) * 1.7 + seed, row * 2.3, 0.5)) * 0.5 + 0.5)
+        if fz < w * 2.2:
+            k *= 0.86   # тень под камнем верхнего ряда
+        return shade(base, k)
+    return f
 
 
 def plank(name, loc, size, rot=(0, 0, 0), col=PLANK, seed=0):
@@ -37,12 +81,8 @@ def plank(name, loc, size, rot=(0, 0, 0), col=PLANK, seed=0):
     def f(co, n):
         if abs(n.dot(ax)) > 0.85:
             return shade(tone, 1.18)   # торец — светлее
-        u = (co - c0).dot(ax)
-        g = math.sin(u * 9 + math.sin(u * 2.3 + (co - c0).length * 11) * 2.2 + seed)
-        if g > 0.8:
-            return shade(tone, 0.8)
-        return shade(tone, 1.06) if g < -0.9 else None
-    paint(p, tone, ao=0.25, ao_h=0.3, noise_amt=0.07, nscale=9, fn=f)
+        return None                     # волокна, кольца и сучки рисует запекание (texbake: "wood")
+    paint(p, tone, ao=0.25, ao_h=0.3, noise_amt=0.07, nscale=9, fn=f, mat="wood")
     return p
 
 
@@ -53,7 +93,8 @@ def log(name, a, b, r, col=WOOD_D, rings=True):
     d = (b - a).normalized()
     segs = 12 if r > 0.035 else 8
     t = tube(name, [tuple(a), tuple(b)], [r, r * 0.95], segs, caps=not rings)
-    paint(t, col, ao=0.25, ao_h=0.3, noise_amt=0.08, nscale=10, fn=bark_fn(tuple(a), tuple(d), col=col, seed=int(r * 1000) % 17))
+    paint(t, col, ao=0.25, ao_h=0.3, noise_amt=0.08, nscale=10, fn=bark_fn(tuple(a), tuple(d), col=col, seed=int(r * 1000) % 17),
+          mat="bark")
     if not rings:
         return t
     o1 = d.orthogonal().normalized()
@@ -74,7 +115,7 @@ def rope_wrap(name, center, r, z0, turns=3, axis="z"):
         z = z0 + i * 0.006
         pts.append((center[0] + math.cos(a) * r, center[1] + math.sin(a) * r, z))
     t = tube(name, pts, 0.018, 6, caps=False)
-    paint(t, ROPE, ao=0.0, noise_amt=0.08)
+    paint(t, ROPE, ao=0.0, noise_amt=0.08, mat="rope")
     return t
 
 
@@ -82,7 +123,7 @@ def stone(name, loc, r, seed, col=STONE):
     s = ico(name, loc, r, (1.15, 1.0, 0.75), (0, 0, seed), sub=2)
     displace(s, 0.3 * r, 0.8 * r, "VORONOI")
     subsurf(s, 1)
-    paint(s, shade(col, 0.9 + 0.15 * (seed % 3) / 2), ao=0.3, ao_h=r, noise_amt=0.1, nscale=4 / r)
+    paint(s, shade(col, 0.9 + 0.15 * (seed % 3) / 2), ao=0.3, ao_h=r, noise_amt=0.1, nscale=4 / r, mat="stone")
     return s
 
 
@@ -134,7 +175,7 @@ def tent():
             paint(peg, WOOD_D, ao=0.0)
             parts += [r, peg]
     mat = box("mat", (0, 0, 0.02), (1.3, 1.9, 0.04), bev=0.02)
-    paint(mat, hexcol("c9a050"), ao=0.0, fn=lambda co, n: 0.85 if int(co.y * 14) % 2 == 0 else None)
+    paint(mat, hexcol("c9a050"), ao=0.0, fn=lambda co, n: 0.85 if int(co.y * 14) % 2 == 0 else None, mat="straw")
     parts.append(mat)
     join(parts, "Tent")
 
@@ -154,7 +195,7 @@ def campfire():
     for i in range(5):
         a = 2 * math.pi * i / 5 + 0.9
         e = sphere("em", (math.cos(a) * 0.2, math.sin(a) * 0.2, 0.06), 0.07, (1, 1, 0.5), segs=8, rings=5)
-        paint(e, hexcol("ff7a2a"), ao=0.0, noise_amt=0.3, nscale=20)
+        paint(e, hexcol("ff7a2a"), ao=0.0, noise_amt=0.3, nscale=20, mat="plain")
         parts.append(e)
     join(parts, "Campfire")
 
@@ -162,7 +203,7 @@ def campfire():
 def torch():
     parts = [log("tp", (0, 0, 0), (0, 0, 1.6), 0.055, rings=False)]
     bowl = lathe("tb", [(0.06, 1.5), (0.16, 1.6), (0.18, 1.72), (0.0, 1.72)], 12)
-    paint(bowl, hexcol("4a3b30"), ao=0.0, fn=lambda co, n: 0.8 if int(co.z * 50) % 2 else None)
+    paint(bowl, hexcol("4a3b30"), ao=0.0, fn=lambda co, n: 0.8 if int(co.z * 50) % 2 else None, mat="iron")
     parts.append(bowl)
     parts.append(rope_wrap("tr", (0, 0), 0.06, 1.3, 3))
     join(parts, "Torch")
@@ -206,7 +247,7 @@ def bamboo(name, a, b, r):
     def f(co, n):
         k = ((co - Vector(a)).dot((Vector(b) - Vector(a)).normalized()) / 0.42) % 1.0
         return 0.75 if k < 0.07 else (1.08 if k < 0.2 else None)
-    paint(t, BAMBOO, ao=0.25, ao_h=0.4, noise_amt=0.06, fn=f)
+    paint(t, BAMBOO, ao=0.25, ao_h=0.4, noise_amt=0.06, fn=f, mat="bamboo")
     return t
 
 
@@ -249,8 +290,8 @@ def thatch_cone(name, z, r_bottom, h, sides=4, rot=math.pi / 4):
         solidify(ob, 0.06)
         tone = shade(STRAW, 0.92 + 0.12 * (c % 2))
         paint(ob, tone, ao=0.0, noise_amt=0.12, nscale=16,
-              fn=lambda co, n, tone=tone: shade(tone, 0.78) if math.sin(math.atan2(co.y, co.x) * 70 + co.z * 9) > 0.55 else (
-                  shade(tone, 1.12) if n.z > 0.6 else None))
+              fn=lambda co, n, tone=tone: shade(tone, 0.84) if math.sin(math.atan2(co.y, co.x) * 70 + co.z * 9) > 0.55 else (
+                  shade(tone, 1.12) if n.z > 0.6 else None), mat="straw")
         parts.append(ob)
     return join(parts, name)
 
@@ -352,7 +393,7 @@ def goat_pen():
         parts.append(lf)
     # кормушка с сеном
     tr = box("tr", (0.9, 1.3, 0.18), (0.9, 0.35, 0.25), bev=0.03)
-    paint(tr, WOOD, ao=0.2, fn=grain(WOOD))
+    paint(tr, WOOD, ao=0.2, mat="wood")
     hay = box("hay", (0.9, 1.3, 0.32), (0.8, 0.25, 0.08), bev=0.03)
     displace(hay, 0.04, 0.05)
     paint(hay, hexcol("d9c45a"), ao=0.0, noise_amt=0.25, nscale=30)
@@ -475,11 +516,12 @@ def hammock():
 def scarecrow():
     parts = [log("sp", (0, 0, 0), (0, 0, 1.8), 0.045, rings=False), log("sa", (-0.62, 0, 1.35), (0.62, 0, 1.35), 0.04, rings=False)]
     shirt = box("sh", (0, 0, 1.2), (0.6, 0.28, 0.62), bev=0.08, seg=3)
-    paint(shirt, hexcol("6f9bd1"), ao=0.0, fn=lambda co, n: hexcol("e8b45a") if (0.05 < co.x < 0.22 and co.z < 1.15) else (0.85 if int(co.z * 20) % 3 == 0 else None))
+    paint(shirt, hexcol("6f9bd1"), ao=0.0, mat="canvas",
+          fn=lambda co, n: hexcol("e8b45a") if (0.05 < co.x < 0.22 and 0.98 < co.z < 1.15) else (0.85 if int(co.z * 20) % 3 == 0 else None))
     parts.append(shirt)
     for sx in (-1, 1):
         sl = tube("sl", [(sx * 0.28, 0, 1.35), (sx * 0.55, 0, 1.33)], [0.09, 0.08], 10)
-        paint(sl, hexcol("6f9bd1"), ao=0.0)
+        paint(sl, hexcol("6f9bd1"), ao=0.0, mat="canvas")
         straw = cyl("ss", (sx * 0.55, 0, 1.33), 0.07, 0.0, 0.2, (0, sx * math.pi / 2, 0), 8)
         paint(straw, hexcol("e8cf8a"), ao=0.0, noise_amt=0.3, nscale=40)
         parts += [sl, straw]
@@ -539,7 +581,7 @@ def boat_wreck():
         pts = [(-ln / 2 + k * ln / 6, y0 * (1 - 0.25 * abs(k - 3) / 3), z0 + 0.12 * abs(k - 3) / 3) for k in range(7)]
         t = tube("hb", pts, 0.08, 6)
         from kit import bevel
-        paint(t, shade(wood, 0.9 + 0.1 * (i % 2)), ao=0.3, ao_h=0.4, noise_amt=0.12, nscale=8, fn=grain(wood))
+        paint(t, shade(wood, 0.9 + 0.1 * (i % 2)), ao=0.3, ao_h=0.4, noise_amt=0.12, nscale=8, mat="wood")
         parts.append(t)
     for k in range(5):
         x = -1.3 + k * 0.65
@@ -565,7 +607,7 @@ def boat_wreck():
     parts.append(sail)
     # надпись "ЧАЙКА" — тёмная полоса на борту
     plate = box("pl", (-0.6, -0.45, 0.62), (0.9, 0.02, 0.16), (0.45, 0, 0))
-    paint(plate, hexcol("f2ead3"), ao=0.0, fn=lambda co, n: hexcol("2a3a6a") if abs(co.z - 0.62) < 0.04 else None)
+    paint(plate, hexcol("f2ead3"), ao=0.0, fn=lambda co, n: hexcol("2a3a6a") if abs(co.z - 0.62) < 0.04 else None, mat="painted")
     parts.append(plate)
     w = join(parts, "Wreck")
     empty("Perch", (1.6, -0.6, 2.45), w)

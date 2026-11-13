@@ -8,7 +8,7 @@ import math
 
 from kit import (box, cyl, displace, empty, hexcol, ico, join, lathe, leaf, mix, overpaint, paint, remesh, rnd, set_origin, set_parent,
                  shade, sphere, subsurf, tube)
-from models_buildings import log, plank, stone
+from models_buildings import boards, log, masonry, plank, stone
 from models_ice import _block
 
 SKIN = hexcol("e8b896")
@@ -216,10 +216,13 @@ def _hull(wreck):
     subsurf(h, 1)
 
     def fn(co, n):
-        if wreck and (math.sin(co.x * 1.7 + co.z * 2.2) > 0.4 and co.z < 1.6):
-            return MOSS
-        if wreck and (math.sin(co.x * 3 + 1.3) * math.sin(co.z * 4) > 0.85):
-            return hexcol("2a1e1a")   # пробоины
+        if wreck:
+            from mathutils import Vector as _V, noise as _nz
+            mv = _nz.noise(co * 0.7) + 0.45 * _nz.noise(co * 2.3) - (co.z - 0.6) * 0.35
+            if mv > 0.25 and co.z < 1.9:
+                return MOSS if mv < 0.55 else hexcol("82a85a")   # мох снизу пятнами, у кромки — светлее
+            if _nz.noise(co * 1.3 + _V((7.0, 0.0, 0.0))) > 0.5 and 0.3 < co.z < 1.6:
+                return hexcol("2a1e1a")   # пробоины
         if co.z > 1.65:
             return hexcol("f2ead8")
         if 1.25 < co.z < 1.45:
@@ -230,12 +233,12 @@ def _hull(wreck):
     paint(h, HULL if not wreck else hexcol("4a5a52"), ao=0.2, ao_h=1.0, noise_amt=0.12, nscale=1.5, fn=fn)
     deck = box("dk", (0, 0, 1.9), (13.0, 3.2, 0.12))
     paint(deck, hexcol("c99a5e") if not wreck else hexcol("8a8a5a"), ao=0.0, noise_amt=0.1,
-          fn=lambda co, n: 0.85 if int(co.y * 5) % 2 else None)
+          fn=boards(5, axis=1, seam=0.05), mat="wood")
     cabin = box("cb", (-4.0, 0, 2.6), (3.0, 2.0, 1.4), bev=0.06)
     paint(cabin, hexcol("e8dcc4") if not wreck else hexcol("a0a080"), ao=0.0,
           fn=lambda co, n: hexcol("bfe8f0") if (abs(n.y) > 0.6 and abs(co.z - 2.7) < 0.2 and int(co.x * 2) % 2) else None)
     roof = box("rf", (-4.0, 0, 3.35), (3.3, 2.3, 0.12))
-    paint(roof, hexcol("8a5a32"), ao=0.0)
+    paint(roof, hexcol("8a5a32"), ao=0.0, fn=boards(6, axis=1, seam=0.05), mat="wood")
     bow = tube("bs", [(7.2, 0, 1.7), (9.0, 0, 2.3)], [0.1, 0.05], 8)   # бушприт
     paint(bow, WOOD_W, ao=0.0)
     rail = []
@@ -246,7 +249,7 @@ def _hull(wreck):
     parts2 = [h, deck, cabin, roof, bow, r]
     if wreck:
         stub = tube("st", [(0.5, 0, 1.9), (0.6, 0.1, 4.2)], [0.18, 0.12], 10)
-        paint(stub, hexcol("6a5a3a"), ao=0.0, fn=lambda co, n: MOSS if co.z < 3.0 else None)
+        paint(stub, hexcol("6a5a3a"), ao=0.0, fn=lambda co, n: MOSS if co.z < 3.0 else None, mat="wood")
         rag = leaf("rg", (0.6, 0.1, 4.0), (0.3, 1.0, -0.6), 1.4, 0.5, droop=0.5)
         paint(rag, hexcol("8a8a6a"), ao=0.0)
         parts2 += [stub, rag]
@@ -257,7 +260,7 @@ def _hull(wreck):
             parts2.append(fl)
     else:
         name = box("nm", (5.0, -1.72, 1.85), (2.0, 0.05, 0.2))
-        paint(name, hexcol("f2ead8"), ao=0.0, fn=lambda co, n: hexcol("2a2a2a") if int(co.x * 6) % 2 else None)
+        paint(name, hexcol("f2ead8"), ao=0.0, fn=lambda co, n: hexcol("2a2a2a") if int(co.x * 6) % 2 else None, mat="painted")
         parts2.append(name)
     join(parts2, "Albatros")
 
@@ -288,7 +291,7 @@ def albatros_mast():
             parts += [yard, sail]
     for sy in (-1, 1):
         sh = tube("sh", [(0.6, sy * 1.7, 2.3), (0.6, 0, 10.5)], 0.02, 4)
-        paint(sh, hexcol("c9a467"), ao=0.0)
+        paint(sh, hexcol("c9a467"), ao=0.0, mat="rope")
         parts.append(sh)
     flag = box("fl", (0.6, 0.6, 11.0), (0.03, 1.0, 0.6))
     paint(flag, hexcol("e8443a"), ao=0.0)
@@ -537,11 +540,34 @@ def fog_tower():
 
 
 # ================================================================== деревня
+def _tiles(cx, cz, ry, row=0.2, width=0.24):
+    """Черепица на скате (ящик, повёрнутый на ry вокруг Y с центром (cx, ·, cz)): ряды вдоль конька,
+    у нижней кромки каждой черепицы — тень, черепицы рядом — со смещением через ряд и чуть разного тона."""
+    ca, sa = math.cos(ry), math.sin(ry)
+
+    def f(co, n):
+        if n.z < 0.3:
+            return None
+        u = (co.x - cx) * ca - (co.z - cz) * sa        # вниз по скату (у правого ската — наоборот)
+        u = u * (1 if ry > 0 else -1) / row
+        r = math.floor(u)
+        fu = u - r
+        v = co.y / width + 0.5 * (r % 2)
+        fv = v - math.floor(v)
+        if fu > 0.86:
+            return 0.62                                 # тень от нижнего края черепицы
+        if fv < 0.06:
+            return 0.74                                 # стык черепиц
+        k = 0.93 + 0.12 * ((int(math.floor(v)) * 7 + int(r) * 3) % 5) / 4
+        return k * (1.06 if fu < 0.25 else 1.0)         # верх черепицы светлее
+    return f
+
+
 def village_house():
     """Дом для команды: белёные стены, черепичная крыша, крылечко с цветами, круглое окошко как иллюминатор."""
     parts = []
     walls = _block("wl", 3.0, 2.6, 2.2, cuts=8)
-    paint(walls, hexcol("f2ead8"), ao=0.25, ao_h=0.6, noise_amt=0.06,
+    paint(walls, hexcol("f2ead8"), ao=0.25, ao_h=0.6, noise_amt=0.06, mat="clay",
           fn=lambda co, n: (hexcol("6a8aa0") if (n.y < -0.5 and math.hypot(co.x + 0.75, co.z - 1.3) < 0.28) else
                             (hexcol("c9b890") if co.z < 0.3 else None)))
     door = box("dr", (0.5, -1.32, 0.85), (0.8, 0.06, 1.6), bev=0.03)
@@ -549,7 +575,7 @@ def village_house():
     parts += [walls, door]
     for sx in (-1, 1):
         rf = box("rf", (sx * 0.85, 0, 2.6), (2.0, 3.0, 0.14), (0, sx * 0.6, 0), bev=0.03)
-        paint(rf, hexcol("c8503a"), ao=0.0, fn=lambda co, n: 0.82 if int(co.y * 6) % 2 else None)
+        paint(rf, hexcol("c8503a"), ao=0.0, fn=_tiles(sx * 0.85, 2.6, sx * 0.6), mat="clay")
         parts.append(rf)
     step = box("st", (0.5, -1.6, 0.08), (1.4, 0.6, 0.16), bev=0.02)
     paint(step, hexcol("a3a8ad"), ao=0.0)
@@ -559,7 +585,7 @@ def village_house():
         paint(fl, [hexcol("ff6fa5"), hexcol("ffd84a"), hexcol("b28cff")][k], ao=0.0)
         parts.append(fl)
     chim = box("ch", (-0.9, 0.6, 3.0), (0.35, 0.35, 0.8), bev=0.02)
-    paint(chim, hexcol("a3a8ad"), ao=0.0)
+    paint(chim, hexcol("a3a8ad"), ao=0.0, fn=masonry(hexcol("a3a8ad"), course=0.14, block=0.2, seed=4), mat="stone")
     parts.append(chim)
     join(parts, "House")
 
@@ -568,7 +594,8 @@ def well():
     """Колодец: каменное кольцо, навес на двух столбах, ворот с ведром."""
     parts = []
     ring = lathe("rg", [(0.75, 0.0), (0.8, 0.8), (0.55, 0.85), (0.55, 0.1)], 18)
-    paint(ring, hexcol("a3a8ad"), ao=0.25, ao_h=0.5, noise_amt=0.15, fn=lambda co, n: 0.8 if int(co.z * 6) % 2 else None)
+    paint(ring, hexcol("a3a8ad"), ao=0.25, ao_h=0.5, noise_amt=0.15,
+          fn=masonry(hexcol("a3a8ad"), course=0.16, block=0.32, around=(0.0, 0.0), seed=5), mat="stone")
     water = cyl("wt", (0, 0, 0.5), 0.55, 0.55, 0.02, segs=16)
     paint(water, hexcol("3f7a9a"), ao=0.0, noise_amt=0)
     parts += [ring, water]
@@ -577,7 +604,7 @@ def well():
     parts.append(log("ax", (-0.75, 0, 1.5), (0.75, 0, 1.5), 0.05, rings=False))
     for sx in (-1, 1):
         rf = box("rf", (0, sx * 0.35, 2.05), (1.8, 0.9, 0.08), (sx * 0.5, 0, 0), bev=0.02)
-        paint(rf, hexcol("8a5a32"), ao=0.0)
+        paint(rf, hexcol("8a5a32"), ao=0.0, fn=boards(7, axis=0, seam=0.05), mat="wood")
         parts.append(rf)
     bucket = lathe("bk", [(0.0, 0.0), (0.13, 0.0), (0.15, 0.22), (0.0, 0.2)], 10, loc=(0.2, 0, 1.0))
     paint(bucket, hexcol("8a5a32"), ao=0.0)
@@ -601,7 +628,7 @@ def long_table():
     jug = lathe("jg", [(0.0, 0.84), (0.1, 0.84), (0.12, 0.98), (0.06, 1.1), (0.0, 1.1)], 10, loc=(-0.8, 0, 0))
     paint(jug, hexcol("c87048"), ao=0.0)
     bread = sphere("br", (0.4, 0.1, 0.9), 0.15, (1.4, 1.0, 0.6))
-    paint(bread, hexcol("d6a050"), ao=0.0)
+    paint(bread, hexcol("d6a050"), ao=0.0, mat="plain")
     bowl = lathe("bw", [(0.0, 0.84), (0.2, 0.86), (0.22, 0.95), (0.0, 0.9)], 12, loc=(1.1, -0.1, 0))
     paint(bowl, hexcol("6f8fb0"), ao=0.0)
     parts += [jug, bread, bowl]

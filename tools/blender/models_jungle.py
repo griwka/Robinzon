@@ -438,7 +438,7 @@ def lifeboat():
         parts.append(plank("bn", (0, y, 0.35), (1.1, 0.18, 0.05), col=hexcol("b8834b")))
     oar = log("oar", (-0.9, -1.5, 0.05), (0.6, 1.2, 0.08), 0.03, col=hexcol("b8834b"), rings=False)
     blade = box("bl", (0.65, 1.3, 0.08), (0.14, 0.35, 0.02), (0, 0, -0.5), bev=0.01)
-    paint(blade, hexcol("b8834b"), ao=0.0)
+    paint(blade, hexcol("b8834b"), ao=0.0, mat="wood")
     parts += [oar, blade]
     for k in range(4):
         parts.append(stone("ls", (-0.9 + k * 0.6, 1.8 - k * 0.3, 0.1), 0.25, k))

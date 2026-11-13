@@ -85,7 +85,16 @@ def cyl(name, loc=(0, 0, 0), r1=0.5, r2=0.5, h=1.0, rot=(0, 0, 0), segs=16, scal
     bm = bmesh.new()
     bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=segs, radius1=r1, radius2=r2, depth=h)
     bmesh.ops.translate(bm, verts=bm.verts, vec=(0, 0, h / 2))
+    _store_u0(bm)
     return place(from_bm(name, bm), loc, rot, scale)
+
+
+def _store_u0(bm):
+    """Запомнить «развёрнутые» координаты детали (u0: поперёк x, y и вдоль z — по своей оси). По ним при запекании
+    в текстуру идут волокна дерева, кора, пряди верёвки, шлифовка металла — вдоль детали, как бы её ни повернули."""
+    u0 = bm.verts.layers.float_vector.new("u0")
+    for v in bm.verts:
+        v[u0] = v.co.copy()
 
 
 def box(name, loc=(0, 0, 0), size=(1, 1, 1), rot=(0, 0, 0), bev=0.0, seg=2):
@@ -105,8 +114,10 @@ def tube(name, pts, radii, segs=12, caps=True, twist=0.0):
     if not isinstance(radii, (list, tuple)):
         radii = [radii] * len(pts)
     bm = bmesh.new()
+    u0 = bm.verts.layers.float_vector.new("u0")
     rings = []
     prev_n = None
+    s = 0.0
     for i, p in enumerate(pts):
         if i == 0:
             d = (pts[1] - pts[0]).normalized()
@@ -114,6 +125,8 @@ def tube(name, pts, radii, segs=12, caps=True, twist=0.0):
             d = (pts[-1] - pts[-2]).normalized()
         else:
             d = ((pts[i + 1] - pts[i]).normalized() + (pts[i] - pts[i - 1]).normalized()).normalized()
+        if i:
+            s += (pts[i] - pts[i - 1]).length
         ref = Vector((0, 0, 1)) if abs(d.z) < 0.9 else Vector((1, 0, 0))
         n = prev_n if prev_n is not None else d.cross(ref).normalized()
         n = (n - d * n.dot(d)).normalized()   # переносим нормаль вдоль кривой без скручивания
@@ -122,7 +135,9 @@ def tube(name, pts, radii, segs=12, caps=True, twist=0.0):
         ring = []
         for k in range(segs):
             a = 2 * math.pi * k / segs + twist * i
-            ring.append(bm.verts.new(p + (n * math.cos(a) + b * math.sin(a)) * radii[i]))
+            v = bm.verts.new(p + (n * math.cos(a) + b * math.sin(a)) * radii[i])
+            v[u0] = (math.cos(a) * radii[i], math.sin(a) * radii[i], s)
+            ring.append(v)
         rings.append(ring)
     for i in range(len(rings) - 1):
         for k in range(segs):
@@ -153,6 +168,7 @@ def lathe(name, profile, segs=24, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1))
         bm.faces.new(rings[-1])
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    _store_u0(bm)
     return place(from_bm(name, bm), loc, rot, scale)
 
 
@@ -254,7 +270,9 @@ def paint(ob, color, ao=0.35, ao_h=0.35, noise_amt=0.06, nscale=3.0, top=0.08, g
     Та же «программа раскраски» запоминается (PAINTS, атрибуты pid/p0/n0): если модель потом запекается
     в текстуру (texbake.py), fn считается в каждом пикселе текстуры, а не в вершинах — границы чёткие.
     mat — вид поверхности для мелкой детали при запекании: "skin", "cloth", "hair", "fur", "wool",
-    "feather", "smooth" (рог, клюв, копыто), "clean" (глаза, блики — без детали). None — угадать."""
+    "feather", "smooth" (рог, клюв, копыто), "clean" (глаза, блики — без детали); у построек и лодок —
+    "wood", "painted", "planked", "bark", "endgrain", "bamboo", "straw", "hay", "stone", "brick", "clay",
+    "metal", "iron", "rust", "plate", "rope", "canvas", "soil", "leaf", "plain" (texbake.detail_build). None — угадать."""
     bake(ob)
     me = ob.data
     if "Col" not in me.color_attributes:
@@ -281,6 +299,10 @@ def paint(ob, color, ao=0.35, ao_h=0.35, noise_amt=0.06, nscale=3.0, top=0.08, g
             out = tuple(min(1.0, max(0.0, v * k)) for v in c)
             attr.data[li].color_srgb = (out[0], out[1], out[2], 1.0)
     me.color_attributes.active_color = attr
+    if "u0" in me.attributes:
+        if "uok" not in me.attributes:
+            me.attributes.new("uok", "INT", "FACE")
+        me.attributes["uok"].data.foreach_set("value", [1] * len(me.polygons))
     _remember(ob, "pid", len(PAINTS))
     PAINTS.append(dict(color=tuple(color), ao=ao, ao_h=ao_h, noise_amt=noise_amt, nscale=nscale, top=top,
                        ground=ground, fn=fn, seed=seed, mat=mat))
@@ -519,7 +541,7 @@ def wood_cap(name, rim, center, axis, rr, seed=0, depth=0.05, rough=0.03, heart=
         if abs(ang - crack_a) < 0.07 and d > 0.2:   # трещина от сердцевины
             return shade(base, 0.55)
         return shade(base, 0.76) if ring % 1.0 < 0.28 else base
-    paint(ob, WOOD_IN, ao=0.0, noise_amt=0.05, nscale=14, fn=f)
+    paint(ob, WOOD_IN, ao=0.0, noise_amt=0.05, nscale=14, fn=f, mat="endgrain")
     return ob
 
 
@@ -550,7 +572,7 @@ def splinters(name, rim, axis, seed=0, count=9, length=(0.08, 0.3), width=0.07, 
         ob = from_bm(name, bm, smooth=False)
         bc = bark_col or BARK
         paint(ob, WOOD_IN, ao=0.0, noise_amt=0.06, nscale=20,
-              fn=lambda co, n, out=out, bc=bc: bc if n.dot(out) > 0.45 else None)
+              fn=lambda co, n, out=out, bc=bc: bc if n.dot(out) > 0.45 else None, mat="wood")
         parts.append(ob)
     return parts
 

@@ -6,7 +6,7 @@ from mathutils import Vector
 
 from kit import (box, cyl, displace, empty, hexcol, ico, join, lathe, leaf, mix, paint, remesh, rnd, set_origin,
                  set_parent, shade, sphere, subsurf, tube)
-from models_buildings import log, plank, rope_wrap, stone, thatch_cone
+from models_buildings import boards, log, plank, rope_wrap, stone, thatch_cone
 
 FORT_STONE = hexcol("9c958a")
 FORT_DARK = hexcol("7a7368")
@@ -267,7 +267,7 @@ def pig_sty():
     trough = box("tr", (-1.0, 1.1, 0.15), (1.0, 0.35, 0.25), bev=0.04)
     paint(trough, hexcol("8a5a32"), ao=0.0)
     shelter = box("sh", (1.0, 1.0, 0.55), (1.2, 1.0, 1.1), bev=0.04)
-    paint(shelter, hexcol("c08a50"), ao=0.2, fn=lambda co, n: 0.85 if int(co.z * 7) % 2 else None)
+    paint(shelter, hexcol("c08a50"), ao=0.2, fn=boards(7), mat="wood")
     roof = cyl("rf", (1.0, 1.0, 1.1), 0.95, 0.05, 0.5, (0, 0, math.pi / 4), segs=4)
     paint(roof, hexcol("d6ad55"), ao=0.0, noise_amt=0.2, nscale=20)
     parts += [mud, trough, shelter, roof]
@@ -278,7 +278,8 @@ def kiln():
     """Печь для обжига кирпичей: глиняный купол, топка, труба, стопка кирпичей."""
     dome = lathe("dm", [(0.0, 0.0), (0.9, 0.0), (0.92, 0.5), (0.75, 1.1), (0.4, 1.45), (0.0, 1.55)], 20)
     displace(dome, 0.04, 0.2)
-    paint(dome, hexcol("c0704a"), ao=0.2, ao_h=0.4, noise_amt=0.12, nscale=5, fn=lambda co, n: 0.85 if (co.z * 4) % 1.0 < 0.08 else None)
+    paint(dome, hexcol("c0704a"), ao=0.2, ao_h=0.4, noise_amt=0.12, nscale=5, fn=lambda co, n: 0.85 if (co.z * 4) % 1.0 < 0.08 else None,
+          mat="clay")
     mouth = box("mo", (0, -0.85, 0.35), (0.6, 0.3, 0.55), bev=0.08)
     paint(mouth, hexcol("2a1a10"), ao=0.0)
     chimney = cyl("ch", (0.2, 0.2, 1.3), 0.18, 0.15, 0.7, segs=12)

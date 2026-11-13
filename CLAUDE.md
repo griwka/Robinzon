@@ -117,6 +117,12 @@
   "wool"|"feather"|"hide"|"smooth"|"clean")`, у животных по умолчанию — `SKIN_KIND`. Godot извлекает текстуру в
   `assets/models/<имя>_<имя>_albedo.png` (+ `.import` со сжатием S3TC — `build.py` ставит его сам, затем ещё раз `--import`) — коммитить вместе с `.glb`. В игре — `Models.tex_mat()`
   (`use_albedo_tex`, `terminator_soft`); модели без текстуры — как раньше, цвет вершин.
+- **Текстуры построек и лодок** (v1.0.7, списки `BUILDINGS` и `BOATS` в `build.py`, семейство `"build"`): деталь — `texbake.detail_build`,
+  виды `paint(..., mat="wood"|"painted"|"planked"|"bark"|"endgrain"|"bamboo"|"straw"|"hay"|"stone"|"brick"|"clay"|"metal"|"iron"|"rust"|
+  "plate"|"rope"|"canvas"|"soil"|"leaf"|"plain")`; без `mat=` — по цвету (`texbake.KNOWN`), проверить: `build.py --kinds <имена>`.
+  Направление волокон — атрибут `u0` от `kit.tube`/`lathe`/`cyl`, у ящиков — оси формы. Размер атласа — по площади (512/1024),
+  свой — `TEX_SIZE`. Узоры для текстур пишите без полос «через одну» и `sin`-полос пятнами (станут «зеброй»): обшивка — `boards()`,
+  кладка — `masonry()` (`models_buildings.py`), пятна (ржавчина, мох) — по шуму `mathutils.noise`.
 - **Живость моделей:** складки ткани, пряди, шерсть у запечённых моделей рисует `texbake.detail` (по пикселям). Прежние
   `kit.liven` / `kit.liven_fur` (то же по вершинам) остались в `kit.py` для моделей на цвете вершин, `build.py` их больше не зовёт.
   Общие помощники дерева: `kit.bark_trunk`, `wood_cap` (торец с кольцами), `splinters`, `bark_fn`, `smooth_path`; `log()`/`plank()`

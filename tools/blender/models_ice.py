@@ -854,7 +854,7 @@ def stove():
     """Кирпичная печка: топка с чугунной дверцей спереди (−Y Blender), плита с чайником, труба. FirePoint — в топке."""
     body = _block("sb", 1.0, 0.8, 1.0, cuts=8)
     bevel_ok = body
-    paint(bevel_ok, BRICK, ao=0.25, ao_h=0.3, noise_amt=0.1,
+    paint(bevel_ok, BRICK, ao=0.25, ao_h=0.3, noise_amt=0.1, mat="brick",
           fn=lambda co, n: (hexcol("e8d8c0") if ((co.z * 7) % 1.0 < 0.1 or ((co.x * 4 + int(co.z * 7) % 2 * 0.5 + (co.y * 4 if abs(n.x) > 0.5 else 0)) % 1.0 < 0.08)) else None))
     parts = [body]
     plate = box("pl", (0, 0, 1.03), (1.08, 0.88, 0.06), bev=0.02)
@@ -866,7 +866,7 @@ def stove():
     hat = cyl("ht", (0.3, 0.2, 2.6), 0.18, 0.04, 0.16, segs=10)
     paint(hat, IRON, ao=0.0)
     kettle = lathe("kt", [(0.0, 1.06), (0.15, 1.06), (0.17, 1.15), (0.13, 1.26), (0.04, 1.3), (0.0, 1.31)], 14, loc=(-0.22, 0.0, 0.0))
-    paint(kettle, hexcol("4a7ab8"), ao=0.0, fn=lambda co, n: hexcol("f2f2f2") if math.sin(co.x * 40) * math.sin(co.y * 40) > 0.7 else None)
+    paint(kettle, hexcol("4a7ab8"), ao=0.0, mat="plain", fn=lambda co, n: hexcol("f2f2f2") if math.sin(co.x * 40) * math.sin(co.y * 40) > 0.7 else None)
     spout = tube("sp", [(-0.1, 0.0, 1.14), (0.0, -0.02, 1.22)], [0.03, 0.015], 6)
     paint(spout, hexcol("4a7ab8"), ao=0.0)
     handle = tube("hd", [(-0.3, 0.0, 1.28), (-0.22, 0.0, 1.38), (-0.14, 0.0, 1.28)], 0.012, 6)
@@ -911,7 +911,7 @@ def greenhouse():
     for x in (-hx, hx):
         posts.append(tube("tp", [(x, -hy, 1.9), (x, hy, 1.9)], 0.045, 6))
     fr = join(posts, "frame")
-    paint(fr, frame, ao=0.0)
+    paint(fr, frame, ao=0.0, mat="painted")
     parts.append(fr)
 
     def pane_fn(co, n):
@@ -948,7 +948,7 @@ def greenhouse():
     # снег на коньке
     for sy in (-1, 1):
         sn = box("sn", (0, sy * 0.25, 2.66), (hx * 2 + 0.1, 0.35, 0.07), (-sy * 0.45, 0, 0), bev=0.03)
-        paint(sn, SNOW, ao=0.0)
+        paint(sn, SNOW, ao=0.0, mat="plain")
         parts.append(sn)
     join(parts, "Greenhouse")
 

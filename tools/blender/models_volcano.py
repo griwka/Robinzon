@@ -8,10 +8,11 @@
 import math
 
 import bmesh
+from mathutils import noise as _nz
 
 from kit import (box, cyl, displace, empty, from_bm, hexcol, ico, join, lathe, leaf, paint, remesh, rnd, set_origin,
                  set_parent, shade, sphere, subsurf, tube)
-from models_buildings import log, plank, stone
+from models_buildings import log, masonry, plank, stone
 from models_ice import _block, _piece
 
 BASALT = hexcol("4a4648")
@@ -410,23 +411,25 @@ def forge():
     Горн спереди (−Y Blender); FirePoint — в горне."""
     parts = []
     hearth = _block("hr", 1.2, 0.9, 0.9, cuts=6)
-    paint(hearth, BASALT_L, ao=0.25, ao_h=0.4, fn=lambda co, n: shade(BASALT_L, 0.8) if (co.z * 5) % 1.0 < 0.1 else None)
+    paint(hearth, BASALT_L, ao=0.25, ao_h=0.4, fn=masonry(BASALT_L, course=0.18, block=0.3, mortar=shade(BASALT_L, 0.72), seed=3), mat="stone")
     pit = box("pt", (0, -0.2, 0.92), (0.7, 0.45, 0.06))
-    paint(pit, hexcol("2a2220"), ao=0.0, fn=lambda co, n: LAVA if math.sin(co.x * 30) * math.sin(co.y * 30) > 0.3 else None)
+    paint(pit, hexcol("2a2220"), ao=0.0, mat="soil",   # угли: россыпь светящихся кусочков
+          fn=lambda co, n: LAVA if _nz.noise(co * 14.0) + 0.5 * _nz.noise(co * 37.0) > 0.25 else (
+              EMBER if _nz.noise(co * 14.0) > 0.55 else None))
     hood = cyl("hd", (0, 0.05, 1.3), 0.7, 0.25, 0.7, segs=4, rot=(0, 0, math.pi / 4))
-    paint(hood, hexcol("b8583a"), ao=0.0, fn=lambda co, n: hexcol("e8d8c0") if (co.z * 7) % 1.0 < 0.1 else None)
+    paint(hood, hexcol("b8583a"), ao=0.0, fn=masonry(hexcol("b8583a"), course=1 / 7, block=0.25, mortar=hexcol("e8d8c0"), seed=1), mat="brick")
     chim = box("ch", (0, 0.05, 2.4), (0.35, 0.35, 1.5), bev=0.03)
-    paint(chim, hexcol("b8583a"), ao=0.0, fn=lambda co, n: hexcol("e8d8c0") if (co.z * 7) % 1.0 < 0.1 else None)
+    paint(chim, hexcol("b8583a"), ao=0.0, fn=masonry(hexcol("b8583a"), course=1 / 7, block=0.25, mortar=hexcol("e8d8c0"), seed=2), mat="brick")
     for sx in (-1, 1):
         parts.append(log("ps", (sx * 0.5, -0.35, 0.9), (sx * 0.4, -0.2, 1.35), 0.05))
     bel = sphere("bl", (0.85, 0.15, 0.7), 0.25, (1.2, 0.8, 0.45))
-    paint(bel, hexcol("8a5a32"), ao=0.0, fn=lambda co, n: 0.8 if math.sin(co.z * 60) > 0.5 else None)
+    paint(bel, hexcol("8a5a32"), ao=0.0, fn=lambda co, n: 0.8 if math.sin(co.z * 60) > 0.5 else None, mat="plain")
     stump = cyl("su", (-1.1, -0.5, 0.0), 0.28, 0.3, 0.5, segs=12)
     paint(stump, hexcol("8a5a32"), ao=0.0, fn=lambda co, n: hexcol("d6b07a") if n.z > 0.8 else None)
     anvil = box("an", (-1.1, -0.5, 0.62), (0.5, 0.2, 0.18), bev=0.03)
     horn = cyl("ah", (-1.35, -0.5, 0.64), 0.08, 0.0, 0.25, (0, -math.pi / 2, 0), 8)
-    paint(anvil, IRON, ao=0.0)
-    paint(horn, IRON, ao=0.0)
+    paint(anvil, IRON, ao=0.0, mat="metal")
+    paint(horn, IRON, ao=0.0, mat="metal")
     barrel = lathe("br", [(0.0, 0.0), (0.25, 0.0), (0.28, 0.3), (0.25, 0.6), (0.0, 0.58)], 14, loc=(1.0, -0.6, 0))
     paint(barrel, hexcol("8a5a32"), ao=0.0, fn=lambda co, n: (hexcol("5fb0d8") if n.z > 0.8 else (IRON if abs(co.z - 0.15) < 0.03 else None)))
     tongs = tube("tg", [(-0.9, -0.55, 0.72), (-0.6, -0.55, 0.75), (-0.5, -0.5, 0.74)], 0.015, 5)

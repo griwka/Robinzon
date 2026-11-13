@@ -31,8 +31,21 @@ SKIN_KIND = {"parrot": "feather", "chicken": "feather", "goose": "feather", "pen
 # одежда героя: куски надеваются на суставы игрока (Player.update_clothes)
 WEAR = ["wear_sweater", "wear_jacket", "wear_boots", "wear_mittens", "wear_fire_gloves"]
 
-# эти модели запекаются в текстуру (texbake.py): чёткие границы цветов, ткань, пряди, шерсть, перья
-TEXTURED = PEOPLE + ANIMALS + WEAR
+# постройки из Data.BUILDINGS (v1.0.7): дерево, солома, камень, металл, верёвка, парусина, глина
+BUILDINGS = ["tent", "campfire", "torch", "workbench", "hut", "coop", "goat_pen", "fence", "flowerbed", "bench",
+             "hammock", "scarecrow", "shell_path", "garden_bed", "beehive", "sheep_pen", "pig_sty", "kiln",
+             "shelter", "lightning_rod", "goose_house", "stove", "greenhouse", "tortoise_pen", "forge", "stone_bridge",
+             "pumpkin_lantern", "village_house", "well", "long_table"]
+
+# лодки и прочие суда — целые и разбитые
+BOATS = ["raft", "canoe", "lifeboat", "boat_wreck", "stepa_boat", "stepa_boat_wreck", "seaplane",
+         "albatros", "albatros_wreck", "albatros_mast", "albatros_helm", "albatros_lights"]
+
+# своё разрешение атласа (иначе — по площади модели): шхуна 15 м и хижина (бамбук + три яруса соломы) — крупнее
+TEX_SIZE = {"albatros": 2048, "albatros_wreck": 2048, "hut": 2048}
+
+# эти модели запекаются в текстуру (texbake.py): чёткие границы цветов, ткань, пряди, шерсть, перья, дерево, камень
+TEXTURED = PEOPLE + ANIMALS + WEAR + BUILDINGS + BOATS
 
 
 def all_builders():
@@ -74,13 +87,19 @@ def main():
         return
     os.makedirs(OUT, exist_ok=True)
     builders = all_builders()
-    names = sys.argv[1:] or list(builders)
+    args = sys.argv[1:]
+    report = "--kinds" in args          # напечатать виды поверхности построек (что угадалось по цвету)
+    args = [a for a in args if a != "--kinds"]
+    names = args or list(builders)
     for name in names:
         t = time.time()
         kit.reset()
         builders[name]()
         size = 0
-        if name in TEXTURED:
+        if name in BUILDINGS or name in BOATS:
+            # дерево, солома, камень, металл, верёвка — texbake.detail_build
+            size = texbake.bake_model(name, "build", size=TEX_SIZE.get(name), seed=len(name), report=report)
+        elif name in TEXTURED:
             # раскраска считается в каждом пикселе атласа; складки, пряди, шерсть — там же (texbake.detail)
             size = texbake.bake_model(name, "animals" if name in ANIMALS else "people", seed=len(name),
                                       default=SKIN_KIND.get(name, "fur"))

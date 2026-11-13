@@ -6,11 +6,11 @@
 Координаты: Blender (x, y, z) → Godot (x, z, −y). «Вперёд» в Godot (+Z) — это −Y в Blender."""
 import math
 
-from mathutils import Vector
+from mathutils import Vector, noise
 
 from kit import (box, cyl, displace, empty, hexcol, ico, join, lathe, leaf, mix, paint, remesh, rnd, set_origin,
                  set_parent, shade, sphere, subsurf, tube)
-from models_buildings import log, plank, rope_wrap, stone, thatch_cone
+from models_buildings import boards as _boards, log, plank, rope_wrap, stone, thatch_cone
 
 RUST = hexcol("a0623a")
 IRON = hexcol("6b6f75")
@@ -28,8 +28,13 @@ HEATHER = hexcol("b56fb8")
 
 
 def _rust_fn(base=RUST):
-    return lambda co, n: (shade(base, 0.75) if math.sin(co.x * 13 + co.y * 7 + co.z * 11) > 0.6
-                          else (hexcol("c87a42") if math.sin(co.x * 5 - co.z * 9) > 0.85 else None))
+    """Ржавчина пятнами (по шуму, а не полосами: в текстуре полосы стали бы «зеброй»)."""
+    def f(co, n):
+        v = noise.noise(co * 2.2) + 0.45 * noise.noise(co * 7.0 + Vector((3.1, 0, 0)))
+        if v > 0.42:
+            return shade(base, 0.75)
+        return hexcol("c87a42") if v < -0.55 else None
+    return f
 
 
 def dense_panel(name, center, w, h, step=0.15, facing="-y"):
@@ -187,13 +192,13 @@ def goose_house():
     """Гусятник: домик с двускатной крышей, плетень, корыто с водой. Радиус ~1.6 м."""
     parts = []
     hut = box("gh", (0.6, 0.8, 0.45), (1.2, 1.0, 0.9), bev=0.03)
-    paint(hut, hexcol("c99a5e"), ao=0.25, fn=lambda co, n: 0.85 if int(co.z * 8) % 2 else None)
+    paint(hut, hexcol("c99a5e"), ao=0.25, fn=_boards(8), mat="wood")
     door = box("gd", (0.6, 0.29, 0.3), (0.45, 0.04, 0.5), bev=0.02)
     paint(door, hexcol("3a2a1a"), ao=0.0)
     parts += [hut, door]
     for sx in (-1, 1):
         roof = box("gr", (0.6 + sx * 0.33, 0.8, 1.05), (0.8, 1.2, 0.06), (0, sx * 0.62, 0), bev=0.02)
-        paint(roof, hexcol("d6ad55"), ao=0.0, noise_amt=0.2, nscale=20, fn=lambda co, n: 0.85 if int(co.y * 12) % 2 else None)
+        paint(roof, hexcol("d6ad55"), ao=0.0, noise_amt=0.2, nscale=20, fn=lambda co, n: 0.88 if int(co.y * 12) % 2 else None, mat="straw")
         parts.append(roof)
     # плетень полукругом
     for k in range(11):
@@ -224,7 +229,7 @@ def lightning_rod():
     base = box("lb", (0, 0, 0.08), (0.9, 0.9, 0.16), bev=0.03)
     paint(base, hexcol("a87a4a"), ao=0.2, fn=lambda co, n: 0.85 if int(co.x * 6) % 2 else None)
     pole = tube("lp", [(0, 0, 0.1), (0, 0, 3.9)], [0.06, 0.04], 10)
-    paint(pole, IRON, ao=0.0, fn=_rust_fn(IRON))
+    paint(pole, IRON, ao=0.0, fn=_rust_fn(IRON), mat="iron")
     tip = cyl("lt", (0, 0, 3.9), 0.06, 0.0, 0.5, segs=10)
     paint(tip, COPPER, ao=0.0)
     ring = cyl("lr", (0, 0, 3.75), 0.12, 0.12, 0.05, segs=12)
@@ -237,7 +242,8 @@ def lightning_rod():
     wire = tube("lw", [(0.07, 0, 3.75), (0.09, 0.02, 2.0), (0.12, 0.05, 0.6), (0.3, 0.2, 0.35)], 0.018, 6)
     paint(wire, COPPER, ao=0.0)
     box_ = box("lx", (0.32, 0.25, 0.3), (0.32, 0.26, 0.3), bev=0.03)
-    paint(box_, PAINT_GREEN, ao=0.0, fn=lambda co, n: hexcol("ffd84a") if (n.y < -0.5 and abs(co.x - 0.32) < 0.05 and abs(co.z - 0.33) < 0.08) else None)
+    paint(box_, PAINT_GREEN, ao=0.0, mat="iron",
+          fn=lambda co, n: hexcol("ffd84a") if (n.y < -0.5 and abs(co.x - 0.32) < 0.05 and abs(co.z - 0.33) < 0.08) else None)
     parts += [wire, box_]
     join(parts, "LightningRod")
 
@@ -261,7 +267,7 @@ def shelter():
         x = r.uniform(-1.3, 1.3)
         y = r.uniform(-1.3, 1.3)
         lf = leaf("leaf", (x, y - 0.6, 2.55 + (y + 1.3) * 0.08), (r.uniform(-0.2, 0.2), 1.0, 0.1), 1.3, 0.28, droop=0.15, segs=6)
-        paint(lf, shade(hexcol("5f9a3a"), r.uniform(0.85, 1.1)), ao=0.0, noise_amt=0.1)
+        paint(lf, shade(hexcol("5f9a3a"), r.uniform(0.85, 1.1)), ao=0.0, noise_amt=0.1, mat="leaf")
         parts.append(lf)
     join(parts, "roof_leaf")
 
@@ -667,17 +673,21 @@ def seaplane():
     fus = lathe("sf", [(0.0, -3.2), (0.35, -3.0), (0.65, -1.8), (0.7, 0.0), (0.6, 1.6), (0.3, 2.6), (0.0, 2.8)], 20,
                 rot=(math.pi / 2 + 0.15, 0.25, 0), loc=(0, 0, -0.2))
     displace(fus, 0.04, 0.2)
-    paint(fus, hexcol("8fa0a8"), ao=0.0, fn=lambda co, n: (RUST if math.sin(co.y * 3 + co.x * 9 + co.z * 5) > 0.3 else
-                                                         (hexcol("2f4a6a") if abs(co.z - 0.0) < 0.06 else None)))
+    paint(fus, hexcol("8fa0a8"), ao=0.0, mat="plate",
+          fn=lambda co, n: (hexcol("2f4a6a") if abs(co.z - 0.0) < 0.06 else
+                            (RUST if noise.noise(co * 1.7) + 0.45 * noise.noise(co * 4.3) > 0.36 else None)))
     parts.append(fus)
     wing = box("sw", (0.0, -0.2, 0.6), (6.5, 1.2, 0.12), (0.0, 0.45, 0.1), bev=0.04)
-    paint(wing, hexcol("a0aab0"), ao=0.0, fn=lambda co, n: RUST if math.sin(co.x * 4 + co.y * 6) > 0.4 else (0.85 if int(co.x * 3) % 2 else None))
+    paint(wing, hexcol("a0aab0"), ao=0.0, mat="plate",
+          fn=lambda co, n: RUST if noise.noise(co * 1.9 + Vector((5, 0, 0))) + 0.45 * noise.noise(co * 4.7) > 0.38 else (
+              0.88 if int(co.x * 3) % 2 else None))
     parts.append(wing)
     tail = box("st", (0, 2.8, 1.0), (0.1, 0.9, 1.2), (0.15, 0, 0), bev=0.03)
-    paint(tail, hexcol("8fa0a8"), ao=0.0, fn=lambda co, n: hexcol("c0392b") if co.z > 1.3 else _rust_fn(hexcol("8fa0a8"))(co, n))
+    tail_rust = _rust_fn(hexcol("8fa0a8"))
+    paint(tail, hexcol("8fa0a8"), ao=0.0, mat="plate", fn=lambda co, n: hexcol("c0392b") if co.z > 1.3 else tail_rust(co, n))
     parts.append(tail)
     flt = lathe("sp", [(0.0, -1.2), (0.22, -0.9), (0.25, 0.0), (0.18, 0.9), (0.0, 1.1)], 14, rot=(math.pi / 2, 0, 0), loc=(1.6, 0.0, -0.1))
-    paint(flt, RUST, ao=0.0, fn=_rust_fn())
+    paint(flt, RUST, ao=0.0, fn=_rust_fn(), mat="rust")
     parts.append(flt)
     prop = box("spp", (0.15, -3.25, 0.3), (1.4, 0.08, 0.14), (0, 0.3, 0.6))
     paint(prop, hexcol("3a3a3a"), ao=0.0)
@@ -807,19 +817,19 @@ def _boat(wreck):
         band = (co.z - 0.18) / 0.12
         if band % 1.0 < 0.1 and abs(n.z) < 0.85:
             return shade(hull_col if co.z > 0.52 else hexcol("e8e2d8"), 0.72)
-        if wreck and math.sin(co.y * 7 + co.z * 13) > 0.65:
-            return RUST
+        if wreck and noise.noise(Vector((co.x * 6.0, co.y * 2.5, co.z * 6.0))) + 0.4 * noise.noise(co * 14.0) > 0.5:
+            return RUST   # ржавые потёки у гвоздей — пятнами
         if co.z > 0.52:
             return hull_col if abs(n.z) < 0.85 else shade(hexcol("c99a5e"), 0.9)
         return hexcol("e8e2d8") if abs(n.z) < 0.85 else hexcol("d8cfc0")
-    paint(hull, hull_col, ao=0.25, ao_h=0.35, noise_amt=0.08, nscale=7, fn=hull_fn)
+    paint(hull, hull_col, ao=0.25, ao_h=0.35, noise_amt=0.08, nscale=7, fn=hull_fn, mat="painted")
     parts.append(hull)
     tbm = bmesh.new()
     tv = [tbm.verts.new(q) for q in stern]
     tbm.faces.new(tv)
     tr = from_bm("transom", tbm, smooth=False)
     solidify(tr, 0.06)
-    paint(tr, hexcol("8a5a32"), ao=0.0, fn=lambda co, n: hexcol("f2e2c0") if 0.42 < co.z < 0.5 else None)
+    paint(tr, hexcol("8a5a32"), ao=0.0, fn=lambda co, n: hexcol("f2e2c0") if 0.42 < co.z < 0.5 else None, mat="painted")
     parts.append(tr)
     for side in (-1, 1):   # привальный брус по борту
         rail = [(q.x + side * 0.03, q.y, q.z + 0.01) for q in rail_pts[side]]
