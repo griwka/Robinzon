@@ -418,7 +418,7 @@ def wood_cap(name, rim, center, axis, rr, seed=0, depth=0.05, rough=0.03, heart=
     axis = Vector(axis).normalized()
     center = Vector(center)
     bm = bmesh.new()
-    nr = 12
+    nr = 12 if rr > 0.15 else (7 if rr > 0.06 else 4)
     rows = [[bm.verts.new(p) for p in rim]]
     for j in range(1, nr):
         t = j / nr

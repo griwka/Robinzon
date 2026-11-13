@@ -296,30 +296,81 @@ def sheep_pen():
 
 
 def canoe():
-    hull = lathe("h", [(0.0, 0.0), (0.3, 0.05), (0.42, 0.22), (0.45, 0.4)], 20, scale=(1, 3.4, 1))
-    from kit import solidify
-    solidify(hull, 0.04)
-    paint(hull, hexcol("a87342"), ao=0.25, ao_h=0.3, fn=lambda co, n: hexcol("d9573b") if 0.3 < co.z < 0.36 else (0.85 if int(co.y * 6) % 2 else None))
-    parts = [hull]
-    for y in (-0.8, 0.0, 0.8):
-        parts.append(plank("sb", (0, y, 0.28), (0.8, 0.16, 0.04)))
-    mast = log("ms", (0, 0.5, 0.1), (0, 0.5, 2.4), 0.04, rings=False)
-    parts.append(mast)
+    """Каноэ с балансиром: долблёный корпус (нос и корма приподняты, полоса краски по борту),
+    балансир-поплавок на двух поперечинах с обмоткой, две скамьи, весло, мачта с треугольным парусом.
+    Длина 3 м вдоль Y (в игре — вдоль Z), как коробка столкновения 1.0 × 0.4 × 3.0."""
     import bmesh
-    from kit import from_bm
+    from kit import from_bm, solidify
     bm = bmesh.new()
-    vs = [bm.verts.new(p) for p in ((0.03, 0.5, 0.6), (0.03, 0.5, 2.3), (0.03, -0.6, 0.65))]
-    bm.faces.new(vs)
-    sail = from_bm("sl", bm)
-    solidify(sail, 0.02)
-    paint(sail, hexcol("e8ddc8"), ao=0.0, fn=lambda co, n: hexcol("b8a48a") if int(co.z * 5) % 2 else None)
-    parts.append(sail)
-    for sx in (-1, 1):
-        out = log("ot", (sx * 0.05, 0, 0.32), (sx * 1.1, 0, 0.32), 0.03, rings=False)
-        fl = lathe("fl", [(0.0, -0.1), (0.07, -0.08), (0.08, 0.05), (0.0, 0.08)], 10, rot=(math.pi / 2, 0, 0), scale=(1, 1, 8), loc=(sx * 1.15, 0, 0.12))
-        paint(fl, hexcol("8a5a32"), ao=0.0)
-        parts += [out, fl]
+    rows = []
+    ns, nu = 24, 10
+    for i in range(ns + 1):
+        t = i / ns
+        y = -1.5 + 3.0 * t
+        s_ = math.sin(math.pi * t)
+        w = 0.34 * s_ ** 0.55 + 0.004
+        dz = 0.3 * s_ ** 0.45 + 0.004
+        top = 0.42 + 0.2 * abs(2 * t - 1) ** 4
+        row = []
+        for j in range(nu + 1):
+            ph = -math.pi / 2 + math.pi * j / nu
+            row.append(bm.verts.new((w * math.sin(ph), y, top - dz * math.cos(ph) ** 0.8)))
+        rows.append(row)
+    for i in range(ns):
+        for j in range(nu):
+            bm.faces.new((rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    hull = from_bm("hull", bm)
+    solidify(hull, 0.045)
+    subsurf(hull, 1)
+    wood = hexcol("9a5e38")
+    paint(hull, wood, ao=0.25, ao_h=0.3, noise_amt=0.08, nscale=8,
+          fn=lambda co, n: (hexcol("f2e2c0") if n.z > 0.6 and co.z > 0.38 else (
+              hexcol("c8402e") if 0.33 < co.z < 0.39 and abs(n.z) < 0.7 else (
+              hexcol("f2d27a") if 0.39 <= co.z < 0.41 and abs(n.z) < 0.7 else (
+              shade(wood, 1.15) if n.z > 0.3 else (0.85 if math.sin(co.y * 14 + co.z * 30) > 0.85 else None))))))
+    parts = [hull]
+    for y in (-0.7, 0.55):   # скамьи
+        parts.append(plank("sb", (0, y, 0.33), (0.56, 0.16, 0.035), seed=int(y * 10)))
+    # балансир: поплавок справа, две поперечины, стойки, обмотка
+    fx = 1.05
+    float_ = tube("am", [(fx, -1.0, 0.16), (fx, -0.85, 0.2), (fx, 0.0, 0.21), (fx, 0.85, 0.2), (fx, 1.0, 0.17)], [0.02, 0.06, 0.075, 0.06, 0.02], 10)
+    paint(float_, hexcol("7a5236"), ao=0.0, noise_amt=0.1, nscale=10, fn=lambda co, n: hexcol("9a7250") if n.z > 0.5 else None)
+    parts.append(float_)
+    for y in (-0.55, 0.55):
+        parts.append(log("bo", (-0.25, y, 0.44), (fx + 0.06, y, 0.4), 0.032, col=hexcol("8a6a48"), rings=True))
+        parts.append(log("st", (fx, y, 0.22), (fx, y, 0.41), 0.022, col=hexcol("8a6a48"), rings=False))
+        for xx in (0.3, fx):
+            parts.append(rope_wrap("rw", (xx, y), 0.04, 0.38 if xx < 1 else 0.36, 2))
+    # весло, положенное поперёк
+    parts.append(log("pd", (-0.3, -0.25, 0.38), (0.35, 0.65, 0.4), 0.018, col=hexcol("b8834b"), rings=False))
+    blade = sphere("bl", (0.42, 0.78, 0.4), 0.11, (0.5, 1.3, 0.12), (0, 0, -0.62), segs=12, rings=6)
+    paint(blade, hexcol("b8834b"), ao=0.0, fn=lambda co, n: hexcol("c8402e") if abs(co.y - 0.8) < 0.025 else None)
+    parts.append(blade)
+    mast = log("ms", (0, 0.35, 0.15), (0, 0.35, 2.3), 0.035, rings=False)
+    parts.append(mast)
     join(parts, "Canoe")
+    # парус-треугольник, чуть надутый ветром, с рейками
+    bm = bmesh.new()
+    vs = []
+    for i in range(6):
+        row = []
+        for j in range(6 - i):
+            u = j / 5
+            v = i / 5
+            p = Vector((0.03, 0.35, 0.55)) + Vector((0, 0, 1.7)) * v + Vector((0, -1.15, 0.05)) * u
+            p.x += math.sin(math.pi * u) * math.sin(math.pi * min(1, v * 1.2)) * 0.12
+            row.append(bm.verts.new(p))
+        vs.append(row)
+    for i in range(5):
+        for j in range(5 - i):
+            bm.faces.new((vs[i][j], vs[i][j + 1], vs[i + 1][j]))
+            if j + 1 < len(vs[i + 1]):
+                bm.faces.new((vs[i][j + 1], vs[i + 1][j + 1], vs[i + 1][j]))
+    sail = from_bm("Sail_cloth", bm)
+    solidify(sail, 0.015)
+    paint(sail, hexcol("efe2c8"), ao=0.0, fn=lambda co, n: hexcol("c8a878") if (co.z - 0.55) % 0.42 < 0.03 else (
+        hexcol("d9573b") if co.z > 1.95 else None))
 
 
 def treehouse_ruin():

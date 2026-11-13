@@ -25,21 +25,46 @@ def grain(base):
 
 
 def plank(name, loc, size, rot=(0, 0, 0), col=PLANK, seed=0):
+    """Доска: скруглённые рёбра, волокна вдоль длинной стороны, светлые торцы, у каждой доски свой тон."""
     p = box(name, loc, size, rot, bev=min(size) * 0.25, seg=2)
-    paint(p, shade(col, 0.92 + 0.1 * ((seed * 37) % 10) / 10), ao=0.25, ao_h=0.3, noise_amt=0.08, nscale=9, fn=grain(col))
+    long_ax = max(range(3), key=lambda i: size[i])
+    tone = shade(col, 0.9 + 0.14 * ((seed * 37 + int(loc[0] * 13 + loc[1] * 7)) % 10) / 10)
+    from mathutils import Euler
+    rmat = Euler(rot).to_matrix()
+    ax = rmat @ Vector([1.0 if i == long_ax else 0.0 for i in range(3)])
+    c0 = Vector(loc)
+
+    def f(co, n):
+        if abs(n.dot(ax)) > 0.85:
+            return shade(tone, 1.18)   # торец — светлее
+        u = (co - c0).dot(ax)
+        g = math.sin(u * 9 + math.sin(u * 2.3 + (co - c0).length * 11) * 2.2 + seed)
+        if g > 0.8:
+            return shade(tone, 0.8)
+        return shade(tone, 1.06) if g < -0.9 else None
+    paint(p, tone, ao=0.25, ao_h=0.3, noise_amt=0.07, nscale=9, fn=f)
     return p
 
 
 def log(name, a, b, r, col=WOOD_D, rings=True):
-    t = tube(name, [a, b], [r, r * 0.95], 12)
-
-    def f(co, n):
-        if rings and abs(n.dot((Vector(b) - Vector(a)).normalized())) > 0.8:
-            d = (co - Vector(b)).length if (co - Vector(b)).length < (co - Vector(a)).length else (co - Vector(a)).length
-            return shade(hexcol("e7c08a"), 0.85 if int(d * 60) % 2 else 1.0)
-        return 0.85 if math.sin(math.atan2(co.y, co.x) * 9 + co.z * 3) > 0.8 else None
-    paint(t, col, ao=0.25, ao_h=0.3, noise_amt=0.08, nscale=10, fn=f)
-    return t
+    """Бревно или жердь: кора с продольными бороздами; торцы (rings=True) — светлый скол с годовыми кольцами."""
+    from kit import bark_fn, wood_cap
+    a, b = Vector(a), Vector(b)
+    d = (b - a).normalized()
+    segs = 12 if r > 0.035 else 8
+    t = tube(name, [tuple(a), tuple(b)], [r, r * 0.95], segs, caps=not rings)
+    paint(t, col, ao=0.25, ao_h=0.3, noise_amt=0.08, nscale=10, fn=bark_fn(tuple(a), tuple(d), col=col, seed=int(r * 1000) % 17))
+    if not rings:
+        return t
+    o1 = d.orthogonal().normalized()
+    o2 = d.cross(o1)
+    parts = [t]
+    for end, axis, rr_ in ((a, -d, r), (b, d, r * 0.95)):
+        rim = [end + (o1 * math.cos(2 * math.pi * k / segs) + o2 * math.sin(2 * math.pi * k / segs)) * rr_ for k in range(segs)]
+        # кольцо вершин торца должно совпасть с трубкой: у tube первая вершина — по своей нормали; торец рисуем чуть шире
+        rim = [end + (q - end) * 1.02 for q in rim]
+        parts.append(wood_cap(name + "_c", rim, end + axis * 0.004, axis, rr_, seed=int((end.x + end.y) * 100) % 50, depth=0.006, rough=0.004))
+    return join(parts, name)
 
 
 def rope_wrap(name, center, r, z0, turns=3, axis="z"):

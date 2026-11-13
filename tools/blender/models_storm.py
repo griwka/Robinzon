@@ -769,32 +769,71 @@ def storm_tower():
 # ================================================================== бот Стёпы
 def _boat(wreck):
     """Бот: деревянный корпус 4.2 м, мачта с шерстяным парусом, кирпичи в трюме. Нос — в +Y Blender (−Z Godot)."""
+    import bmesh
+    from kit import from_bm, solidify
     parts = []
     hull_col = hexcol("3f6a8a")
-    prof = [(0.0, -2.1), (0.55, -1.8), (0.85, -0.8), (0.9, 0.4), (0.7, 1.5), (0.0, 2.2)]
-    for i, side in enumerate((-1, 1)):
-        pts = []
-        for (w, y) in prof:
-            pts.append((side * w, y))
-        for k in range(len(pts) - 1):
-            a = pts[k]
-            b = pts[k + 1]
-            if wreck and side == 1 and k == 2 and z1 > 0.6:
-                continue   # пробоина в борту
-            for z0, z1 in ((0.2, 0.45), (0.45, 0.7)):
-                mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
-                ln = math.hypot(b[0] - a[0], b[1] - a[1])
-                ang = math.atan2(b[1] - a[1], b[0] - a[0])
-                pl = box("hp", (mid[0] * (0.85 if z0 < 0.4 else 1.0), mid[1], (z0 + z1) / 2), (ln + 0.04, 0.08, z1 - z0 - 0.01),
-                         (0, 0, ang))
-                paint(pl, hull_col if z1 > 0.6 else hexcol("e8e2d8"), ao=0.0, noise_amt=0.1,
-                      fn=(lambda co, n: RUST if wreck and math.sin(co.y * 7 + co.z * 13) > 0.7 else None))
-                parts.append(pl)
-    keel = tube("kl", [(0, -2.0, 0.25), (0, -1.0, 0.05), (0, 1.0, 0.05), (0, 2.15, 0.6)], 0.08, 8)
+    # корпус — гладкая обшивка по шпангоутам: нос острый и приподнят, корма — плоский транец
+    ns, nu = 44, 20
+    bm = bmesh.new()
+    rows = []
+    for i in range(ns + 1):
+        t = i / ns
+        y = -2.1 + 4.3 * t
+        w = 0.86 * math.sin(math.pi * (0.22 + 0.78 * t)) ** 0.7 if t < 0.97 else 0.86 * math.sin(math.pi * (0.22 + 0.78 * 0.97)) ** 0.7 * (1 - t) / 0.03
+        top = 0.74 + 0.28 * max(0.0, t - 0.6) ** 2 * 6 + 0.06 * (1 - t) ** 3
+        depth = 0.56 * (0.55 + 0.45 * math.sin(math.pi * t) ** 0.5)
+        row = []
+        for j in range(nu + 1):
+            ph = -math.pi / 2 + math.pi * j / nu
+            c = math.cos(ph)
+            row.append(bm.verts.new((max(w, 0.003) * math.sin(ph) * (0.75 + 0.25 * c), y, top - depth * c ** 0.55)))
+        rows.append(row)
+    for i in range(ns):
+        for j in range(nu):
+            if wreck and i in (19, 20, 21, 22) and j in (16, 17, 18):
+                continue   # пробоина в правом борту
+            bm.faces.new((rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]))
+    stern = [v.co.copy() for v in rows[0]]
+    rail_pts = {side: [rows[i][0 if side < 0 else nu].co.copy() for i in range(0, ns + 1, 3)] for side in (-1, 1)}
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    hull = from_bm("hull", bm)
+    solidify(hull, 0.05)
+    subsurf(hull, 1)   # плотнее сетка — ровные полосы краски
+    # полосы обшивки внахлёст: тёмная линия на каждом поясе, синий верх, кремовый низ, ржавчина у разбитого
+    def hull_fn(co, n):
+        if n.z > 0.75 and co.z > 0.5:
+            return hexcol("c99a5e")   # планширь сверху
+        band = (co.z - 0.18) / 0.12
+        if band % 1.0 < 0.1 and abs(n.z) < 0.85:
+            return shade(hull_col if co.z > 0.52 else hexcol("e8e2d8"), 0.72)
+        if wreck and math.sin(co.y * 7 + co.z * 13) > 0.65:
+            return RUST
+        if co.z > 0.52:
+            return hull_col if abs(n.z) < 0.85 else shade(hexcol("c99a5e"), 0.9)
+        return hexcol("e8e2d8") if abs(n.z) < 0.85 else hexcol("d8cfc0")
+    paint(hull, hull_col, ao=0.25, ao_h=0.35, noise_amt=0.08, nscale=7, fn=hull_fn)
+    parts.append(hull)
+    tbm = bmesh.new()
+    tv = [tbm.verts.new(q) for q in stern]
+    tbm.faces.new(tv)
+    tr = from_bm("transom", tbm, smooth=False)
+    solidify(tr, 0.06)
+    paint(tr, hexcol("8a5a32"), ao=0.0, fn=lambda co, n: hexcol("f2e2c0") if 0.42 < co.z < 0.5 else None)
+    parts.append(tr)
+    for side in (-1, 1):   # привальный брус по борту
+        rail = [(q.x + side * 0.03, q.y, q.z + 0.01) for q in rail_pts[side]]
+        rl = tube("rail", rail, 0.035, 6)
+        paint(rl, hexcol("6b4524"), ao=0.0)
+        parts.append(rl)
+    keel = tube("kl", [(0, -2.05, 0.28), (0, -1.0, 0.16), (0, 1.0, 0.16), (0, 1.95, 0.45), (0, 2.25, 1.0)], [0.06, 0.07, 0.07, 0.06, 0.05], 8)
     paint(keel, hexcol("6b4524"), ao=0.0)
-    deck = box("dk", (0, -0.3, 0.3), (1.4, 2.6, 0.06))
-    paint(deck, hexcol("c99a5e"), ao=0.0, fn=lambda co, n: 0.85 if int(co.x * 8) % 2 else None)
-    parts += [keel, deck]
+    parts.append(keel)
+    for y in (-1.3, 0.3, 1.2):   # банки
+        parts.append(plank("bk", (0, y, 0.58), (1.25 if abs(y) < 1.25 else 1.0, 0.22, 0.05), seed=int(y * 10)))
+    deck = box("dk", (0, -0.3, 0.3), (1.0, 2.8, 0.05))
+    paint(deck, hexcol("b8885a"), ao=0.0, fn=lambda co, n: 0.85 if int(co.x * 9) % 2 else None)
+    parts.append(deck)
     for k in range(6 if not wreck else 2):   # кирпичный балласт
         br = box("bk", (-0.3 + (k % 3) * 0.3, -0.6 + (k // 3) * 0.22, 0.4), (0.26, 0.12, 0.1), bev=0.01)
         paint(br, hexcol("b8583a"), ao=0.0)
@@ -809,8 +848,20 @@ def _boat(wreck):
         import bmesh
         from kit import from_bm, solidify
         bm = bmesh.new()
-        v = [bm.verts.new(p) for p in ((0, 0.25, 0.95), (0, 0.25, 3.4), (0, -1.55, 1.0))]
-        bm.faces.new(v)
+        vs = []
+        for i in range(6):
+            row = []
+            for j in range(6 - i):
+                u, v = j / 5, i / 5
+                q = Vector((0, 0.25, 0.97)) + Vector((0, 0, 2.4)) * v + Vector((0, -1.8, 0.03)) * u
+                q.x += math.sin(math.pi * u) * math.sin(math.pi * min(1, v * 1.2)) * 0.18
+                row.append(bm.verts.new(q))
+            vs.append(row)
+        for i in range(5):
+            for j in range(5 - i):
+                bm.faces.new((vs[i][j], vs[i][j + 1], vs[i + 1][j]))
+                if j + 1 < len(vs[i + 1]):
+                    bm.faces.new((vs[i][j + 1], vs[i + 1][j + 1], vs[i + 1][j]))
         sail = from_bm("sl", bm)
         solidify(sail, 0.02)
         paint(sail, hexcol("e8ddc8"), ao=0.0, fn=lambda co, n: 0.88 if int(co.z * 6) % 2 else (hexcol("c0392b") if co.z > 3.0 else None))
