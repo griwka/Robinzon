@@ -99,6 +99,20 @@
   `python tools/gen_audio.py pickup harvest craft …`. У звуков с нотами высоту не качаем — `Audio.TONAL`.
 - **Преграды:** густая трава (`ResourceNode.SOFT`) — слой 8, замедляет (`Player.in_grass`); над преградами с инструментом —
   невидимая «крышка» (`CAP_LAYER` = 32), чтобы на них не запрыгивали.
+- **Мелкая трава** — `scripts/grass_field.gd` (`GrassField`, `Island.grass_field`): слои Grass/Flowers/Clover кусками 10 м,
+  клетки 1 × 1 м; `clear_at(p, r)` — расчистить (сохраняется в `Game.grass`, битовая карта base64 на остров), маска `clear_mask`
+  в `terrain.gdshader` — ровный газон. Цель героя — `GrassField.Spot`. Постройка расчищает траву под собой (`BuildSystem`).
+- **Столкновения по модели** — `Models.add_trimesh(body, visual)` (листва, огонь, плоды пропускаются; масштаб запекается).
+  Подключено к постройкам, сюжетным местам и особым местам. Проверка `--colcheck --location=…` (0 дыр на всех островах);
+  нарочно проходимое — в `COLCHECK_OK` в `dev_tools.gd` с причиной.
+- **Культуры** — модели `crop_<вид>`: растения-узлы `P0..P8`, в каждом `P<n>_leaf`, `P<n>_stem`, плоды `P<n>_fruit<k>` (точка вращения
+  в центре плода). `GardenBed._grow_visual()` растит их плавно по `progress`; у деревьев узел `Fruit` с плодами `Fruit_<k>`
+  (`FruitTree._grow_visual()`). Стадии `stage()` для заданий не менялись.
+- **Новые растения** — `tools/blender/models_flora.py`, вид в `ResourceNode.KINDS`, расстановка — `Island._spawn_flora()` со своим
+  случайным рядом (номера прежних преград не сдвигаются). Кусты под мачете и деревца под топор — только дальше 17 м от лагеря.
+- **Живость моделей:** `kit.liven` (люди: складки, кожа) и `kit.liven_fur` (животные) применяет `build.py` по спискам `PEOPLE`/`ANIMALS`.
+  Общие помощники дерева: `kit.bark_trunk`, `wood_cap` (торец с кольцами), `splinters`, `bark_fn`, `smooth_path`; `log()`/`plank()`
+  в `models_buildings.py`. `kit.set_parent` пересчитывает матрицы — у свежих пустышек дети больше не «улетают».
 - **Сохранение:** версия `SAVE_VERSION` в `game.gd`. Новые флаги для старых сохранений — через миграцию в `load_game`.
   Ячейки: `Game.SLOTS`, `slot_path(n)`, `use_slot(n)`, `slot_info(n)`; ячейка 1 — прежний `save.json`, у тестов свои `save_dev*.json`.
 
@@ -130,6 +144,7 @@ godot --headless --path . -- --autotest --location=eye --chapter=8
 godot --headless --path . -- --autotest --location=eye --chapter=8 --from=9 --ending=keeper
 godot --headless --path . -- --autotest --location=eye --chapter=8 --walk
 godot --headless --path . -- --walktest --location=fort
+godot --headless --path . -- --colcheck --location=storm
 godot --headless --path . -- --walktest --location=storm
 godot --path . --resolution 1600x900 -- --shot=shot.png --frames=90 --location=fort
 ```
@@ -170,7 +185,9 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 - `--climb=N:h` — герой на лиане N на высоте h (0..1); `--slots=load|new|save|pauseload` — список ячеек сохранения;
 - `--toolrow --nohud` — все инструменты в ряд; `--sat=35` — сытость; `--worn=machete:0.7` — износ инструмента;
 - `--demo --wheel=pen|bed|seeds` — круг действий; `--panel=build|craft|inv` — окно (всё открыто); `--farline=marta` — реплика издалека;
-- `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO.
+- `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO;
+- `--gallery=a,b --gpitch=0.3 --dist= --camy=` — модели в ряд своей камерой; `--growrow=tomato,corn` — грядки и деревья на разных стадиях;
+  `--mow=5` — расчистить траву вокруг героя.
 
 Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для музыки и фона — ffmpeg в PATH;
 `python tools/gen_audio.py thunder0 radio` — только указанные эффекты, без ffmpeg). Иконки главы 4 — в `tools/icons_storm.py`, главы 5 — в `tools/icons_ice.py`, главы 6 — в `tools/icons_volcano.py`, главы 7 — в `tools/icons_fog.py`, главы 8 — в `tools/icons_eye.py`.
