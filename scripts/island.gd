@@ -1114,6 +1114,7 @@ func _spawn_stepa(holder: Node3D) -> void:
 		cs.position.y = 1.3
 		body.add_child(cs)
 		hut.add_child(body)
+		Models.add_trimesh(body, hut)   # соломенная крыша и навес — тоже твёрдые
 	var sp := hp + to_camp.normalized() * 2.6
 	sp.y = height_at(sp.x, sp.z)
 	poi_extra["stepa"] = sp
