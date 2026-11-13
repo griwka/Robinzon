@@ -540,3 +540,40 @@ def smooth_path(pts, radii, sub=4):
     out_p.append(tuple(P[-1]))
     out_r.append(radii[-1])
     return out_p, out_r
+
+
+# ============================================================ живость персонажей
+def liven(ob, seed=0, fold=0.17):
+    """Поверх готовой раскраски: мягкие складки ткани (продольные — к низу одежды, поперечные — у пояса
+    и на рукавах), пряди на волосах, тёплая кожа (румянее снизу лица, теплее в тени). Белки глаз,
+    чёрные зрачки и мелкие яркие детали не трогаем."""
+    me = ob.data
+    if "Col" not in me.color_attributes:
+        return ob
+    attr = me.color_attributes["Col"]
+    off = Vector((seed * 3.7, seed * 1.3, seed * 5.1))
+    for poly in me.polygons:
+        for li in poly.loop_indices:
+            v = me.vertices[me.loops[li].vertex_index]
+            co, n = v.co, v.normal
+            r, g, b, a_ = attr.data[li].color_srgb
+            mx, mn = max(r, g, b), min(r, g, b)
+            if mx > 0.93 and mn > 0.85 or mx < 0.12:
+                continue   # белки, блики, зрачки
+            skin = r > 0.72 and g > 0.48 and b > 0.32 and r >= g >= b and (r - b) > 0.12 and (mx - mn) < 0.45
+            if skin:
+                warm = 0.04 * max(0.0, -n.z) + 0.03 * max(0.0, 0.2 - n.z)
+                r2, g2, b2 = min(1.0, r * (1.0 + warm * 0.5)), g * (1.0 - warm * 0.3), b * (1.0 - warm * 0.8)
+            else:
+                ang = math.atan2(co.y, co.x)
+                nz = noise.noise(co * 4.0 + off)
+                vert = math.sin(ang * 9 + nz * 3.0)
+                horiz = math.sin(co.z * 24 + noise.noise(co * 3.0 + off) * 2.5)
+                low = max(0.0, min(1.0, (1.0 - co.z) * 1.4))   # к низу одежды складки сильнее
+                f = max(0.0, (vert - 0.45) / 0.55) * (0.35 + 0.65 * low) + max(0.0, (horiz - 0.75) / 0.25) * 0.5
+                k = 1.0 - fold * min(1.0, f)
+                if n.z > 0.55:
+                    k *= 1.05   # верх складки на свету
+                r2, g2, b2 = r * k, g * k, b * k
+            attr.data[li].color_srgb = (min(1.0, r2), min(1.0, g2), min(1.0, b2), a_)
+    return ob

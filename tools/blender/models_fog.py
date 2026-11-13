@@ -6,7 +6,7 @@
 Координаты: Blender (x, y, z) → Godot (x, z, −y). «Вперёд» в Godot (+Z) — это −Y в Blender."""
 import math
 
-from kit import (box, cyl, displace, empty, hexcol, ico, join, lathe, leaf, paint, remesh, rnd, set_origin, set_parent,
+from kit import (box, cyl, displace, empty, hexcol, ico, join, lathe, leaf, mix, paint, remesh, rnd, set_origin, set_parent,
                  shade, sphere, subsurf, tube)
 from models_buildings import log, plank, stone
 from models_ice import _block
@@ -31,13 +31,28 @@ def _person(body_col, legs_col, skin, hair_col, extra, name_scale=1.0, height=1.
     for sx in (-1, 1):
         a = tube("pa", [(sx * 0.27, 0, 0.95 * hz), (sx * 0.35, 0.05, 0.72 * hz), (sx * 0.32, 0.12, 0.52 * hz)], [0.085, 0.075, 0.07], 10)
         paint(a, body_col, ao=0.0)
-        hd = sphere("ph", (sx * 0.31, 0.14, 0.48 * hz), 0.07)
+        cuff = tube("pc", [(sx * 0.325, 0.11, 0.56 * hz), (sx * 0.322, 0.125, 0.52 * hz)], [0.085, 0.082], 10)
+        paint(cuff, shade(body_col, 0.82), ao=0.0)
+        # кисть: ладонь, большой палец и четыре пальца — не «шарик»
+        hd = sphere("ph", (sx * 0.31, 0.14, 0.47 * hz), 0.062, (0.85, 0.75, 1.05))
         paint(hd, skin, ao=0.0)
+        th = tube("pth", [(sx * 0.29, 0.17, 0.49 * hz), (sx * 0.27, 0.21, 0.46 * hz)], [0.024, 0.017], 6)
+        paint(th, skin, ao=0.0)
+        fingers = []
+        for f in range(4):
+            fx = sx * (0.335 - f * 0.018)
+            fy = 0.115 + f * 0.022
+            fg = tube("pf", [(fx, fy, 0.43 * hz), (fx * 1.01, fy + 0.005, 0.38 * hz)], [0.016, 0.012], 6)
+            paint(fg, skin, ao=0.0, fn=lambda co, n: shade(skin, 0.92) if co.z < 0.39 * hz else None)
+            fingers.append(fg)
         lg = tube("pl", [(sx * 0.12, 0, 0.15), (sx * 0.12, 0.02, 0.03)], 0.09, 10)
         paint(lg, legs_col, ao=0.0)
-        bt = lathe("pt", [(0.0, 0.0), (0.11, 0.0), (0.11, 0.12), (0.0, 0.13)], 10, loc=(sx * 0.12, 0.04, 0), scale=(1, 1.4, 1))
-        paint(bt, hexcol("3a2a1a"), ao=0.0)
-        parts += [a, hd, lg, bt]
+        # ботинок: подошва, носок, шнурки
+        bt = lathe("pt", [(0.0, 0.0), (0.11, 0.0), (0.115, 0.05), (0.105, 0.12), (0.0, 0.13)], 14, loc=(sx * 0.12, 0.045, 0), scale=(1, 1.45, 1))
+        paint(bt, hexcol("4a3424"), ao=0.0, fn=lambda co, n: hexcol("2a1e16") if co.z < 0.03 else (hexcol("6a4a32") if n.z > 0.6 else None))
+        lace = tube("lc", [(sx * 0.12 - 0.04, 0.12, 0.11), (sx * 0.12 + 0.04, 0.12, 0.11)], 0.01, 4)
+        paint(lace, hexcol("d8c8a8"), ao=0.0)
+        parts += [a, cuff, hd, th, lg, bt, lace] + fingers
     hp = [sphere("hd", (0, 0, 1.36 * hz), 0.27, segs=26, rings=14)]
     paint(hp[0], skin, ao=0.0)
     for sx in (-1, 1):
@@ -46,11 +61,23 @@ def _person(body_col, legs_col, skin, hair_col, extra, name_scale=1.0, height=1.
         i = sphere("i", (sx * 0.1, 0.25, 1.385 * hz), 0.027, (1, 0.4, 0.9))
         paint(i, hexcol("3a2a1a"), ao=0.0, noise_amt=0)
         ear = sphere("er", (sx * 0.26, 0.0, 1.36 * hz), 0.055, (0.5, 0.8, 1.0))
-        paint(ear, skin, ao=0.0)
-        hp += [w, i, ear]
+        paint(ear, skin, ao=0.0, fn=lambda co, n: shade(skin, 0.85) if n.y > 0.3 else None)
+        glint = sphere("gl", (sx * 0.09, 0.262, 1.398 * hz), 0.009, (1, 0.5, 1))
+        paint(glint, hexcol("ffffff"), ao=0.0, noise_amt=0)
+        lid = sphere("ld", (sx * 0.1, 0.228, 1.405 * hz), 0.05, (1.05, 0.5, 0.55))   # верхнее веко: взгляд мягче
+        paint(lid, shade(skin, 0.95), ao=0.0, fn=lambda co, n: shade(skin, 0.7) if n.z < -0.4 else None)
+        cheek = sphere("ck", (sx * 0.16, 0.2, 1.3 * hz), 0.05, (1.0, 0.45, 0.7))
+        paint(cheek, mix(skin, hexcol("f08a7a"), 0.55), ao=0.0, noise_amt=0)
+        hp += [w, i, glint, lid, ear, cheek]
     nose = sphere("ns", (0, 0.27, 1.33 * hz), 0.04, (0.85, 1.0, 0.9))
-    paint(nose, shade(skin, 0.93), ao=0.0)
+    paint(nose, shade(skin, 0.93), ao=0.0, fn=lambda co, n: shade(skin, 1.08) if n.z > 0.5 else None)
     hp.append(nose)
+    neck = cyl("nk", (0, 0, 1.0 * hz), 0.1, 0.09, 0.14, segs=12)
+    paint(neck, shade(skin, 0.88), ao=0.0)
+    collar = tube("cl", [(math.cos(a) * 0.17, math.sin(a) * 0.17 + 0.01, 1.03 * hz + 0.025 * max(0.0, math.sin(a))) for a in [k * math.pi / 10 for k in range(21)]],
+                  0.035, 8, caps=False)
+    paint(collar, shade(body_col, 0.85), ao=0.0)
+    parts += [neck, collar]
     extra(parts, hp, hz)
     b = join(parts, "Body")
     set_origin(b, (0, 0, 0))

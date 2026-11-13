@@ -53,6 +53,9 @@ def player():
         paint(pupil, DARK, ao=0.0, noise_amt=0)
         glint = sphere("g", (sx * 0.11, 0.31, 1.437), 0.011, (1, 0.5, 1))
         paint(glint, WHITE, ao=0.0, noise_amt=0)
+        lid = sphere("ld", (sx * 0.12, 0.262, 1.462), 0.07, (1.05, 0.45, 0.42))   # веко: живой, а не «кукольный» взгляд
+        paint(lid, shade(SKIN, 0.96), ao=0.0, fn=lambda co, n: shade(SKIN_D, 0.85) if n.z < -0.3 else None)
+        head_parts.append(lid)
         brow = tube("br", [(sx * 0.07, 0.3, 1.52), (sx * 0.13, 0.31, 1.535), (sx * 0.18, 0.29, 1.52)], 0.014, 6)
         paint(brow, shade(HAIR, 0.7), ao=0.0)
         cheek = sphere("c", (sx * 0.2, 0.25, 1.31), 0.05, (1.0, 0.4, 0.7))
@@ -102,7 +105,14 @@ def player():
         paint(hand, SKIN, ao=0.0)
         thumb = sphere("th", (sx * 0.31, 0.1, 0.6), 0.03, (1.0, 1.4, 1.0))
         paint(thumb, SKIN, ao=0.0)
-        a = join([arm, sleeve, hand, thumb], nm)
+        fingers = []
+        for f in range(4):   # четыре коротких пальца, чуть согнутых
+            fx = sx * (0.37 - f * 0.018)
+            fy = 0.0 + f * 0.024
+            fg = tube("fg", [(fx, fy, 0.54), (fx * 1.005, fy + 0.012, 0.495), (fx, fy + 0.03, 0.47)], [0.019, 0.016, 0.013], 6)
+            paint(fg, SKIN, ao=0.0, fn=lambda co, n: SKIN_D if co.z < 0.49 else None)
+            fingers.append(fg)
+        a = join([arm, sleeve, hand, thumb] + fingers, nm)
         set_origin(a, sh)
         set_parent(a, body)
         if nm == "ArmR":

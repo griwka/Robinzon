@@ -17,6 +17,9 @@ import kit  # noqa: E402
 MODULES = ["models_characters", "models_nature", "models_buildings", "models_farm", "models_jungle", "models_banyan", "models_fort", "models_storm", "models_ice", "models_volcano", "models_fog", "models_eye", "models_tools", "models_flora"]
 
 
+PEOPLE = ["player", "marta", "stepa", "timur", "ingrid", "vera", "misha", "renata", "gosha", "petya", "pasha", "lyova"]
+
+
 def all_builders():
     out = {}
     for m in MODULES:
@@ -37,6 +40,10 @@ def main():
         t = time.time()
         kit.reset()
         builders[name]()
+        if name in PEOPLE:   # жители: складки ткани, пряди, тёплая кожа
+            for ob in kit.bpy.context.scene.objects:
+                if ob.type == "MESH":
+                    kit.liven(ob, seed=len(name))
         kit.export(os.path.join(OUT, name + ".glb"))
         tris = sum(len(o.data.loop_triangles) if (o.data.calc_loop_triangles() or True) else 0
                    for o in kit.bpy.context.scene.objects if o.type == "MESH")
