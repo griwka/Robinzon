@@ -211,10 +211,48 @@ def bamboo(name, a, b, r):
 
 
 def thatch_cone(name, z, r_bottom, h, sides=4, rot=math.pi / 4):
-    c = cyl(name, (0, 0, z), r_bottom, 0.05, h, (0, 0, rot), segs=sides)
-    displace(c, 0.05, 0.08)
-    paint(c, STRAW, ao=0.0, noise_amt=0.15, nscale=20, fn=lambda co, n: 0.8 if math.sin(co.z * 60 + math.atan2(co.y, co.x) * 40) > 0.6 else None)
-    return c
+    """Соломенная крыша: несколько ярусов снопов внахлёст, у каждого — неровная «бахрома» снизу,
+    полосы соломинок и чуть разный тон. sides=4 — четырёхскатная, больше — круглая."""
+    import bmesh
+    from kit import from_bm
+    rng = rnd(int(r_bottom * 100 + z * 10))
+    courses = 4
+    segs = sides * 12 if sides <= 6 else 40
+    parts = []
+
+    def rad_at(a, r):
+        if sides > 6:
+            return r
+        # «квадратный» обвод: радиус до стороны многоугольника
+        k = math.pi / sides
+        da = ((a - rot) % (2 * k)) - k
+        return r * math.cos(k) / math.cos(da)
+    for c in range(courses):
+        t0 = c / courses
+        t1 = min(1.0, (c + 1.35) / courses)
+        r0 = r_bottom * (1 - t0) + 0.05 * t0
+        r1 = r_bottom * (1 - t1) + 0.05 * t1
+        bm = bmesh.new()
+        bot, top = [], []
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            fringe = (0.07 if k % 2 else 0.0) + rng.uniform(0, 0.04)
+            rb = rad_at(a, r0) + 0.05
+            bot.append(bm.verts.new((math.cos(a) * rb, math.sin(a) * rb, z + h * t0 - fringe)))
+            rt = rad_at(a, r1)
+            top.append(bm.verts.new((math.cos(a) * rt, math.sin(a) * rt, z + h * t1)))
+        for k in range(segs):
+            bm.faces.new((bot[k], bot[(k + 1) % segs], top[(k + 1) % segs], top[k]))
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        ob = from_bm(name + "_c%d" % c, bm)
+        from kit import solidify
+        solidify(ob, 0.06)
+        tone = shade(STRAW, 0.92 + 0.12 * (c % 2))
+        paint(ob, tone, ao=0.0, noise_amt=0.12, nscale=16,
+              fn=lambda co, n, tone=tone: shade(tone, 0.78) if math.sin(math.atan2(co.y, co.x) * 70 + co.z * 9) > 0.55 else (
+                  shade(tone, 1.12) if n.z > 0.6 else None))
+        parts.append(ob)
+    return join(parts, name)
 
 
 def hut():
