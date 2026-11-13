@@ -297,7 +297,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		var sens: float = 0.003 * float(Game.settings.get("mouse", 1.0))
 		camera_yaw -= event.relative.x * sens
 		camera_pitch = clampf(camera_pitch - event.relative.y * sens, -1.3, 0.5)
-	if event is InputEventMouseButton and event.pressed:
+	# колёсико — масштаб камеры, но не когда открыто окно (крафт, постройки, сумка…): там оно листает список
+	if event is InputEventMouseButton and event.pressed and controls_enabled:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			camera_distance = maxf(2.5, camera_distance - 0.5)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
