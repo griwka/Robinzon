@@ -574,7 +574,7 @@ func _work_pose(kind: String, t: float) -> void:
 	var c := _carry_pitch(_hand_id)
 	var pitch := c
 	var yaw := 0.0
-	var spin := 0.0
+	var spin := _carry_spin(_hand_id)   # лезвие — в сторону удара (см. _carry_spin)
 	match kind:
 		"stone_axe":
 			# рубка: замах из-за правого плеча, удар сверху вниз двумя руками, корпус подаётся вперёд
@@ -598,10 +598,12 @@ func _work_pose(kind: String, t: float) -> void:
 		"machete":
 			# мачете: рука отводится вправо на уровне груди, клинок рубит поперёк справа налево
 			arm_r.rotation.x = _keys(t, [[0.0, CARRY_ARM], [0.3, -1.45], [0.5, -1.5], [0.75, -1.3], [1.0, CARRY_ARM]])
-			arm_r.rotation.z = _keys(t, [[0.0, CARRY_ARM_OUT], [0.3, 1.2], [0.5, -0.05], [0.75, 0.0], [1.0, CARRY_ARM_OUT]])
+			arm_r.rotation.z = _keys(t, [[0.0, CARRY_ARM_OUT], [0.3, 1.2], [0.5, -0.05], [0.65, 0.08], [0.75, 0.12], [1.0, CARRY_ARM_OUT]])
 			arm_l.rotation.x = _keys(t, [[0.0, 0.0], [0.3, -0.5], [0.5, -0.2], [1.0, 0.0]])
 			pitch = _keys(t, [[0.0, c], [0.3, PI * 0.55], [0.5, PI * 0.5], [0.75, PI * 0.5], [1.0, c]])
-			yaw = _keys(t, [[0.0, 0.0], [0.3, -1.35], [0.5, 0.45], [0.75, 0.4], [1.0, 0.0]])
+			yaw = _keys(t, [[0.0, 0.0], [0.3, -1.35], [0.5, 0.45], [0.75, 0.3], [1.0, 0.0]])
+			# взмах поперёк: клинок поворачивается остриём влево, по ходу удара (несут — остриём вниз-вперёд)
+			spin = _keys(t, [[0.0, PI], [0.3, PI / 2], [0.55, PI / 2], [0.8, PI], [1.0, PI]])
 			_swing_twist = _keys(t, [[0.0, 0.0], [0.3, -0.45], [0.5, 0.35], [0.75, 0.25], [1.0, 0.0]])
 			_swing_lean = _keys(t, [[0.0, 0.0], [0.5, -0.12], [1.0, 0.0]])
 		"shovel":
@@ -664,9 +666,16 @@ static func _carry_pitch(id: String) -> float:
 	return 0.0 if id == "watering_can" else CARRY_ANGLE
 
 
-## Поворот вокруг своей оси, когда несут: у ледового бура Т-ручка — вдоль шага, а не поперёк (иначе упирается в бок).
+## Поворот вокруг своей оси. У рубящих (топоры, мачете, кирки, ледоруб) лезвие в модели смотрит в +Y, а в руке оно
+## оказалось бы сверху-сзади — герой бил бы обухом. Разворот на пол-оборота: лезвие вниз-вперёд, по ходу удара.
+## У ледового бура Т-ручка — вдоль шага, а не поперёк (иначе упирается в бок).
+const EDGE_TOOLS := ["stone_axe", "iron_axe", "machete", "iron_machete", "pickaxe", "iron_pickaxe", "ice_pick"]
+
+
 static func _carry_spin(id: String) -> float:
-	return PI / 2 if id == "ice_drill" else 0.0
+	if id == "ice_drill":
+		return PI / 2
+	return PI if id in EDGE_TOOLS else 0.0
 
 
 ## Герой в море: ниже уровня воды, но над дном (не под землёй, не в бункере).

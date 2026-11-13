@@ -731,6 +731,37 @@ func _test_tool_clip() -> void:
 	p.velocity = Vector3.ZERO
 	p._lean = Vector2.ZERO
 	print("    инструмент в теле: ", ", ".join(report))
+	# лезвие рубящих — по ходу удара: в момент удара острая сторона (в модели +Y) смотрит туда, куда движется головка,
+	# а когда несут — вниз-вперёд (иначе герой бьёт обухом)
+	var edge_bad: Array = []
+	for id in Player.EDGE_TOOLS:
+		Game.inventory[id] = 1
+		Game.hold(id)
+		p._update_tool()
+		p.swing_kind = id
+		p.velocity = Vector3.ZERO
+		p._lean = Vector2.ZERO
+		var hit := 0.52 if id in ["pickaxe", "iron_pickaxe", "ice_pick"] else 0.5
+		var tips: Array = []
+		var edge := Vector3.ZERO
+		for k in [-1, 0, 1]:
+			p.pose_hold = hit + k * 0.02
+			for rep in 3:
+				p._animate(0.0, 0.0)
+			var mb := p.model.global_basis.orthonormalized().inverse()
+			tips.append(mb * (p.hand_tool.global_basis * Vector3(0, -1, 0)))
+			if k == 0:
+				edge = (mb * (p.hand_tool.global_basis * Vector3(0, 0, -1))).normalized()
+		var motion: Vector3 = (tips[2] as Vector3) - (tips[0] as Vector3)
+		var ok_hit := motion.length() > 0.001 and edge.dot(motion.normalized()) > 0.5
+		p.pose_hold = -1.0
+		p._swing_t = 0.0
+		for rep in 3:
+			p._animate(0.0, 0.0)
+		var carry_edge := (p.model.global_basis.orthonormalized().inverse() * (p.hand_tool.global_basis * Vector3(0, 0, -1))).normalized()
+		if not ok_hit or carry_edge.y > 0.0:
+			edge_bad.append("%s (%s)" % [Data.ITEMS[id]["name"], "удар" if not ok_hit else "несёт"])
+	_check(edge_bad.is_empty(), "рубящие инструменты в руке лезвием по ходу удара%s" % ((": " + ", ".join(edge_bad)) if not edge_bad.is_empty() else ""))
 	_check(bad.is_empty(), "инструменты в руке не проходят сквозь героя%s" % ((": " + "; ".join(bad)) if not bad.is_empty() else ""))
 	# за спиной — тоже снаружи
 	var back_bad: Array = []
