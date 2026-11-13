@@ -10,6 +10,7 @@ uniform float fade_from = 38.0;
 uniform float fade_to = 55.0;
 
 global uniform float g_wind;
+global uniform float g_lamp;   // сила огней по времени суток (WorldEnv)
 global uniform vec3 g_player_pos;
 
 varying float v_h;
@@ -44,6 +45,6 @@ void light() {
 	if (LIGHT_IS_DIRECTIONAL) {
 		DIFFUSE_LIGHT += LIGHT_COLOR / PI * smoothstep(0.3, 0.7, ATTENUATION);
 	} else {
-		DIFFUSE_LIGHT += LIGHT_COLOR / PI * ATTENUATION;
+		DIFFUSE_LIGHT += LIGHT_COLOR / PI * ATTENUATION * g_lamp;
 	}
 }

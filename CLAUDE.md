@@ -57,11 +57,14 @@
 ## Графика (подробно — `docs/ГРАФИКА.md`)
 - **Где что лежит:**
   - свет, небо, дымка, SSAO, свечение, постобработка и общие параметры шейдеров — `scripts/world_env.gd`;
+  - сутки непрерывные: солнце и луна — по дугам небесной сферы (`WorldEnv._celestial`), один свет `Sun` днём — солнце,
+    ночью — луна; палитра суток — `Palette.at_elevation()`; звёзды и созвездия — `scripts/sky_stars.gd`; фаза луны — по
+    `Game.day`; плавное «насколько ночь» — `WorldEnv.night_amount(t)` (а `Game.is_day()` — для правил игры);
   - цвета — `scripts/palette.gd`;
   - эффекты — `scripts/fx.gd`, погода — `scripts/weather.gd`.
 - **Шейдеры моделей:**
   - общий код — `shaders/toon_common.gdshaderinc`, его подключают `toon` и `toon_foliage` (`#define FOLIAGE`);
-  - общие параметры (`g_sun_dir`, `g_player_pos`, `g_wind`, `g_rain`, `g_light`, `g_cloud_*`) объявлены
+  - общие параметры (`g_sun_dir`, `g_player_pos`, `g_wind`, `g_rain`, `g_light`, `g_cloud_*`, `g_moon_dir`, `g_daylight`, `g_lamp` — сила огней) объявлены
     в `project.godot → [shader_globals]`.
 - **Чего не делать — всё это даёт NaN-пиксели, которые свечение раздувает в белые пятна:**
   - не читать `COLOR` в проходе контура (`outline.gdshader`): у части сеток в моделях нет цвета вершин;
@@ -137,7 +140,7 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 ```
 
 Полезные аргументы для `dev_tools`:
-- `--time=0..1` — время суток;
+- `--time=0..1` — время суток (0.255 рассвет, 0.5 полдень, 0.74 закат, 0.78 сумерки, 0.95 ночь); `--moon=0..1` — фаза луны;
 - `--demo` — построить лагерь с фермой;
 - `--gallery` — все модели рядом;
 - `--at=x,y,z` — поставить героя в точку;

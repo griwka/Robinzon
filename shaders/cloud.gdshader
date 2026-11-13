@@ -4,6 +4,8 @@ shader_type spatial;
 render_mode unshaded, shadows_disabled;
 
 global uniform vec3 g_sun_dir;
+global uniform vec4 g_moon_dir;
+global uniform float g_daylight;
 global uniform vec3 g_cloud_lit;
 global uniform vec3 g_cloud_shade;
 
@@ -15,7 +17,9 @@ void vertex() {
 
 void fragment() {
 	vec3 n = normalize(wn);
-	float k = smoothstep(-0.05, 0.12, dot(n, normalize(g_sun_dir)) * 0.6 + n.y * 0.55);
+	float ls = dot(n, g_sun_dir);   // g_sun_dir и g_moon_dir уже единичные
+	float lm = dot(n, g_moon_dir.xyz);
+	float k = smoothstep(-0.05, 0.12, mix(lm, ls, g_daylight) * 0.6 + n.y * 0.55);
 	vec3 c = mix(g_cloud_shade, g_cloud_lit, k);
 	float fres = 1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0);
 	c = mix(c, g_cloud_lit, smoothstep(0.72, 0.8, fres) * 0.6);

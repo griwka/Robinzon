@@ -3,6 +3,8 @@
 //    поэтому вокруг контуров нет светлых ореолов и «лесенка» не усиливается;
 // 2) цветокоррекция: тени чуть холоднее (сиреневые), света теплее, приглушённым цветам — немного сочности;
 // 3) мягкая тёплая виньетка по углам — взгляд собирается к центру.
+// По времени суток (WorldEnv): в золотой час света теплеют, ночью тени уходят в уютную синеву
+// (без чёрного), а тёплые огни остаются тёплыми — «ламповая» ночь.
 shader_type canvas_item;
 
 uniform sampler2D screen : hint_screen_texture, filter_linear;
@@ -11,6 +13,8 @@ uniform vec3 shadow_tint = vec3(-0.018, -0.006, 0.03);
 uniform vec3 highlight_tint = vec3(0.012, 0.008, -0.018);
 uniform float vibrance = 0.18;
 uniform float vignette = 0.22;
+uniform float night = 0.0;    // 0 — день, 1 — ночь
+uniform float golden = 0.0;   // закат и рассвет
 
 void fragment() {
 	vec2 px = SCREEN_PIXEL_SIZE;
@@ -30,6 +34,14 @@ void fragment() {
 	float l = dot(c, vec3(0.299, 0.587, 0.114));
 	c += shadow_tint * (1.0 - l) * (1.0 - l);
 	c += highlight_tint * l * l;
+	// золотой час: света теплее, тени чуть розовее
+	c += vec3(0.035, 0.012, -0.03) * golden * l;
+	c += vec3(0.012, -0.004, 0.01) * golden * (1.0 - l) * (1.0 - l);
+	// ночь: тёмное — в мягкую синеву (не в черноту), а тёплое (огонь, окна) — ещё теплее
+	float warmth = clamp((c.r - c.b) * 2.5, 0.0, 1.0);
+	c += vec3(0.008, 0.016, 0.042) * night * (1.0 - l) * (1.0 - l) * (1.0 - warmth);
+	c = mix(c, c * vec3(0.86, 0.95, 1.18), night * 0.6 * (1.0 - warmth));   // лунный свет — синий, не серый
+	c += vec3(0.03, 0.01, -0.02) * night * warmth * l;
 	float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
 	c = mix(vec3(l), c, 1.0 + vibrance * (1.0 - sat));
 	vec2 q = uv - 0.5;

@@ -37,6 +37,7 @@ uniform vec2 mask_origin = vec2(-100.0, -100.0);
 uniform float mask_size = 200.0;
 
 global uniform float g_rain;
+global uniform float g_lamp;   // сила огней по времени суток (WorldEnv)
 
 varying vec3 world_pos;
 varying vec3 world_normal;
@@ -136,6 +137,6 @@ void light() {
 		float lit = smoothstep(0.0, 0.06, ndl) * sh;
 		DIFFUSE_LIGHT += LIGHT_COLOR / PI * lit;
 	} else {
-		DIFFUSE_LIGHT += LIGHT_COLOR / PI * smoothstep(-0.2, 0.3, ndl) * ATTENUATION;
+		DIFFUSE_LIGHT += LIGHT_COLOR / PI * smoothstep(-0.2, 0.3, ndl) * ATTENUATION * g_lamp;
 	}
 }

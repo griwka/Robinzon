@@ -15,8 +15,10 @@ uniform float map_size = 200.0;
 uniform float height_min = -6.0;
 uniform float height_max = 14.0;
 uniform float brightness = 1.0;   // меняется со временем суток
+uniform vec3 tint = vec3(1.0);    // оттенок: ночью вода синее (WorldEnv)
 
 global uniform vec3 g_sun_dir;
+global uniform vec4 g_moon_dir;   // xyz — на луну, w — сила лунной дорожки
 global uniform float g_rain;
 
 varying vec3 world_pos;
@@ -69,8 +71,27 @@ void fragment() {
 	float sun_path = pow(max(dot(r, v), 1e-4), 60.0) * smoothstep(-0.05, 0.15, g_sun_dir.y);
 	float sparkle = aastep(0.62, texture(noise_tex, world_pos.xz * 0.22 + TIME * vec2(0.03, -0.02)).r);
 	col += vec3(1.0, 0.95, 0.85) * sun_path * sparkle * 2.5 * (1.0 - g_rain);
+	// дорожка к низкому светилу: узкая по сторонам и длинная к горизонту (как от волн)
+	vec2 vh = v.xz;
+	float vhl = length(vh);
+	vh = vhl > 1e-4 ? vh / vhl : vec2(0.0, 1.0);
+	float low_sun = (1.0 - smoothstep(0.04, 0.32, g_sun_dir.y)) * smoothstep(-0.04, 0.03, g_sun_dir.y);
+	vec2 sh = -g_sun_dir.xz;
+	float shl = length(sh);
+	if (low_sun > 0.001 && shl > 1e-4) {
+		float az = 1.0 - dot(vh, sh / shl);
+		float gold = exp(-az * 160.0) * low_sun;
+		col += vec3(1.0, 0.72, 0.4) * gold * sparkle * 1.6 * (1.0 - g_rain);
+	}
+	vec2 mh = -g_moon_dir.xz;
+	float mhl = length(mh);
+	if (g_moon_dir.w > 0.001 && mhl > 1e-4) {
+		float az = 1.0 - dot(vh, mh / mhl);
+		float silver = exp(-az * 220.0) * (0.35 + 0.65 * (1.0 - smoothstep(0.05, 0.55, g_moon_dir.y)));
+		col += vec3(0.72, 0.82, 1.0) * silver * sparkle * 1.5 * g_moon_dir.w * (1.0 - g_rain);
+	}
 
-	ALBEDO = col * brightness;
+	ALBEDO = col * brightness * tint;
 	ALPHA = mix(0.78, 0.96, aastep(1.3, depth));
 	ALPHA = max(ALPHA, foam);
 }

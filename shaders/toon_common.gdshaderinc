@@ -21,6 +21,7 @@ uniform float emission_energy = 0.0; // > 0 — светится сам (окн�
 
 global uniform vec3 g_player_pos;
 global uniform float g_wind;
+global uniform float g_lamp;   // сила огней: днём скромнее, ночью — тёплые круги (WorldEnv)
 
 varying vec3 v_color;
 varying vec3 w_pos;
@@ -118,6 +119,6 @@ void light() {
 	} else {
 		// костры и факелы: мягкий тёплый круг, свет немного «заворачивает» за край
 		float lit = smoothstep(-0.25, 0.3, ndl) * ATTENUATION;
-		DIFFUSE_LIGHT += LIGHT_COLOR / PI * lit;
+		DIFFUSE_LIGHT += LIGHT_COLOR / PI * lit * g_lamp;
 	}
 }

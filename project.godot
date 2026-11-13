@@ -68,3 +68,15 @@ g_rain={
 "type": "float",
 "value": 0.0
 }
+g_moon_dir={
+"type": "vec4",
+"value": Vector4(-0.3, 0.6, -0.7, 0)
+}
+g_daylight={
+"type": "float",
+"value": 1.0
+}
+g_lamp={
+"type": "float",
+"value": 1.0
+}

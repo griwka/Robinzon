@@ -160,8 +160,10 @@ var _theme_mix := 0.0
 
 
 func _process(delta: float) -> void:
-	var night := 0.0 if Game.is_day() else 1.0
-	_night_mix = move_toward(_night_mix, night, delta / 6.0)  # плавная смена за ~6 секунд
+	# музыка ночи вступает вместе с сумерками (по высоте солнца), а не по часам;
+	# после сна или плавания время прыгает — тогда смена занимает ~6 секунд
+	var night := WorldEnv.night_amount(Game.time_of_day)
+	_night_mix = move_toward(_night_mix, night, delta / 6.0)
 	_theme_mix = move_toward(_theme_mix, 1.0 if _theme_on else 0.0, delta / 3.0)
 	var base := maxf(1.0 - _theme_mix, 0.0001)
 	music_day.volume_db = linear_to_db(maxf(1.0 - _night_mix, 0.0001) * base) - 6.0

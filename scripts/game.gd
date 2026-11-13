@@ -325,7 +325,8 @@ func apply_display() -> void:
 
 func _process(delta: float) -> void:
 	_tick_hunger(delta)
-	var speed := 1.0 if is_day() else 2.0
+	# ночь идёт вдвое быстрее дня; разгон и торможение — плавные, в сумерках (без рывка)
+	var speed := 2.0 - smoothstep(-0.175, -0.075, cos((time_of_day - 0.5) * TAU))
 	time_of_day += delta / DAY_LENGTH * speed
 	world_time += delta
 	if time_of_day >= 1.0:
