@@ -250,7 +250,7 @@ const BUILDINGS := {
 	# глава 4
 	"shelter": {"name": "Навес", "cost": {"bamboo": 4, "leaf": 6, "rope": 2}, "radius": 1.4, "unlock": true, "tab": "дом",
 		"desc": "Крыша на четырёх столбах. Под ним гроза не страшна."},
-	"lightning_rod": {"name": "Громоотвод", "cost": {"scrap": 4, "copper_wire": 3, "plank": 2}, "radius": 0.7, "unlock": true, "tab": "ферма",
+	"lightning_rod": {"name": "Громоотвод", "cost": {"scrap": 4, "copper_wire": 3, "plank": 2}, "radius": 0.7, "unlock": true, "tab": "дом",
 		"desc": "Ловит молнию в грозу и заряжает пустой аккумулятор."},
 	"goose_house": {"name": "Гусятник", "cost": {"plank": 6, "fiber": 4, "goose": 1}, "radius": 1.6, "unlock": true, "tab": "ферма",
 		"desc": "Для пары гусей. Корми травой — дают перья."},
