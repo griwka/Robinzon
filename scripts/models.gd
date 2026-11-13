@@ -33,11 +33,48 @@ static func glb(name: String) -> Node3D:
 	var n: Node3D = ps.instantiate()
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
 		var nm: String = mi.name.to_lower()
-		if nm.contains("leaf") or nm.contains("frond") or nm.contains("crown_l"):
-			mi.material_override = model_mat(true)
-		else:
-			mi.material_override = model_mat(false)
+		var foliage := nm.contains("leaf") or nm.contains("frond") or nm.contains("crown_l")
+		var tex := _albedo_tex(mi as MeshInstance3D)
+		mi.material_override = tex_mat(tex, foliage) if tex else model_mat(foliage)
 	return n
+
+
+## Текстура цвета из материала .glb (модели, запечённые в атлас: люди, животные, одежда), иначе null.
+static func _albedo_tex(mi: MeshInstance3D) -> Texture2D:
+	if mi.mesh == null or mi.mesh.get_surface_count() == 0:
+		return null
+	var bm := mi.mesh.surface_get_material(0) as BaseMaterial3D
+	return bm.albedo_texture if bm else null
+
+
+## Тот же toon-материал, что model_mat, но цвет — из текстуры, а не из вершин. Рисованная фактура
+## мазками почти выключена: детали (ткань, пряди, шерсть) уже нарисованы в текстуре, а крупные мазки на лице и одежде
+## выглядели пятнами.
+static func tex_mat(tex: Texture2D, foliage := false) -> ShaderMaterial:
+	var key := "tex|%s|%s" % [tex.get_rid().get_id(), foliage]
+	if _mat_cache.has(key):
+		return _mat_cache[key]
+	var m := ShaderMaterial.new()
+	m.shader = TOON_FOLIAGE if foliage else TOON
+	m.set_shader_parameter("albedo", Color.WHITE)
+	m.set_shader_parameter("use_vertex_color", false)
+	m.set_shader_parameter("use_albedo_tex", true)
+	m.set_shader_parameter("albedo_tex", tex)
+	m.set_shader_parameter("rim_amount", 0.2)
+	m.set_shader_parameter("gloss", 0.03)
+	m.set_shader_parameter("painted", PAINTED)
+	m.set_shader_parameter("paint_amount", TEX_PAINT)
+	m.set_shader_parameter("terminator_soft", 0.5)
+	if foliage:
+		m.set_shader_parameter("wind_strength", 0.8)
+		m.set_shader_parameter("near_fade", 1.0)
+	else:
+		m.next_pass = outline_mat(0.022)
+	_mat_cache[key] = m
+	return m
+
+
+const TEX_PAINT := 0.04   # сила рисованной фактуры на запечённых моделях (у остальных 0.16)
 
 
 static func model_mat(foliage: bool) -> ShaderMaterial:

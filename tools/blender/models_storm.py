@@ -116,7 +116,7 @@ def timur():
     paint(hp[0], SKIN, ao=0.0, fn=lambda co, n: (hexcol("8a6a5a") if (co.z < 1.3 and co.y > 0.05) else None))
     hair = sphere("hr", (0, -0.03, 1.45), 0.27, (1.0, 1.0, 0.75))
     displace(hair, 0.02, 0.05, "VORONOI")
-    paint(hair, hexcol("2a2420"), ao=0.0, noise_amt=0.2, nscale=30)
+    paint(hair, hexcol("2a2420"), ao=0.0, noise_amt=0.2, nscale=30, mat="hair")
     hp.append(hair)
     for sx in (-1, 1):
         w = sphere("w", (sx * 0.1, 0.24, 1.4), 0.05, (1, 0.42, 0.9))

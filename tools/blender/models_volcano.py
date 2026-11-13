@@ -93,7 +93,7 @@ def vera():
     paint(hp[0], SKIN, ao=0.0)
     hair = sphere("hr", (0, -0.04, 1.4), 0.28, (1.05, 1.0, 0.9))
     displace(hair, 0.03, 0.05, "VORONOI")
-    paint(hair, hexcol("cfc8c0"), ao=0.0, noise_amt=0.15, nscale=30)
+    paint(hair, hexcol("cfc8c0"), ao=0.0, noise_amt=0.15, nscale=30, mat="hair")
     scarf = sphere("sc", (0, -0.03, 1.48), 0.29, (1.05, 1.05, 0.75))
     paint(scarf, hexcol("d8443a"), ao=0.0,
           fn=lambda co, n: hexcol("ffd23f") if (math.sin(co.x * 40) * math.sin(co.y * 40) > 0.6) else (hexcol("4f9a4a") if math.sin(co.x * 25 + co.z * 20) > 0.85 else None))

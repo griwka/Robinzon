@@ -13,6 +13,7 @@ sys.path.insert(0, HERE)
 OUT = os.path.join(HERE, "..", "..", "assets", "models")
 
 import kit  # noqa: E402
+import texbake  # noqa: E402
 
 MODULES = ["models_characters", "models_nature", "models_buildings", "models_farm", "models_jungle", "models_banyan", "models_fort", "models_storm", "models_ice", "models_volcano", "models_fog", "models_eye", "models_tools", "models_flora"]
 
@@ -21,6 +22,17 @@ PEOPLE = ["player", "marta", "stepa", "timur", "ingrid", "vera", "misha", "renat
 
 
 ANIMALS = ["parrot", "chicken", "goat", "sheep", "pig", "goose", "penguin", "walrus", "tortoise", "monkey", "crab"]
+
+
+# чем покрыто животное (texbake.detail): перья — ряды пёрышек, шкура — мягкие пятна; остальные — штрихи шерсти
+SKIN_KIND = {"parrot": "feather", "chicken": "feather", "goose": "feather", "penguin": "feather",
+             "pig": "hide", "walrus": "hide", "tortoise": "hide", "crab": "smooth"}
+
+# одежда героя: куски надеваются на суставы игрока (Player.update_clothes)
+WEAR = ["wear_sweater", "wear_jacket", "wear_boots", "wear_mittens", "wear_fire_gloves"]
+
+# эти модели запекаются в текстуру (texbake.py): чёткие границы цветов, ткань, пряди, шерсть, перья
+TEXTURED = PEOPLE + ANIMALS + WEAR
 
 
 def all_builders():
@@ -35,7 +47,31 @@ def all_builders():
     return out
 
 
+def texture_imports():
+    """Текстуры запечённых моделей Godot извлекает из .glb сам (assets/models/<имя>_<имя>_albedo.png) с настройками
+    «без сжатия». Ставим сжатие VRAM (S3TC/DXT1): на глаз как без сжатия, а места на диске и в видеопамяти —
+    0.7 МБ на атлас 1024 вместо 1 МБ и 5.6 МБ (BPTC дал бы 1.4 МБ без видимой разницы).
+    Работает для уже существующих .import — после первого импорта нового атласа запустить build.py ещё раз
+    (или только эту функцию: python tools/blender/build.py --imports) и снова --import."""
+    n = 0
+    for name in TEXTURED:
+        p = os.path.join(OUT, "%s_%s_albedo.png.import" % (name, name))
+        if not os.path.exists(p):
+            continue
+        s = open(p, encoding="utf-8").read()
+        t = s.replace("compress/mode=0", "compress/mode=2")
+        if t != s:
+            with open(p, "w", encoding="utf-8", newline="") as fh:
+                fh.write(t)
+            n += 1
+    if n:
+        print("сжатие S3TC выставлено у %d текстур — запустите godot --headless --path . --import" % n)
+
+
 def main():
+    if sys.argv[1:] == ["--imports"]:
+        texture_imports()
+        return
     os.makedirs(OUT, exist_ok=True)
     builders = all_builders()
     names = sys.argv[1:] or list(builders)
@@ -43,18 +79,16 @@ def main():
         t = time.time()
         kit.reset()
         builders[name]()
-        if name in PEOPLE:   # жители: складки ткани, пряди, тёплая кожа
-            for ob in kit.bpy.context.scene.objects:
-                if ob.type == "MESH":
-                    kit.liven(ob, seed=len(name))
-        if name in ANIMALS:  # животные и птицы: штрихи шерсти и перьев
-            for ob in kit.bpy.context.scene.objects:
-                if ob.type == "MESH":
-                    kit.liven_fur(ob, seed=len(name))
-        kit.export(os.path.join(OUT, name + ".glb"))
+        size = 0
+        if name in TEXTURED:
+            # раскраска считается в каждом пикселе атласа; складки, пряди, шерсть — там же (texbake.detail)
+            size = texbake.bake_model(name, "animals" if name in ANIMALS else "people", seed=len(name),
+                                      default=SKIN_KIND.get(name, "fur"))
+        kit.export(os.path.join(OUT, name + ".glb"), textured=size > 0)
         tris = sum(len(o.data.loop_triangles) if (o.data.calc_loop_triangles() or True) else 0
                    for o in kit.bpy.context.scene.objects if o.type == "MESH")
-        print("%-16s %6d tris  %.1fs" % (name, tris, time.time() - t))
+        print("%-16s %6d tris  %.1fs%s" % (name, tris, time.time() - t, "  tex %d" % size if size else ""))
+    texture_imports()
 
 
 if __name__ == "__main__":

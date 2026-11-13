@@ -6,7 +6,7 @@
 Координаты: Blender (x, y, z) → Godot (x, z, −y). «Вперёд» в Godot (+Z) — это −Y в Blender."""
 import math
 
-from kit import (box, cyl, displace, empty, hexcol, ico, join, lathe, leaf, mix, paint, remesh, rnd, set_origin, set_parent,
+from kit import (box, cyl, displace, empty, hexcol, ico, join, lathe, leaf, mix, overpaint, paint, remesh, rnd, set_origin, set_parent,
                  shade, sphere, subsurf, tube)
 from models_buildings import log, plank, stone
 from models_ice import _block
@@ -94,11 +94,11 @@ def misha():
         parts.append(hood)
         hair = sphere("hr", (0, -0.03, 1.45), 0.27, (1.0, 1.0, 0.75))
         displace(hair, 0.05, 0.06, "VORONOI")
-        paint(hair, hexcol("c8783a"), ao=0.0, noise_amt=0.2, nscale=25)
+        paint(hair, hexcol("c8783a"), ao=0.0, noise_amt=0.2, nscale=25, mat="hair")
         hp.append(hair)
         for k in range(4):
             sp = tube("tf", [(-0.1 + k * 0.07, 0.15, 1.6), (-0.12 + k * 0.08, 0.22, 1.66)], [0.04, 0.005], 6)
-            paint(sp, hexcol("c8783a"), ao=0.0)
+            paint(sp, hexcol("c8783a"), ao=0.0, mat="hair")
             hp.append(sp)
         smile = tube("mo", [(-0.09, 0.24, 1.27), (0.0, 0.26, 1.23), (0.09, 0.24, 1.27)], 0.015, 6)
         paint(smile, hexcol("8a3a32"), ao=0.0)
@@ -119,9 +119,9 @@ def renata():
                 paint(bt, hexcol("d9a84a"), ao=0.0, noise_amt=0)
                 parts.append(bt)
         hair = sphere("hr", (0, -0.03, 1.44), 0.28, (1.0, 1.02, 0.78))
-        paint(hair, hexcol("2a1e1a"), ao=0.0, noise_amt=0.12, nscale=25)
+        paint(hair, hexcol("2a1e1a"), ao=0.0, noise_amt=0.12, nscale=25, mat="hair")
         braid = tube("br", [(0, -0.2, 1.38), (0.05, -0.28, 1.15), (0.02, -0.3, 0.9)], [0.07, 0.06, 0.035], 8)
-        paint(braid, hexcol("2a1e1a"), ao=0.0, fn=lambda co, n: 0.75 if int(co.z * 25) % 2 else None)
+        paint(braid, hexcol("2a1e1a"), ao=0.0, fn=lambda co, n: 0.75 if int(co.z * 25) % 2 else None, mat="hair")
         brow = tube("bw", [(-0.15, 0.24, 1.47), (-0.04, 0.25, 1.46)], 0.016, 6)
         paint(brow, hexcol("2a1e1a"), ao=0.0)
         brow2 = tube("bw2", [(0.04, 0.25, 1.46), (0.15, 0.24, 1.48)], 0.016, 6)
@@ -146,20 +146,14 @@ def gosha():
         parts.append(wrench)
         beard = sphere("bd", (0, 0.12, 1.24), 0.22, (1.05, 0.8, 0.85))
         displace(beard, 0.03, 0.05, "VORONOI")
-        paint(beard, hexcol("5a3a22"), ao=0.0, noise_amt=0.2, nscale=30)
+        paint(beard, hexcol("5a3a22"), ao=0.0, noise_amt=0.2, nscale=30, mat="beard")
         cap = sphere("cp", (0, -0.02, 1.5), 0.26, (1.05, 1.05, 0.5))
         paint(cap, hexcol("3a3a42"), ao=0.0)
         hp += [beard, cap]
     _person(hexcol("eef2f6"), hexcol("3a4a5a"), SKIN_D, hexcol("5a3a22"), extra, height=1.05)
-    # тельняшка: полосы перекрашиваем по высоте
+    # тельняшка: полосы перекрашиваем по высоте (при запекании — по пикселям, края полос чёткие)
     import bpy
-    b = bpy.data.objects["Body"]
-    attr = b.data.color_attributes["Col"]
-    for poly in b.data.polygons:
-        for li in poly.loop_indices:
-            co = b.data.vertices[b.data.loops[li].vertex_index].co
-            if 0.42 < co.z < 1.0 and int(co.z * 18) % 2 == 0 and abs(co.x) < 0.33:
-                attr.data[li].color_srgb = (0.18, 0.28, 0.48, 1.0)
+    overpaint(bpy.data.objects["Body"], lambda co, n: (0.18, 0.28, 0.48) if (0.42 < co.z < 1.0 and int(co.z * 18) % 2 == 0 and abs(co.x) < 0.33) else None)
 
 
 def _twin(stripe, cap):
@@ -169,7 +163,7 @@ def _twin(stripe, cap):
         pom = sphere("pm", (0, -0.02, 1.68), 0.06)
         paint(pom, hexcol("f2ead8"), ao=0.0)
         hair = sphere("hr", (0, -0.05, 1.42), 0.27, (1.0, 1.0, 0.7))
-        paint(hair, hexcol("d6b07a"), ao=0.0)
+        paint(hair, hexcol("d6b07a"), ao=0.0, mat="hair")
         grin = tube("mo", [(-0.07, 0.245, 1.27), (0.0, 0.258, 1.25), (0.07, 0.245, 1.27)], 0.013, 6)
         paint(grin, hexcol("8a3a32"), ao=0.0)
         hp += [hair, hat, pom, grin]
@@ -178,13 +172,7 @@ def _twin(stripe, cap):
         parts.append(scarf)
     _person(hexcol("eef2f6"), hexcol("2f3e5c"), SKIN, hexcol("d6b07a"), extra)
     import bpy
-    b = bpy.data.objects["Body"]
-    attr = b.data.color_attributes["Col"]
-    for poly in b.data.polygons:
-        for li in poly.loop_indices:
-            co = b.data.vertices[b.data.loops[li].vertex_index].co
-            if 0.42 < co.z < 1.0 and int(co.z * 18) % 2 == 0 and abs(co.x) < 0.31:
-                attr.data[li].color_srgb = stripe + (1.0,)
+    overpaint(bpy.data.objects["Body"], lambda co, n: stripe if (0.42 < co.z < 1.0 and int(co.z * 18) % 2 == 0 and abs(co.x) < 0.31) else None)
 
 
 def petya():

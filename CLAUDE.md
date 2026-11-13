@@ -110,7 +110,15 @@
   (`FruitTree._grow_visual()`). Стадии `stage()` для заданий не менялись.
 - **Новые растения** — `tools/blender/models_flora.py`, вид в `ResourceNode.KINDS`, расстановка — `Island._spawn_flora()` со своим
   случайным рядом (номера прежних преград не сдвигаются). Кусты под мачете и деревца под топор — только дальше 17 м от лагеря.
-- **Живость моделей:** `kit.liven` (люди: складки, кожа) и `kit.liven_fur` (животные) применяет `build.py` по спискам `PEOPLE`/`ANIMALS`.
+- **Текстуры моделей** (люди, животные, птицы, одежда `wear_*` — список `TEXTURED` в `build.py`): `tools/blender/texbake.py`
+  запекает раскраску в атлас (UV smart project, 256–1024 px). `kit.paint` запоминает программу раскраски (`kit.PAINTS`, атрибуты
+  `pid`/`p0`/`n0`), и `fn(co, n)` считается в каждом пикселе — границы чёткие. Перекраска собранного тела — `kit.overpaint(ob, fn)`,
+  не писать `color_srgb` напрямую. Вид поверхности для мелкой детали — `paint(..., mat="hair"|"beard"|"stubble"|"cloth"|"skin"|"fur"|
+  "wool"|"feather"|"hide"|"smooth"|"clean")`, у животных по умолчанию — `SKIN_KIND`. Godot извлекает текстуру в
+  `assets/models/<имя>_<имя>_albedo.png` (+ `.import` со сжатием S3TC — `build.py` ставит его сам, затем ещё раз `--import`) — коммитить вместе с `.glb`. В игре — `Models.tex_mat()`
+  (`use_albedo_tex`, `terminator_soft`); модели без текстуры — как раньше, цвет вершин.
+- **Живость моделей:** складки ткани, пряди, шерсть у запечённых моделей рисует `texbake.detail` (по пикселям). Прежние
+  `kit.liven` / `kit.liven_fur` (то же по вершинам) остались в `kit.py` для моделей на цвете вершин, `build.py` их больше не зовёт.
   Общие помощники дерева: `kit.bark_trunk`, `wood_cap` (торец с кольцами), `splinters`, `bark_fn`, `smooth_path`; `log()`/`plank()`
   в `models_buildings.py`. `kit.set_parent` пересчитывает матрицы — у свежих пустышек дети больше не «улетают».
 - **Сохранение:** версия `SAVE_VERSION` в `game.gd`. Новые флаги для старых сохранений — через миграцию в `load_game`.

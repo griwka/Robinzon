@@ -164,7 +164,7 @@ def marta():
     hairp = [sphere("hc", (0, -0.05, 1.42), 0.32, (1.02, 1.0, 0.85)), sphere("bun", (0, -0.22, 1.62), 0.14)]
     hm = join(hairp, "Hair")
     remesh(hm, 0.02, 2)
-    paint(hm, hair, ao=0.0, noise_amt=0.08, nscale=14)
+    paint(hm, hair, ao=0.0, noise_amt=0.08, nscale=14, mat="hair")
     band = tube("bd", [(math.cos(a) * 0.325, math.sin(a) * 0.325 - 0.02, 1.52 + 0.04 * math.sin(a)) for a in [k * math.pi / 10 for k in range(21)]], 0.04, 8, caps=False)
     paint(band, hexcol("d9573b"), ao=0.0, fn=lambda co, n: hexcol("ffffff") if int((math.atan2(co.y, co.x) + 4) * 6) % 2 else None)
     knot = sphere("kn", (0.0, -0.33, 1.55), 0.06)
@@ -197,7 +197,7 @@ def sheep():
     remesh(b, 0.022, 1)
     from mathutils import noise as _nz
     paint(b, wool, ao=0.3, ao_h=0.45, noise_amt=0.1, nscale=14,
-          fn=lambda co, n: shade(wool, 0.84) if _nz.noise(co * 22) < -0.35 else (shade(wool, 1.04) if n.z > 0.6 else None))
+          fn=lambda co, n: shade(wool, 0.93) if _nz.noise(co * 22) < -0.4 else (shade(wool, 1.04) if n.z > 0.6 else None), mat="wool")
     parts = [b]
     for x in (-0.13, 0.13):
         for y in (-0.25, 0.25):
@@ -209,7 +209,7 @@ def sheep():
     hp = [sphere("h", (0, 0.45, 0.72), 0.12, (0.85, 1.25, 0.95))]
     paint(hp[0], face, ao=0.0)
     tuft = sphere("tf", (0, 0.42, 0.84), 0.09, (1.2, 1, 0.7))
-    paint(tuft, wool, ao=0.0, noise_amt=0.1, nscale=20)
+    paint(tuft, wool, ao=0.0, noise_amt=0.1, nscale=20, mat="wool")
     hp.append(tuft)
     for sx in (-1, 1):
         e = leaf("ear", (sx * 0.09, 0.42, 0.76), (sx, -0.2, -0.3), 0.12, 0.04, droop=0.1)

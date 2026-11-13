@@ -2,6 +2,8 @@
 Подвижные части — отдельные объекты с точкой вращения в суставе (их анимирует игра)."""
 import math
 
+from mathutils import noise
+
 from kit import (box, cyl, empty, hexcol, ico, join, lathe, leaf, mix, paint, set_origin, set_parent, shade,
                  sphere, subsurf, tube)
 
@@ -57,7 +59,7 @@ def player():
         paint(lid, shade(SKIN, 0.96), ao=0.0, fn=lambda co, n: shade(SKIN_D, 0.85) if n.z < -0.3 else None)
         head_parts.append(lid)
         brow = tube("br", [(sx * 0.07, 0.3, 1.52), (sx * 0.13, 0.31, 1.535), (sx * 0.18, 0.29, 1.52)], 0.014, 6)
-        paint(brow, shade(HAIR, 0.7), ao=0.0)
+        paint(brow, shade(HAIR, 0.7), ao=0.0, mat="smooth")
         cheek = sphere("c", (sx * 0.2, 0.25, 1.31), 0.05, (1.0, 0.4, 0.7))
         paint(cheek, hexcol("f29a8a"), ao=0.0, noise_amt=0)
         head_parts += [white, iris, pupil, glint, brow, cheek]
@@ -88,7 +90,7 @@ def player():
     hm = join(hair, "Hair")
     remesh(hm, 0.014, 3)
     paint(hm, HAIR, ao=0.0, noise_amt=0.06, nscale=14,
-          fn=lambda co, n: 0.82 if (co.z < 1.45 or n.z < -0.2) else (1.1 if n.z > 0.6 else None))
+          fn=lambda co, n: 0.82 if co.z < 1.45 else (1.1 if n.z > 0.6 else None), mat="hair")
     head_parts.append(hm)
     head = join(head_parts, "Head")
     set_origin(head, (0, 0, 1.12))
@@ -246,7 +248,8 @@ def goat():
     body = sphere("gb", (0, 0, 0.56), 0.28, (0.9, 1.55, 0.88), segs=24, rings=14)
     subsurf(body, 1)
     paint(body, fur, ao=0.0, noise_amt=0.06,
-          fn=lambda co, n: patch if (co.x > 0.05 and -0.1 < co.y < 0.15 and co.z > 0.6) else None)
+          fn=lambda co, n: patch if (((co.x - 0.2) / 0.16) ** 2 + ((co.y - 0.03) / 0.16) ** 2 + ((co.z - 0.72) / 0.14) ** 2
+                                     + 0.35 * noise.noise(co * 9.0)) < 1.0 else None)
     parts = [body]
     tail = tube("gt", [(0, -0.42, 0.72), (0, -0.5, 0.82)], [0.05, 0.02], 8)
     paint(tail, fur, ao=0.0)

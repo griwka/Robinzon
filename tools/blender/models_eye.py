@@ -54,16 +54,16 @@ def lyova():
                 parts.append(w)
         # седые растрёпанные волосы
         hair = sphere("hr", (0, -0.03, 1.45), 0.28, (1.0, 1.0, 0.72))
-        paint(hair, hexcol("c8c4bc"), ao=0.0, noise_amt=0.18, nscale=25)
+        paint(hair, hexcol("c8c4bc"), ao=0.0, noise_amt=0.18, nscale=25, mat="hair")
         hp.append(hair)
         for k in range(6):
             a = -0.9 + k * 0.36
             sp = tube("tf", [(math.sin(a) * 0.2, math.cos(a) * 0.1 - 0.05, 1.6), (math.sin(a) * 0.3, math.cos(a) * 0.14 - 0.08, 1.66)], [0.045, 0.006], 6)
-            paint(sp, hexcol("b8b4ac"), ao=0.0)
+            paint(sp, hexcol("b8b4ac"), ao=0.0, mat="hair")
             hp.append(sp)
         # щетина, усталые брови, тонкий рот
         stub = sphere("st", (0, 0.12, 1.24), 0.2, (1.05, 0.75, 0.6))
-        paint(stub, hexcol("9a948a"), ao=0.0, noise_amt=0.3, nscale=40)
+        paint(stub, hexcol("9a948a"), ao=0.0, noise_amt=0.3, nscale=40, mat="stubble")
         hp.append(stub)
         for sx in (-1, 1):
             br = tube("bw", [(sx * 0.04, 0.25, 1.47), (sx * 0.15, 0.24, 1.455)], 0.015, 6)

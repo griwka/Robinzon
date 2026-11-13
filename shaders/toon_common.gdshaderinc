@@ -10,6 +10,12 @@
 
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform bool use_vertex_color = false;
+// текстура цвета (люди, животные, одежда — запечены в атлас tools/blender/texbake.py); без неё — как раньше
+uniform bool use_albedo_tex = false;
+uniform sampler2D albedo_tex : source_color, hint_default_white, filter_linear_mipmap_anisotropic, repeat_disable;
+// > 0 — у границы света тень от карты теней не учитываем: на круглых головах и телах она шла «ступеньками»
+// (самозатенение с шагом карты теней), а там и так мультяшная граница света
+uniform float terminator_soft = 0.0;
 uniform float rim_amount : hint_range(0.0, 1.0) = 0.25;
 uniform float gloss : hint_range(0.0, 1.0) = 0.15;
 uniform float wind_strength = 0.0;   // > 0 — качается на ветру
@@ -82,6 +88,9 @@ void fragment() {
 		vc = vec3(1.0);   // у сетки нет цвета вершин и пришёл мусор — лучше белый, чем «горящий» пиксель
 	}
 	ALBEDO = albedo.rgb * vc;
+	if (use_albedo_tex) {
+		ALBEDO *= texture(albedo_tex, UV).rgb;
+	}
 	if (paint_amount > 0.0) {
 		// трипланарная фактура: крупные мазки (резкие ступени тона) + мелкая крапинка
 		vec3 bl = wn * wn;
@@ -99,6 +108,9 @@ void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	if (LIGHT_IS_DIRECTIONAL) {
 		float sh = smoothstep(0.3, 0.7, ATTENUATION);
+		if (terminator_soft > 0.0) {
+			sh = mix(1.0, sh, smoothstep(0.0, terminator_soft, ndl));
+		}
 		float lit = smoothstep(0.0, 0.045, ndl) * sh;
 		float top = smoothstep(0.55, 0.6, ndl) * sh;     // вторая полоса — объём
 		DIFFUSE_LIGHT += LIGHT_COLOR / PI * (lit * 0.84 + top * 0.16);

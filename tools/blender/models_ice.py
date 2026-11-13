@@ -109,9 +109,9 @@ def ingrid():
     hp = [sphere("hd", (0, 0, 1.37), 0.27, segs=26, rings=14)]
     paint(hp[0], SKIN, ao=0.0, fn=lambda co, n: shade(SKIN, 0.95) if co.z < 1.27 else None)
     hair = sphere("hr", (0, -0.03, 1.44), 0.28, (1.0, 1.02, 0.72))
-    paint(hair, hexcol("d8d4cc"), ao=0.0, noise_amt=0.12, nscale=25, fn=lambda co, n: 0.88 if math.sin(math.atan2(co.y, co.x) * 14) > 0.5 else None)
+    paint(hair, hexcol("d8d4cc"), ao=0.0, noise_amt=0.12, nscale=25, fn=lambda co, n: 0.88 if math.sin(math.atan2(co.y, co.x) * 14) > 0.5 else None, mat="hair")
     bun = sphere("bn", (0, -0.2, 1.55), 0.12, (1.0, 0.9, 0.9))
-    paint(bun, hexcol("cfcac0"), ao=0.0, fn=lambda co, n: 0.85 if math.sin(co.x * 40 + co.z * 30) > 0.6 else None)
+    paint(bun, hexcol("cfcac0"), ao=0.0, fn=lambda co, n: 0.85 if math.sin(co.x * 40 + co.z * 30) > 0.6 else None, mat="hair")
     hp += [hair, bun]
     for sx in (-1, 1):
         w = sphere("w", (sx * 0.1, 0.23, 1.39), 0.045, (1, 0.42, 0.9))
@@ -207,7 +207,7 @@ def walrus():
     body = sphere("wb", (-0.2, 0, 0.5), 0.55, (2.4, 1.2, 0.95), segs=26, rings=16)
     displace(body, 0.04, 0.6)
     paint(body, hide, ao=0.25, ao_h=0.3, noise_amt=0.12, nscale=5,
-          fn=lambda co, n: (hexcol("c8987e") if n.z > 0.6 else (0.85 if math.sin(co.x * 9 + co.z * 4) > 0.8 else None)))
+          fn=lambda co, n: (hexcol("c8987e") if n.z > 0.6 else (0.93 if math.sin(co.x * 9 + co.z * 4) > 0.88 else None)))
     parts = [body]
     for sy in (-1, 1):
         fl = sphere("wf", (0.35, sy * 0.62, 0.12), 0.22, (1.3, 0.55, 0.25), (0, 0, sy * 0.4))
@@ -221,7 +221,7 @@ def walrus():
     hd = sphere("wh", (1.05, 0, 0.62), 0.36, (1.1, 1.0, 0.85), segs=22, rings=12)
     paint(hd, hide, ao=0.0, noise_amt=0.1)
     muzzle = sphere("wm", (1.35, 0, 0.52), 0.22, (0.8, 1.35, 0.75))
-    paint(muzzle, hexcol("d0a888"), ao=0.0, fn=lambda co, n: hexcol("7a5a48") if math.sin(co.y * 60) > 0.5 and n.x > 0.4 else None)
+    paint(muzzle, hexcol("d0a888"), ao=0.0, fn=lambda co, n: hexcol("9a7058") if math.sin(co.y * 60) > 0.86 and n.x > 0.4 else None)
     hp = [hd, muzzle]
     for sy in (-1, 1):
         tusk = tube("tk", [(1.42, sy * 0.1, 0.42), (1.48, sy * 0.12, 0.2), (1.44, sy * 0.13, 0.02)], [0.04, 0.032, 0.008], 8)

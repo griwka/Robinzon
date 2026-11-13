@@ -33,6 +33,8 @@ def shade(c, k):
 # ============================================================ сцена
 def reset():
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    del PAINTS[1:]
+    del OVERLAYS[1:]
 
 
 def link(ob):
@@ -246,9 +248,13 @@ def bake(ob):
 
 
 # ============================================================ раскраска
-def paint(ob, color, ao=0.35, ao_h=0.35, noise_amt=0.06, nscale=3.0, top=0.08, ground=0.0, fn=None, seed=0):
+def paint(ob, color, ao=0.35, ao_h=0.35, noise_amt=0.06, nscale=3.0, top=0.08, ground=0.0, fn=None, seed=0, mat=None):
     """Раскрасить вершины: базовый цвет + мягкое затенение у земли и снизу + лёгкий шум.
-    fn(co, normal) -> множитель или цвет (tuple) для узоров."""
+    fn(co, normal) -> множитель или цвет (tuple) для узоров.
+    Та же «программа раскраски» запоминается (PAINTS, атрибуты pid/p0/n0): если модель потом запекается
+    в текстуру (texbake.py), fn считается в каждом пикселе текстуры, а не в вершинах — границы чёткие.
+    mat — вид поверхности для мелкой детали при запекании: "skin", "cloth", "hair", "fur", "wool",
+    "feather", "smooth" (рог, клюв, копыто), "clean" (глаза, блики — без детали). None — угадать."""
     bake(ob)
     me = ob.data
     if "Col" not in me.color_attributes:
@@ -275,6 +281,54 @@ def paint(ob, color, ao=0.35, ao_h=0.35, noise_amt=0.06, nscale=3.0, top=0.08, g
             out = tuple(min(1.0, max(0.0, v * k)) for v in c)
             attr.data[li].color_srgb = (out[0], out[1], out[2], 1.0)
     me.color_attributes.active_color = attr
+    _remember(ob, "pid", len(PAINTS))
+    PAINTS.append(dict(color=tuple(color), ao=ao, ao_h=ao_h, noise_amt=noise_amt, nscale=nscale, top=top,
+                       ground=ground, fn=fn, seed=seed, mat=mat))
+    return ob
+
+
+# программы раскраски для запекания в текстуру (индекс 0 — «нет программы», берётся цвет вершин)
+PAINTS = [None]
+OVERLAYS = [None]
+
+
+def _remember(ob, key, idx):
+    """Записать в меш номер программы (на грани) и где были вершины и нормали в момент раскраски:
+    потом модель двигают (join, set_origin), а узоры fn(co, n) считаются в тех, исходных координатах."""
+    me = ob.data
+    if key not in me.attributes:
+        me.attributes.new(key, "INT", "FACE")
+    me.attributes[key].data.foreach_set("value", [idx] * len(me.polygons))
+    if key == "pid":
+        for nm in ("p0", "n0"):
+            if nm not in me.attributes:
+                me.attributes.new(nm, "FLOAT_VECTOR", "POINT")
+        co = [0.0] * (len(me.vertices) * 3)
+        me.vertices.foreach_get("co", co)
+        me.attributes["p0"].data.foreach_set("vector", co)
+        nr = [0.0] * (len(me.vertices) * 3)
+        me.vertices.foreach_get("normal", nr)
+        me.attributes["n0"].data.foreach_set("vector", nr)
+
+
+def overpaint(ob, fn):
+    """Перекрасить готовый (уже собранный) объект узором fn(co, n) -> цвет или None — например, полосы
+    тельняшки поверх туловища. co, n — те же координаты, что видел paint. При запекании — по пикселям."""
+    me = ob.data
+    attr = me.color_attributes["Col"]
+    has_p0 = "p0" in me.attributes
+    p0 = me.attributes["p0"].data if has_p0 else None
+    n0 = me.attributes["n0"].data if has_p0 else None
+    for poly in me.polygons:
+        for li in poly.loop_indices:
+            vi = me.loops[li].vertex_index
+            co = p0[vi].vector if has_p0 else me.vertices[vi].co
+            nr = n0[vi].vector if has_p0 else me.vertices[vi].normal
+            c = fn(co, nr)
+            if c is not None:
+                attr.data[li].color_srgb = (c[0], c[1], c[2], 1.0)
+    _remember(ob, "ovl", len(OVERLAYS))
+    OVERLAYS.append(fn)
     return ob
 
 
@@ -325,16 +379,23 @@ def material_for_vertex_colors():
     return mat
 
 
-def export(path):
-    mat = material_for_vertex_colors()
-    for ob in bpy.context.scene.objects:
-        if ob.type == "MESH":
-            ob.data.materials.clear()
-            ob.data.materials.append(mat)
+def export(path, textured=False):
+    """textured — модель уже запечена в текстуру (texbake.bake_model): свой материал с картинкой,
+    цвет вершин не нужен. Иначе — общий материал «цвет вершин»."""
+    if not textured:
+        mat = material_for_vertex_colors()
+        for ob in bpy.context.scene.objects:
+            if ob.type == "MESH":
+                ob.data.materials.clear()
+                ob.data.materials.append(mat)
     kw = dict(filepath=path, export_format="GLB", export_apply=True, export_yup=True, use_selection=False)
     props = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
     if "export_vertex_color" in props:
-        kw["export_vertex_color"] = "ACTIVE"
+        kw["export_vertex_color"] = "NONE" if textured else "ACTIVE"
+    if textured and "export_image_format" in props:
+        kw["export_image_format"] = "AUTO"
+    if textured and "export_texcoords" in props:
+        kw["export_texcoords"] = True
     if "export_animations" in props:
         kw["export_animations"] = False
     bpy.ops.export_scene.gltf(**kw)

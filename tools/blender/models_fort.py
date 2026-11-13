@@ -186,7 +186,7 @@ def stepa():
     bd = [sphere("bd", (0, 0.12, 1.22), 0.26, (1.05, 0.8, 0.95)), sphere("ms", (0, 0.27, 1.32), 0.1, (1.6, 0.6, 0.5))]
     bdm = join(bd, "Beard")
     remesh(bdm, 0.02, 2)
-    paint(bdm, beard, ao=0.0, noise_amt=0.1, nscale=16)
+    paint(bdm, beard, ao=0.0, noise_amt=0.1, nscale=16, mat="beard")
     hp.append(bdm)
     for sx in (-1, 1):
         w = sphere("w", (sx * 0.11, 0.26, 1.43), 0.05, (1, 0.42, 0.9))
@@ -194,7 +194,7 @@ def stepa():
         i = sphere("i", (sx * 0.115, 0.28, 1.425), 0.03, (1, 0.4, 0.9))
         paint(i, hexcol("3a5a7a"), ao=0.0, noise_amt=0)
         br = tube("br", [(sx * 0.05, 0.27, 1.5), (sx * 0.18, 0.25, 1.52)], 0.022, 6)
-        paint(br, beard, ao=0.0)
+        paint(br, beard, ao=0.0, mat="smooth")
         hp += [w, i, br]
     nose = sphere("ns", (0, 0.31, 1.37), 0.05, (1, 0.9, 0.8))
     paint(nose, hexcol("d98a70"), ao=0.0)
@@ -213,7 +213,12 @@ def stepa():
 def pig():
     pink = hexcol("f2a8a8")
     body = sphere("pb", (0, 0, 0.42), 0.3, (0.95, 1.35, 0.85), segs=18, rings=12)
-    paint(body, pink, ao=0.0, fn=lambda co, n: hexcol("8a5a3a") if (co.x > 0.1 and -0.1 < co.y < 0.2 and co.z > 0.45) else None)
+    from mathutils import noise as _nz   # пятно на боку: круглое, с неровным краем
+
+    def spot(co, n):
+        d = ((co.x - 0.2) / 0.16) ** 2 + ((co.y - 0.05) / 0.17) ** 2 + ((co.z - 0.58) / 0.16) ** 2
+        return hexcol("8a5a3a") if d + 0.35 * _nz.noise(co * 9.0) < 1.0 else None
+    paint(body, pink, ao=0.0, fn=spot)
     parts = [body]
     for x in (-0.15, 0.15):
         for y in (-0.25, 0.25):
