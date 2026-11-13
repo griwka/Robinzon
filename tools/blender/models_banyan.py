@@ -186,9 +186,18 @@ def sheep():
     from kit import remesh
     blobs = [sphere("w", (x, y, 0.55 + z), 0.22, segs=12, rings=8) for x, y, z in
              ((0, 0, 0.05), (0.14, 0.2, 0), (-0.14, 0.2, 0), (0.14, -0.2, 0), (-0.14, -0.2, 0), (0, 0.32, 0.02), (0, -0.32, 0.02), (0, 0, 0.18))]
+    import random as _r
+    rr = _r.Random(3)
+    for k in range(70):   # кудряшки шерсти
+        th = rr.uniform(0, math.pi * 0.85)
+        ph = rr.uniform(0, 2 * math.pi)
+        c = (math.sin(th) * math.cos(ph) * 0.3, math.sin(th) * math.sin(ph) * 0.46, 0.6 + math.cos(th) * 0.24)
+        blobs.append(sphere("cu", c, rr.uniform(0.06, 0.09), segs=8, rings=6))
     b = join(blobs, "w")
-    remesh(b, 0.03, 2)
-    paint(b, wool, ao=0.0, noise_amt=0.1, nscale=14)
+    remesh(b, 0.022, 1)
+    from mathutils import noise as _nz
+    paint(b, wool, ao=0.3, ao_h=0.45, noise_amt=0.1, nscale=14,
+          fn=lambda co, n: shade(wool, 0.84) if _nz.noise(co * 22) < -0.35 else (shade(wool, 1.04) if n.z > 0.6 else None))
     parts = [b]
     for x in (-0.13, 0.13):
         for y in (-0.25, 0.25):

@@ -123,16 +123,21 @@ def vera():
 # ================================================================== черепаха
 def tortoise():
     """Гигантская черепаха: высокий панцирь с щитками, толстые ноги, морщинистая шея. Узлы Body и Head."""
-    shell = sphere("sh", (0, 0, 0.42), 0.48, (1.0, 1.25, 0.72), segs=24, rings=14)
+    shell = sphere("sh", (0, 0, 0.42), 0.48, (1.0, 1.25, 0.72), segs=40, rings=24)
+
+    from mathutils import noise as _nz
 
     def scutes(co, n):
-        u = math.atan2(co.y, co.x) * 3.0
-        v = co.z * 9.0
-        if (u % 1.0) < 0.07 or (v % 1.0) < 0.07:
-            return hexcol("4a3a24")
+        # щитки панциря: ячейки (Вороной) с тёмными швами, светлым центром и кольцами роста
+        d, _p = _nz.voronoi(co * 3.4, distance_metric="DISTANCE")
+        edge = d[1] - d[0]
+        if edge < 0.05:
+            return hexcol("3e2e1c")
         if co.z < 0.25:
             return hexcol("8a7a52")
-        return None
+        from kit import mix as _mix
+        base = _mix(hexcol("a8844a"), hexcol("6e5230"), min(1.0, d[0] * 1.6))
+        return shade(base, 0.86) if (d[0] * 26) % 1.0 < 0.22 else base
     paint(shell, hexcol("8a6a3a"), ao=0.0, noise_amt=0.1, nscale=6, fn=scutes)
     rim = tube("rm", [(math.cos(a) * 0.5, math.sin(a) * 0.62, 0.22) for a in [k * math.pi / 12 for k in range(25)]], 0.05, 6, caps=False)
     paint(rim, hexcol("6a5232"), ao=0.0)

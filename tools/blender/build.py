@@ -20,6 +20,9 @@ MODULES = ["models_characters", "models_nature", "models_buildings", "models_far
 PEOPLE = ["player", "marta", "stepa", "timur", "ingrid", "vera", "misha", "renata", "gosha", "petya", "pasha", "lyova"]
 
 
+ANIMALS = ["parrot", "chicken", "goat", "sheep", "pig", "goose", "penguin", "walrus", "tortoise", "monkey", "crab"]
+
+
 def all_builders():
     out = {}
     for m in MODULES:
@@ -44,6 +47,10 @@ def main():
             for ob in kit.bpy.context.scene.objects:
                 if ob.type == "MESH":
                     kit.liven(ob, seed=len(name))
+        if name in ANIMALS:  # животные и птицы: штрихи шерсти и перьев
+            for ob in kit.bpy.context.scene.objects:
+                if ob.type == "MESH":
+                    kit.liven_fur(ob, seed=len(name))
         kit.export(os.path.join(OUT, name + ".glb"))
         tris = sum(len(o.data.loop_triangles) if (o.data.calc_loop_triangles() or True) else 0
                    for o in kit.bpy.context.scene.objects if o.type == "MESH")

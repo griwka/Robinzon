@@ -577,3 +577,27 @@ def liven(ob, seed=0, fold=0.17):
                 r2, g2, b2 = r * k, g * k, b * k
             attr.data[li].color_srgb = (min(1.0, r2), min(1.0, g2), min(1.0, b2), a_)
     return ob
+
+
+def liven_fur(ob, seed=0, amt=0.1):
+    """Шерсть и перья поверх раскраски: короткие штрихи вдоль тела (вперёд-назад), спинка на свету
+    чуть светлее, брюшко — в мягкой тени. Глаза и тёмные мелочи не трогаем."""
+    me = ob.data
+    if "Col" not in me.color_attributes:
+        return ob
+    attr = me.color_attributes["Col"]
+    off = Vector((seed * 2.3, seed * 4.1, seed * 1.7))
+    for poly in me.polygons:
+        for li in poly.loop_indices:
+            v = me.vertices[me.loops[li].vertex_index]
+            co, n = v.co, v.normal
+            r, g, b, a_ = attr.data[li].color_srgb
+            mx, mn = max(r, g, b), min(r, g, b)
+            if mx < 0.14 or (mx > 0.95 and mn > 0.9 and ob.name == "Head"):
+                continue
+            # штрихи: вытянуты вдоль Y (тело смотрит в +Y)
+            st = noise.noise(Vector((co.x * 38, co.y * 9, co.z * 38)) + off)
+            k = 1.0 + amt * (st * 0.9)
+            k *= 1.0 + 0.06 * max(0.0, n.z) - 0.08 * max(0.0, -n.z)
+            attr.data[li].color_srgb = (min(1.0, r * k), min(1.0, g * k), min(1.0, b * k), a_)
+    return ob
