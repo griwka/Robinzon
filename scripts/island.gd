@@ -294,6 +294,7 @@ func _build_grass() -> void:
 	for i in tr.size():
 		grass_field.add("Grass", tr[i], cols[i])
 	grass_field.commit("Grass", tuft_mesh, _grass_mat(), 60.0)
+	_add_clover()
 	if cold:
 		return   # цветы распустятся в оттепель
 
@@ -328,6 +329,41 @@ func _build_grass() -> void:
 	for i in ft.size():
 		grass_field.add("Flowers", ft[i], fc[i])
 	grass_field.commit("Flowers", Models.flower_mesh(), fmat, 50.0)
+
+
+## Низкая травка: клевер (с белыми головками) куртинами по газону — тоже убирается (GrassField, слой Clover).
+func _add_clover() -> void:
+	var src := Models.glb("clover_tuft")
+	if src == null or mix in ["volcano"]:
+		return
+	var mesh: Mesh = null
+	for mi in src.find_children("*", "MeshInstance3D", true, false):
+		mesh = (mi as MeshInstance3D).mesh
+	src.free()
+	if mesh == null:
+		return
+	var g := RandomNumberGenerator.new()
+	g.seed = seed_value + 91
+	var want := 900 if mix != "ice" else 400
+	var placed := 0
+	for t in 9000:
+		if placed >= want:
+			break
+		var cx := g.randf_range(-radius * 1.1, radius * 1.1)
+		var cz := g.randf_range(-radius * 1.1, radius * 1.1)
+		for q in 6:   # куртинка
+			var x := cx + g.randf_range(-1.1, 1.1)
+			var z := cz + g.randf_range(-1.1, 1.1)
+			var h := height_at(x, z)
+			if h < 1.3 or h > 8.0 or normal_at(x, z).y < 0.85 or Vector2(x - camp_center.x, z - camp_center.z).length() < 6.5 or _lava_field(x, z):
+				continue
+			if cold and h > SNOW_LINE - 0.2:
+				continue
+			var s := g.randf_range(0.8, 1.35)
+			grass_field.add("Clover", Transform3D(Basis(Vector3.UP, g.randf() * TAU).scaled(Vector3(s, s, s)), Vector3(x, h - 0.01, z)),
+				Color.WHITE.lerp(Color("e8ffb0"), g.randf() * 0.3))
+			placed += 1
+	grass_field.commit("Clover", mesh, Models.model_mat(true), 40.0)
 
 
 func _grass_mat() -> ShaderMaterial:
@@ -728,6 +764,7 @@ func _spawn_resources() -> void:
 				continue
 			_spawn(holder, kind, Vector3(x, h - 0.05, z), seed_v, ("j%d" if loc == "home" else loc + ":j%d") % _uid, -100.0)
 	_barrier_rings(holder)
+	_spawn_flora(holder, decor)
 	_spawn_fishing_spots(holder)
 	if mix == "fort":
 		_spawn_stepa(holder)
@@ -1168,6 +1205,98 @@ func _spawn(holder: Node3D, kind: String, pos: Vector3, seed_v: int, uid: String
 		node = r
 	node.position = pos
 	holder.add_child(node)
+
+
+## Новые растения (v1.0.5): отдельный проход со своим случайным рядом — номера прежних преград
+## (по ним в сохранении записано, что расчищено) не сдвигаются. Мягкие (руками) растут и у лагеря,
+## кусты под мачете и деревца под топор — только в чаще, дальше 17 м от лагеря.
+func _spawn_flora(holder: Node3D, decor: Node3D) -> void:
+	var g := RandomNumberGenerator.new()
+	g.seed = seed_value + 77
+	var taken := {}   # клетка 2 × 2 м -> есть ли там уже что-то
+	for n in holder.get_children():
+		var q := (n as Node3D).position
+		taken[Vector2i(int(floor(q.x / 2.0)), int(floor(q.z / 2.0)))] = true
+	var patch := FastNoiseLite.new()
+	patch.seed = seed_value + 78
+	patch.frequency = 0.06
+	var camp2 := Vector2(camp_center.x, camp_center.z)
+	var wreck2 := Vector2(wreck_point.x, wreck_point.z)
+	var k := 0
+	var step := 3.0
+	var n_ := int(radius * 1.35 * 2 / step)
+	for j in n_:
+		for i in n_:
+			var x := -radius * 1.35 + i * step + g.randf_range(-1.0, 1.0)
+			var z := -radius * 1.35 + j * step + g.randf_range(-1.0, 1.0)
+			var roll := g.randf()
+			var seed_v := g.randi()
+			var h := height_at(x, z)
+			var p2 := Vector2(x, z)
+			var cell := Vector2i(int(floor(x / 2.0)), int(floor(z / 2.0)))
+			if taken.has(cell) or p2.distance_to(camp2) < 9.5 or p2.distance_to(wreck2) < 7.0 or _lava_field(x, z):
+				continue
+			if _near_poi(p2, {"banyan": 10.0, "fort": 14.5, "storm": 10.5, "ice": 11.0, "volcano": 11.0, "fog": 10.0, "eye": 9.0}.get(mix, 5.0)):
+				continue
+			if mix == "fog" and _near_trail(p2):
+				continue
+			var deep := p2.distance_to(camp2) >= 17.0
+			var lush := patch.get_noise_2d(x, z) * 0.5 + 0.5   # пятна, где растений больше
+			var kind := _flora_kind(h, roll * (1.4 - lush * 0.8), deep)
+			if kind == "":
+				continue
+			taken[cell] = true
+			if kind == "mushrooms":
+				_add_decor(decor, "mushrooms", Vector3(x, h - 0.02, z), seed_v)
+				continue
+			k += 1
+			_spawn(holder, kind, Vector3(x, h - 0.04, z), seed_v, loc + ":f%d" % k, -100.0)
+
+
+## Какое новое растение растёт здесь: по острову, высоте и глубине чащи. "" — ничего.
+func _flora_kind(h: float, r: float, deep: bool) -> String:
+	if mix == "fog":
+		if h > -0.45 and h < 0.5:
+			return "cattail" if r < 0.35 else ""
+		if h < 0.5:
+			return ""
+		if r < 0.1: return "cattail"
+		if r < 0.16: return "swamp_willow" if deep else "taro"
+		if r < 0.24: return "taro"
+		if r < 0.29: return "mushrooms"
+		return ""
+	if h < 1.1:
+		return "ginger" if mix in ["home", "banyan"] and h > 0.6 and r < 0.04 else ""
+	match mix:
+		"storm":
+			if h > 8.5: return "gorse" if deep and r < 0.08 else ""
+			if r < 0.12: return "foxglove"
+			if r < 0.2: return "gorse" if deep else "foxglove"
+			if r < 0.23: return "mushrooms"
+		"ice":
+			if h > SNOW_LINE + 0.4: return ""
+			if r < 0.15: return "cotton_grass"
+			if r < 0.22: return "dwarf_birch" if deep else "cotton_grass"
+			if r < 0.24: return "mushrooms"
+		"volcano":
+			if h > 5.0: return ""
+			if r < 0.08: return "yucca" if deep else ""
+			if r < 0.15: return "ohia" if deep else ""
+			if r < 0.2: return "taro"
+			if r < 0.22: return "mushrooms"
+		"eye":
+			if r < 0.06: return "monstera"
+			if r < 0.1: return "hibiscus" if deep else "ginger"
+			if r < 0.12: return "mushrooms"
+		_:   # тропики: дом, Баньян, форт
+			if h > 9.0: return ""
+			if r < 0.09: return "monstera"
+			if r < 0.16: return "taro"
+			if r < 0.21: return "ginger"
+			if r < 0.26: return "hibiscus" if deep else "monstera"
+			if r < 0.3: return "tree_fern" if deep else "taro"
+			if r < 0.34: return "mushrooms"
+	return ""
 
 
 func _add_decor(holder: Node3D, model: String, pos: Vector3, seed_v: int) -> void:

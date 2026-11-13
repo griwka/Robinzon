@@ -76,6 +76,33 @@ const KINDS := {
 	# --- Туманный остров
 	"mangrove": {"hp": 3, "tool": "stone_axe", "drops": {"mangrove_wood": 2}, "respawn": 150.0,
 		"verb": "Срубить мангр (доски не гниют)", "radius": 0.7, "height": 4.5},
+	# --- новые растения (v1.0.5): мягкие — руками, кусты — мачете, деревца — топором
+	"monstera": {"hp": 1, "tool": "", "drops": {"leaf": 2}, "respawn": 0.0,
+		"verb": "Убрать монстеру", "radius": 0.75, "height": 1.0},
+	"taro": {"hp": 1, "tool": "", "drops": {"leaf": 2}, "respawn": 0.0,
+		"verb": "Убрать листья таро", "radius": 0.75, "height": 1.1},
+	"ginger": {"hp": 1, "tool": "", "drops": {"fiber": 1}, "respawn": 0.0,
+		"verb": "Убрать имбирь", "radius": 0.5, "height": 1.1},
+	"foxglove": {"hp": 1, "tool": "", "drops": {"fiber": 1}, "respawn": 0.0,
+		"verb": "Убрать наперстянку", "radius": 0.45, "height": 1.0},
+	"cotton_grass": {"hp": 1, "tool": "", "drops": {"fiber": 1}, "respawn": 0.0,
+		"verb": "Сорвать пушицу", "radius": 0.5, "height": 0.7},
+	"cattail": {"hp": 1, "tool": "", "drops": {"fiber": 2}, "respawn": 0.0,
+		"verb": "Срезать рогоз", "radius": 0.55, "height": 1.4},
+	"hibiscus": {"hp": 2, "tool": "machete", "drops": {"fiber": 2}, "respawn": 0.0,
+		"verb": "Прорубить куст гибискуса", "radius": 0.8, "height": 1.5},
+	"gorse": {"hp": 2, "tool": "machete", "drops": {"fiber": 2}, "respawn": 0.0,
+		"verb": "Прорубить дрок", "radius": 0.7, "height": 1.1},
+	"dwarf_birch": {"hp": 2, "tool": "machete", "drops": {"wood": 1, "fiber": 1}, "respawn": 0.0,
+		"verb": "Срубить карликовую берёзу", "radius": 0.7, "height": 1.0},
+	"yucca": {"hp": 2, "tool": "machete", "drops": {"fiber": 3}, "respawn": 0.0,
+		"verb": "Срезать юкку", "radius": 0.6, "height": 1.1},
+	"ohia": {"hp": 2, "tool": "machete", "drops": {"fiber": 2, "wood": 1}, "respawn": 0.0,
+		"verb": "Прорубить куст охии", "radius": 0.8, "height": 1.6},
+	"tree_fern": {"hp": 3, "tool": "stone_axe", "drops": {"wood": 2, "leaf": 2}, "respawn": 0.0,
+		"verb": "Срубить древовидный папоротник", "radius": 0.35, "height": 2.8},
+	"swamp_willow": {"hp": 3, "tool": "stone_axe", "drops": {"wood": 3}, "respawn": 0.0,
+		"verb": "Срубить болотную иву", "radius": 0.4, "height": 3.0},
 }
 const MODEL_NAMES := {"tall_grass": ["tall_grass"], "fern": ["fern_a", "fern_b"], "thicket": ["thicket"],
 	"bamboo": ["bamboo_clump"], "jungle_tree": ["jungle_tree_a", "jungle_tree_b"], "fallen_log": ["fallen_log", "fallen_log_b"],
@@ -86,7 +113,11 @@ const MODEL_NAMES := {"tall_grass": ["tall_grass"], "fern": ["fern_a", "fern_b"]
 	"ice_block": ["ice_block"], "ice_wall": ["ice_wall_a", "ice_wall_b"],
 	"aloe": ["aloe_plant"], "coffee_bush": ["coffee_bush"], "charred_tree": ["charred_tree_a", "charred_tree_b"],
 	"ore_vein": ["ore_vein"], "obsidian_rock": ["obsidian_rock"], "basalt": ["basalt_a", "basalt_b"],
-	"mangrove": ["mangrove_a", "mangrove_b"]}
+	"mangrove": ["mangrove_a", "mangrove_b"],
+	"monstera": ["monstera_a", "monstera_b"], "taro": ["taro_a", "taro_b"], "ginger": ["ginger"], "foxglove": ["foxglove"],
+	"cotton_grass": ["cotton_grass"], "cattail": ["cattail"], "hibiscus": ["hibiscus_a", "hibiscus_b"], "gorse": ["gorse"],
+	"dwarf_birch": ["dwarf_birch"], "yucca": ["yucca"], "ohia": ["ohia"], "tree_fern": ["tree_fern_a", "tree_fern_b"],
+	"swamp_willow": ["swamp_willow"]}
 const BUSH_SEEDS := ["seed_carrot", "seed_carrot", "seed_potato", "seed_corn", "seed_cabbage"]
 
 @export var kind := "bush"
@@ -114,7 +145,7 @@ func _ready() -> void:
 		"tall_grass", "fern", "thicket", "bamboo", "jungle_tree", "fallen_log", "cliff", "liana_curtain", "clay", \
 				"heather", "blueberry", "crooked_tree", "scrap_pile", "sand", "rockfall", \
 				"moss", "lingonberry", "pine", "ice_block", "ice_wall", \
-				"aloe", "coffee_bush", "charred_tree", "ore_vein", "obsidian_rock", "basalt", "mangrove":
+				"aloe", "coffee_bush", "charred_tree", "ore_vein", "obsidian_rock", "basalt", "mangrove", 				"monstera", "taro", "ginger", "foxglove", "cotton_grass", "cattail", "hibiscus", "gorse", "dwarf_birch", 				"yucca", "ohia", "tree_fern", "swamp_willow":
 			var names: Array = MODEL_NAMES[kind]
 			visual = Models.glb(names[rng.randi() % names.size()])
 			if visual == null:
@@ -171,7 +202,7 @@ func _ready() -> void:
 
 func _setup_visibility() -> void:
 	# дальние мелкие объекты не рисуем и не даём им тени — так тысяча растений не тормозит
-	var far := 90.0 if kind in ["jungle_tree", "palm", "cliff", "bamboo", "crooked_tree", "rockfall", "pine", "ice_wall", "charred_tree", "basalt", "mangrove"] else 55.0
+	var far := 90.0 if kind in ["jungle_tree", "palm", "cliff", "bamboo", "crooked_tree", "rockfall", "pine", "ice_wall", "charred_tree", "basalt", "mangrove", "tree_fern", "swamp_willow"] else 55.0
 	for mi in visual.find_children("*", "GeometryInstance3D", true, false):
 		var gi := mi as GeometryInstance3D
 		gi.visibility_range_end = far
@@ -188,7 +219,7 @@ var _cap: StaticBody3D
 
 
 ## Густая трава и папоротник: не стена. Сквозь них идут (медленнее), они шуршат и качаются.
-const SOFT := ["tall_grass", "fern", "heather", "moss"]
+const SOFT := ["tall_grass", "fern", "heather", "moss", "monstera", "taro", "ginger", "foxglove", "cotton_grass", "cattail"]
 var _brush_t := 0.0
 
 
@@ -313,7 +344,9 @@ const HIT_SOUND := {"palm": "chop", "driftwood": "chop", "rock": "rock", "pebble
 	"heather": "pull", "blueberry": "rustle", "crooked_tree": "chop", "scrap_pile": "metal", "sand": "plant", "rockfall": "rock",
 	"moss": "pull", "lingonberry": "rustle", "pine": "chop", "ice_block": "ice", "ice_wall": "ice",
 	"aloe": "rustle", "coffee_bush": "rustle", "charred_tree": "chop", "ore_vein": "metal", "obsidian_rock": "ice", "basalt": "rock",
-	"mangrove": "chop"}
+	"mangrove": "chop", "monstera": "pull", "taro": "pull", "ginger": "pull", "foxglove": "pull", "cotton_grass": "pull",
+	"cattail": "pull", "hibiscus": "rustle", "gorse": "rustle", "dwarf_birch": "chop", "yucca": "rustle", "ohia": "rustle",
+	"tree_fern": "chop", "swamp_willow": "chop"}
 
 
 const COLORS := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color("a0a4a8"), "cliff": Color("a0a4a8"),
@@ -324,11 +357,16 @@ const COLORS := {"palm": Color("c9a26b"), "bush": Color("4fae3c"), "rock": Color
 	"sand": Color("ecd29a"), "rockfall": Color("8a8a90"),
 	"moss": Color("8fa060"), "lingonberry": Color("d8343a"), "pine": Color("8a6a4a"), "ice_block": Color("cfeefa"), "ice_wall": Color("cfeefa"),
 	"aloe": Color("6fbf7a"), "coffee_bush": Color("c8302a"), "charred_tree": Color("3a3634"), "ore_vein": Color("a0624a"),
-	"obsidian_rock": Color("3a2a5a"), "basalt": Color("5a5658"), "mangrove": Color("7a5a3a")}
+	"obsidian_rock": Color("3a2a5a"), "basalt": Color("5a5658"), "mangrove": Color("7a5a3a"),
+	"monstera": Color("3f8f45"), "taro": Color("4a9a4a"), "ginger": Color("e8384a"), "foxglove": Color("c858b8"),
+	"cotton_grass": Color("f4f4ee"), "cattail": Color("7a8a4a"), "hibiscus": Color("e8384a"), "gorse": Color("ffd23f"),
+	"dwarf_birch": Color("c8a83a"), "yucca": Color("6a9a5a"), "ohia": Color("e8303a"), "tree_fern": Color("5aa64a"),
+	"swamp_willow": Color("7aa05a")}
 const STONE := ["rock", "cliff", "pebble", "rockfall", "scrap_pile", "ice_block", "ice_wall", "ore_vein", "obsidian_rock", "basalt"]
 ## Что выдёргивают руками с корнем (своя анимация и звук).
-const PULLED := ["tall_grass", "fern", "heather", "moss"]
-const WOOD := ["palm", "jungle_tree", "fallen_log", "bamboo", "driftwood", "crooked_tree", "pine", "charred_tree", "mangrove"]
+const PULLED := ["tall_grass", "fern", "heather", "moss", "monstera", "taro", "ginger", "foxglove", "cotton_grass", "cattail"]
+const WOOD := ["palm", "jungle_tree", "fallen_log", "bamboo", "driftwood", "crooked_tree", "pine", "charred_tree", "mangrove",
+	"tree_fern", "swamp_willow", "dwarf_birch"]
 const HEAVY := ["rock", "cliff", "jungle_tree", "palm", "fallen_log", "bamboo", "crooked_tree", "rockfall", "pine", "ice_wall",
 	"charred_tree", "basalt", "obsidian_rock"]
 var _hit_tw: Tween
@@ -362,7 +400,7 @@ func _hit_fx(player: Node) -> void:
 		FX.burst(self, at, col, 8)
 	elif kind in WOOD:
 		FX.burst(self, at, col, 10)
-		if kind in ["palm", "jungle_tree", "crooked_tree", "pine"]:
+		if kind in ["palm", "jungle_tree", "crooked_tree", "pine", "tree_fern", "swamp_willow"]:
 			FX.leaves(self, Vector3(0, float(cfg["height"]) * 0.8, 0), Color("4f7a4a") if kind == "pine" else Color("4f9a4a"), 5)
 	else:
 		FX.leaves(self, at, col, 7)
@@ -386,7 +424,7 @@ func _deplete() -> void:
 	var col: Color = COLORS.get(kind, Color("e9d8b0"))
 	var big := kind in HEAVY or kind in ["thicket", "liana_curtain"]
 	var tw := create_tween()
-	if kind in ["palm", "jungle_tree", "crooked_tree", "pine", "charred_tree", "mangrove"]:
+	if kind in ["palm", "jungle_tree", "crooked_tree", "pine", "charred_tree", "mangrove", "tree_fern", "swamp_willow"]:
 		# дерево валится от игрока, бьётся о землю: пыль кольцом, глухой удар, тряска
 		var away := Vector3.FORWARD
 		if _hitter is Node3D:
