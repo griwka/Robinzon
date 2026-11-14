@@ -560,7 +560,16 @@ def supply_crate():
     for x in (-0.48, 0.48):
         parts.append(plank("cf", (x, 0, 0.36), (0.08, 0.74, 0.72), col=hexcol("8a5a32")))
     label = box("lb", (0, -0.36, 0.4), (0.55, 0.01, 0.2))
-    paint(label, CLOTH, ao=0.0, fn=lambda co, n: hexcol("3a2a1a") if (0.37 < co.z < 0.43 and abs(co.x) < 0.22) else None)
+    def stencil(co, n):
+        # надпись по трафарету: «буквы» — короткие штрихи с промежутками (шум), а не сплошная полоса
+        from mathutils import noise
+        if not (0.375 < co.z < 0.425 and abs(co.x) < 0.21):
+            return None
+        letter = math.floor(co.x / 0.034)
+        gap = (co.x / 0.034) % 1.0 > 0.78
+        hole = noise.noise(Vector((co.x * 90.0, co.z * 90.0, letter * 1.7))) > 0.25
+        return None if (gap or hole) else hexcol("3a2a1a")
+    paint(label, CLOTH, ao=0.0, fn=stencil)
     parts.append(label)
     body = join(parts, "Crate")
     lid_parts = [plank("lid%d" % i, (0, -0.26 + i * 0.26, 0.75), (1.04, 0.25, 0.08), seed=i, col=hexcol("bf8a52")) for i in range(3)]

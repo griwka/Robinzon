@@ -358,9 +358,8 @@ def ore_vein():
     """Рудная жила: глыба тёмного камня с рыжими ржавыми прожилками и блёстками."""
     s = ico("ov", (0, 0, 0.5), 0.85, (1.25, 1.0, 0.75), sub=3)
     displace(s, 0.25, 0.6, "VORONOI")
-    paint(s, hexcol("5e5658"), ao=0.25, ao_h=0.5, noise_amt=0.1,
-          fn=lambda co, n: (hexcol("c8643a") if math.sin(co.x * 6 + co.z * 9) > 0.75 else
-                            (hexcol("e8a050") if math.sin(co.x * 23 + co.y * 17) > 0.95 else None)))
+    # прожилки, ореол ржавчины и блёстки рисует texbake_props ("ore") — извилистыми линиями по шуму
+    paint(s, hexcol("5e5658"), ao=0.25, ao_h=0.5, noise_amt=0.1)
     join([s], "OreVein")
 
 
@@ -372,8 +371,9 @@ def obsidian_rock():
         a = k * 1.6
         c = _flat(cyl("ob", (math.cos(a) * 0.3, math.sin(a) * 0.3, 0.0), r.uniform(0.25, 0.35), 0.02, r.uniform(0.6, 1.2),
                       (r.uniform(-0.3, 0.3), r.uniform(-0.3, 0.3), a), segs=5))
+        # отлив и раковистый излом — texbake_props ("obsidian"); здесь только светлые верхние и тёмные боковые грани
         paint(c, OBSIDIAN, ao=0.0, noise_amt=0.0,
-              fn=lambda co, n: (hexcol("8a6ab8") if n.z > 0.3 and math.sin(co.x * 9) > 0.3 else (hexcol("4a3a6a") if n.x > 0.5 else None)))
+              fn=lambda co, n: (hexcol("8a6ab8") if n.z > 0.55 else (hexcol("4a3a6a") if n.x > 0.5 else None)))
         parts.append(c)
     base = ico("bs", (0, 0, 0.1), 0.5, (1.2, 1.0, 0.4), sub=1)
     paint(base, BASALT, ao=0.0)
@@ -393,7 +393,8 @@ def _basalt(seed):
             c = _flat(cyl("bc", (x, y, -0.1), 0.24, 0.24, h, segs=6))
             parts.append(c)
     b = join(parts, "Basalt")
-    paint(b, BASALT, ao=0.25, ao_h=0.8, noise_amt=0.08, fn=_basalt_fn())
+    # светлые торцы; поры, трещины-отдельности и пятна — texbake_props ("basalt"), без косых полос _basalt_fn
+    paint(b, BASALT, ao=0.25, ao_h=0.8, noise_amt=0.08, fn=lambda co, n: shade(BASALT, 1.25) if n.z > 0.6 else None)
 
 
 def basalt_a():

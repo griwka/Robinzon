@@ -287,7 +287,7 @@ def letters_box():
     for k in range(5):
         x = -0.2 + k * 0.1
         st = box("st", (x, 0, 0.44), (0.08, 0.26, 0.14), (0.0, 0.08 * (k % 2 - 0.5), 0))
-        paint(st, hexcol("efe4c8"), ao=0.0, fn=lambda co, n: shade(hexcol("efe4c8"), 0.9) if (co.z * 50) % 1.0 < 0.3 else None)
+        paint(st, hexcol("efe4c8"), ao=0.0)    # обрез пачки тонкими листами — texbake_props ("paper")
         tie = box("ti", (x, 0, 0.44), (0.085, 0.02, 0.15))
         paint(tie, hexcol("c87a52"), ao=0.0)
         parts += [st, tie]
@@ -295,6 +295,17 @@ def letters_box():
     paint(top, hexcol("f6ecd2"), ao=0.0, fn=lambda co, n: hexcol("5a4a8a") if abs(co.y + 0.05) < 0.012 and abs(co.x - 0.05) < 0.08 else None)
     parts.append(top)
     join(parts, "LettersBox")
+
+
+def _text_fn(co, n):
+    """Строчки рукописи на развороте: слова разной длины с пробелами (по шуму), поля у корешка и по краям."""
+    from mathutils import Vector, noise
+    if n.z < 0.7 or abs(co.x) < 0.06 or abs(co.x) > 0.47 or abs(co.y) > 0.25:
+        return None
+    row = math.floor(co.y * 22)
+    if (co.y * 22) % 1.0 > 0.2:
+        return None
+    return hexcol("4a3a2a") if noise.noise(Vector((co.x * 28.0, row * 3.1, 0.5))) > -0.18 else None
 
 
 def keepers_book():
@@ -310,7 +321,7 @@ def keepers_book():
         cover = box("cv", (sx * 0.27, 0, 0.98), (0.52, 0.66, 0.04), (0, sx * -0.08, 0), bev=0.01)
         paint(cover, hexcol("6a2e22"), ao=0.0)
         pages = box("pg", (sx * 0.25, 0, 1.03), (0.46, 0.6, 0.07), (0, sx * -0.1, 0), bev=0.01)
-        paint(pages, hexcol("efe2c0"), ao=0.0, fn=lambda co, n: (hexcol("4a3a2a") if n.z > 0.7 and (co.y * 22) % 1.0 < 0.2 and abs(co.x) > 0.06 else None))
+        paint(pages, hexcol("efe2c0"), ao=0.0, fn=_text_fn)
         parts += [cover, pages]
     spine = tube("sn", [(0, -0.3, 1.0), (0, 0.3, 1.0)], 0.04, 8)
     paint(spine, hexcol("5a2418"), ao=0.0)

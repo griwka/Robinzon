@@ -153,6 +153,13 @@
   `foliage`/`fruit`). `kit.leaf` пишет координаты листа (атрибуты `lf0`/`lf1`) — по ним жилки, край и блик. Кроны — «чешуйками»
   (`texbake._scales`, ячейки Вороного `worley`). Клевер (`clover_tuft`, MultiMesh травы) — на цвете вершин. Плоды на грядках
   и деревьях подкрашивает копия их же материала — `Models.tint_mat(mi)` (не `model_mat`: у запечённых нет цвета вершин).
+- **Текстуры камней и мелочи** (v1.0.10, `tools/blender/texbake_props.py`, список `PROPS` — валуны, галька, скалы, обвал, базальт,
+  обсидиан, руда, лёд и припай, ракушка, плавник, глина, песок, железо, ящики, сундуки, вещи и все `tool_*`): вид поверхности —
+  **по пикселю**: цвет, который вернула `fn` (мох на камне, снег на льду, латунные оковки), ищется в `COLORS`/`MODEL_COLORS`,
+  иначе `mat=`, иначе `MODEL_KIND`. Свои виды: `rock`, `cliff`, `basalt`, `obsidian`, `ore`, `flint`, `ice`, `snow`, `moss`, `sand`, `mud`,
+  `shell`, `driftwood`, `leather`, `cork`, `paper`, `brass`, `edge`, `forged`, `enamel`, `coal`, `ember`, `glass`, `rubber`, `water`, `fish`; остальное —
+  `texbake.detail_build`. Ячеистый шум — `texbake_props.cells()`. Атлас 256–512 (инструменты — 512, скалы и ледяные стены — 1024,
+  `texbake_props.TEX_SIZE`). Лёд мелочи красится `_snow_fn` (не `_ice_fn` с полосами), базальт — без `_basalt_fn`.
 - **Живость моделей:** складки ткани, пряди, шерсть у запечённых моделей рисует `texbake.detail` (по пикселям). Прежние
   `kit.liven` / `kit.liven_fur` (то же по вершинам) остались в `kit.py` для моделей на цвете вершин, `build.py` их больше не зовёт.
   Общие помощники дерева: `kit.bark_trunk`, `wood_cap` (торец с кольцами), `splinters`, `bark_fn`, `smooth_path`; `log()`/`plank()`
