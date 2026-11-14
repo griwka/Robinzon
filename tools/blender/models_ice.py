@@ -46,6 +46,26 @@ def _ice_fn(base=ICE, snow_z=None, snow_n=0.55):
     return f
 
 
+def _glacier_fn(base=ICE, snow_z=None, snow_n=0.55):
+    """Лёд особых мест (v1.0.10, запекается в текстуру): слои, трещины и пузырьки рисует texbake_places
+    ("glacier"/"ice"), здесь — только снег сверху пятнами по шуму и светлые верхние грани (без полос «через одну»)."""
+    from mathutils import noise as _nz
+
+    def f(co, n):
+        if snow_z is not None and co.z > snow_z and n.z > snow_n:
+            return SNOW if _nz.noise(co * 1.7) > -0.35 else SNOW_SH
+        if n.z > 0.5:
+            return shade(base, 1.12)
+        # глубокий синий лёд и светлые сколы — пятнами по шуму
+        v = _nz.noise(co * 0.55) + 0.4 * _nz.noise(co * 1.6 + Vector((3.0, 0, 0)))
+        if v > 0.5:
+            return ICE_D
+        if v < -0.55:
+            return ICE_L
+        return None
+    return f
+
+
 def _block(name, w, d, h, cuts=8, z0=0.0):
     """Брусок w×d×h (низ — на z0) с частой сеткой: его удобно гнуть и покрывать рельефом."""
     bm = bmesh.new()
@@ -256,14 +276,14 @@ def glacier_wall():
         if y < 0:
             v.co.y += z * 0.03
     displace(wall, 0.28, 0.9, "VORONOI")
-    paint(wall, ICE, ao=0.3, ao_h=1.5, noise_amt=0.1, nscale=1.5, fn=_ice_fn(ICE, snow_z=7.4, snow_n=0.4))
+    paint(wall, ICE, ao=0.3, ao_h=1.5, noise_amt=0.1, nscale=1.5, fn=_glacier_fn(ICE, snow_z=7.4, snow_n=0.4), mat="glacier")
     parts = [wall]
     # снежный бортик
     lip = tube("lp", [(math.sin(a / R) * (R - 0.1), R - math.cos(a / R) * (R - 0.1), 8.05) for a in [-2.0 + k * 0.4 for k in range(11)]],
                0.42, 10, caps=True)
     lip.scale = (1.0, 1.0, 0.65)
     displace(lip, 0.1, 0.3)
-    paint(lip, SNOW, ao=0.0, noise_amt=0.06, fn=lambda co, n: SNOW_SH if n.z < -0.2 else None)
+    paint(lip, SNOW, ao=0.0, noise_amt=0.06, fn=lambda co, n: SNOW_SH if n.z < -0.2 else None, mat="snow")
     parts.append(lip)
     _icicles(parts, -1.7, 1.7, -0.4, 7.85, 9, 11, (0.4, 1.3), 0.08)
     join(parts, "GlacierWall")
@@ -276,14 +296,14 @@ def ice_steps():
         z = 0.2 + k * 0.5
         x = -0.18 if k % 2 == 0 else 0.18
         st = box("st", (x, -0.02, z), (0.34, 0.2, 0.06), bev=0.02)
-        paint(st, ICE_L, ao=0.0, fn=lambda co, n: SNOW if n.z > 0.5 else None)
+        paint(st, ICE_L, ao=0.0, fn=lambda co, n: SNOW if n.z > 0.5 else None, mat="ice")
         hole = box("hl", (x, 0.04, z + 0.06), (0.3, 0.08, 0.1), bev=0.02)
-        paint(hole, ICE_D, ao=0.0)
+        paint(hole, ICE_D, ao=0.0, mat="ice")
         parts += [st, hole]
     peg = tube("pg", [(0.3, 0.05, 0.55), (0.3, -0.14, 0.6)], 0.02, 6)
     paint(peg, IRON, ao=0.0)
     rope = tube("rp", [(0.3, -0.13, 0.0), (0.31, -0.15, 0.5), (0.3, -0.14, 1.0)], 0.018, 6)
-    paint(rope, hexcol("c9a467"), ao=0.0, fn=lambda co, n: 0.85 if int(co.z * 30) % 2 else None)
+    paint(rope, hexcol("c9a467"), ao=0.0, mat="rope")   # пряди винтом рисует запекание
     parts += [peg, rope]
     join(parts, "IceSteps")
 
@@ -300,12 +320,15 @@ def frozen_waterfall():
     jets.append(pool)
     w = join(jets, "Waterfall")
     remesh(w, 0.14, 3)
-    paint(w, ICE_L, ao=0.2, ao_h=0.8, noise_amt=0.1, nscale=2,
-          fn=lambda co, n: (ICE_D if math.sin(co.x * 11) > 0.75 else (ICE if math.sin(co.x * 5 + co.z * 0.7) > 0.4 else None)))
+    # застывшие струи: голубые натёки по шуму, вытянутому сверху вниз (не полосы через одну)
+    from mathutils import noise as _nz
+    paint(w, ICE_L, ao=0.2, ao_h=0.8, noise_amt=0.1, nscale=2, mat="ice",
+          fn=lambda co, n: (ICE_D if _nz.noise(Vector((co.x * 2.6, co.y * 2.6, co.z * 0.35))) > 0.38 else
+                            (ICE if _nz.noise(Vector((co.x * 1.4 + 5.0, co.y * 1.4, co.z * 0.25))) > 0.05 else None)))
     parts = [w]
     _icicles(parts, -1.5, 1.5, -0.5, 4.0, 7, 23, (0.4, 1.0), 0.07)
     snow = sphere("sn", (0, -0.2, 8.0), 1.0, (2.0, 0.8, 0.35))
-    paint(snow, SNOW, ao=0.0)
+    paint(snow, SNOW, ao=0.0, mat="snow")
     parts.append(snow)
     join(parts, "FrozenWaterfall")
 
@@ -314,11 +337,11 @@ def ice_ledge():
     """Ледяной уступ 3,4 × 3,4 м, 4,2 м в высоту (низ — z=0): голубая глыба со снежной шапкой."""
     blk = _block("lg", 3.5, 3.5, 4.2, cuts=8)
     displace(blk, 0.22, 0.8, "VORONOI")
-    paint(blk, ICE, ao=0.3, ao_h=1.0, noise_amt=0.1, fn=_ice_fn(ICE, snow_z=3.6, snow_n=0.45))
+    paint(blk, ICE, ao=0.3, ao_h=1.0, noise_amt=0.1, fn=_glacier_fn(ICE, snow_z=3.6, snow_n=0.45), mat="glacier")
     parts = [blk]
     cap = sphere("cp", (0, 0, 4.15), 1.8, (1.05, 1.05, 0.18))
     displace(cap, 0.06, 0.3)
-    paint(cap, SNOW, ao=0.0, fn=lambda co, n: SNOW_SH if n.z < 0.3 else None)
+    paint(cap, SNOW, ao=0.0, fn=lambda co, n: SNOW_SH if n.z < 0.3 else None, mat="snow")
     parts.append(cap)
     _icicles(parts, -1.5, 1.5, -1.8, 4.0, 6, 5, (0.3, 0.8), 0.07)
     join(parts, "IceLedge")
@@ -329,6 +352,7 @@ def observatory():
     """Обсерватория: купол из голубых ледяных блоков (как иглу) с медной щелью для телескопа,
     входной тамбур с деревянной дверью (−Y Blender → +Z Godot), железная труба печки, снег вокруг."""
     dome = lathe("dm", [(2.9, 0.0), (2.95, 0.6), (2.8, 1.6), (2.4, 2.6), (1.7, 3.4), (0.9, 3.85), (0.0, 4.0)], 28)
+    from models_buildings import boards
     subsurf(dome, 1)
 
     def blocks(co, n):
@@ -340,27 +364,28 @@ def observatory():
         if co.z > 3.3:
             return SNOW
         return shade(ICE, 0.92 + 0.12 * ((row * 7 + col * 3) % 5) / 4)
-    paint(dome, ICE, ao=0.3, ao_h=1.2, noise_amt=0.05, fn=blocks)
+    paint(dome, ICE, ao=0.3, ao_h=1.2, noise_amt=0.05, fn=blocks, mat="ice")
     parts = [dome]
     # медная щель через верх
     for sx in (-1, 1):
         rib = tube("rb", [(sx * 0.35, math.cos(a) * 2.95 * 0 + 2.9 * math.cos(a), 0.3 + 3.75 * math.sin(a)) for a in
                           [math.pi * 0.08 + k * math.pi * 0.42 / 8 for k in range(9)]], 0.07, 6)
-        paint(rib, COPPER, ao=0.0, fn=lambda co, n: hexcol("5fb39a") if math.sin(co.z * 9) > 0.8 else None)
+        paint(rib, COPPER, ao=0.0, mat="brass")   # патина пятнами — при запекании
         parts.append(rib)
     slit = box("sl", (0, 1.6, 3.55), (0.6, 2.0, 0.08), (0.75, 0, 0))
     paint(slit, hexcol("2a3a4a"), ao=0.0)
     parts.append(slit)
     tube_t = cyl("tt", (0, 1.4, 3.0), 0.14, 0.12, 1.6, (-0.75, 0, 0), 12)
-    paint(tube_t, BRASS, ao=0.0, fn=lambda co, n: shade(BRASS, 0.8) if math.sin(co.z * 14) > 0.85 else None)
+    paint(tube_t, BRASS, ao=0.0, mat="brass")
     parts.append(tube_t)
     # тамбур с дверью
     hall = lathe("hl", [(1.0, 0.0), (1.02, 0.8), (0.85, 1.6), (0.5, 2.0), (0.0, 2.1)], 18, loc=(0, -2.6, 0), scale=(1.0, 1.25, 1.0))
-    paint(hall, ICE, ao=0.3, ao_h=0.8, fn=blocks)
+    paint(hall, ICE, ao=0.3, ao_h=0.8, fn=blocks, mat="ice")
     parts.append(hall)
     door = box("dr", (0, -3.82, 0.85), (0.9, 0.12, 1.7), bev=0.04)
-    paint(door, hexcol("8a5a32"), ao=0.0, fn=lambda co, n: (hexcol("6b4524") if int(co.x * 9) % 3 == 0 else
-                                                          (BRASS if (abs(co.x - 0.3) < 0.04 and abs(co.z - 0.9) < 0.05) else None)))
+    _door_boards = boards(3.3, axis=0)
+    paint(door, hexcol("8a5a32"), ao=0.0, mat="wood",
+          fn=lambda co, n: BRASS if (abs(co.x - 0.3) < 0.04 and abs(co.z - 0.9) < 0.05) else _door_boards(co, n))
     frame = tube("fr", [(-0.5, -3.85, 0.0), (-0.5, -3.85, 1.75), (0.5, -3.85, 1.75), (0.5, -3.85, 0.0)], 0.06, 6)
     paint(frame, hexcol("6b4524"), ao=0.0)
     lamp = sphere("lm", (0.62, -3.95, 1.55), 0.09)
@@ -379,7 +404,7 @@ def observatory():
         if abs(math.sin(a) + 1) < 0.25:
             continue
         sd = sphere("sd", (math.cos(a) * 3.0, math.sin(a) * 3.0, 0.05), r.uniform(0.5, 0.8), (1.4, 1.0, 0.45))
-        paint(sd, SNOW, ao=0.0, fn=lambda co, n: SNOW_SH if n.z < 0.3 else None)
+        paint(sd, SNOW, ao=0.0, fn=lambda co, n: SNOW_SH if n.z < 0.3 else None, mat="snow")
         parts.append(sd)
     join(parts, "Observatory")
 
@@ -395,7 +420,7 @@ def telescope():
     paint(mount, BRASS, ao=0.0)
     tube_t = lathe("tb", [(0.0, -0.9), (0.14, -0.9), (0.15, -0.6), (0.17, 0.4), (0.2, 1.3), (0.21, 1.45), (0.0, 1.45)], 16,
                    loc=(0, 0, 1.4), rot=(-0.85, 0, 0))
-    paint(tube_t, BRASS, ao=0.0, fn=lambda co, n: (shade(BRASS, 0.75) if math.sin((co.y * 0.6 + co.z) * 7) > 0.9 else None))
+    paint(tube_t, BRASS, ao=0.0, mat="brass")
     lens = sphere("ln", (0, 1.15, 2.4), 0.17, (1.0, 0.3, 1.0), (-0.85, 0, 0))
     paint(lens, hexcol("bfe8f0"), ao=0.0, noise_amt=0)
     eye = tube("ey", [(0, -0.55, 0.95), (0, -0.7, 0.85)], 0.05, 8)
@@ -407,7 +432,7 @@ def telescope():
 def star_dial():
     """Звёздный круг: каменная тумба с медным диском, шесть делений (на первом — Полярная звезда)."""
     ped = lathe("pd2", [(0.3, 0.0), (0.34, 0.1), (0.24, 0.3), (0.22, 0.8), (0.32, 0.92), (0.0, 0.94)], 16)
-    paint(ped, STONE_PALE, ao=0.2, ao_h=0.4, noise_amt=0.1)
+    paint(ped, STONE_PALE, ao=0.2, ao_h=0.4, noise_amt=0.1, mat="ashlar")
     disk = cyl("dk", (0, 0, 0.94), 0.64, 0.62, 0.08, segs=36)
     paint(disk, hexcol("2a3a5a"), ao=0.0, noise_amt=0, fn=lambda co, n: COPPER if math.hypot(co.x, co.y) > 0.58 else None)
     parts = [ped, disk]
@@ -422,7 +447,7 @@ def star_dial():
     paint(polar, hexcol("fff6c0"), ao=0.0, noise_amt=0)
     parts.append(polar)
     snow = sphere("sn", (0.25, 0.2, 0.05), 0.35, (1.4, 1.2, 0.3))
-    paint(snow, SNOW, ao=0.0)
+    paint(snow, SNOW, ao=0.0, mat="snow")
     parts.append(snow)
     join(parts, "StarDial")
 
@@ -594,7 +619,7 @@ def _cold_heart(frozen):
     parts = []
     tower = lathe("tw", [(1.8, 0.0), (1.7, 0.5), (1.45, 3.5), (1.25, 7.0), (1.05, 8.6), (1.35, 8.9), (1.35, 9.2), (0.0, 9.2)], 20)
     displace(tower, 0.07, 0.5, "VORONOI")
-    paint(tower, STONE_PALE, ao=0.3, ao_h=1.2, noise_amt=0.1, nscale=3,
+    paint(tower, STONE_PALE, ao=0.3, ao_h=1.2, noise_amt=0.1, nscale=3, mat="ashlar",
           fn=lambda co, n: (hexcol("8fa8c0") if (co.z * 1.6) % 1.0 < 0.07 else
                             (hexcol("6fb4d8") if (abs(math.atan2(co.y, co.x) + 1.57) < 0.1 and co.z > 2.5) else None)))
     parts.append(tower)
@@ -606,7 +631,7 @@ def _cold_heart(frozen):
         parts.append(stone("bs", (math.cos(a) * 2.3, math.sin(a) * 2.3, 0.15), 0.4, k, STONE_PALE))
     t = join(parts, "ColdHeart")
     bowl = lathe("bw", [(0.0, 9.2), (0.6, 9.25), (0.9, 9.6), (0.8, 9.65), (0.0, 9.4)], 18)
-    paint(bowl, hexcol("8fa0b0"), ao=0.0)
+    paint(bowl, hexcol("8fa0b0"), ao=0.0, mat="metal")
     set_parent(bowl, t)
     heart = ico("hr", (0, 0, 9.75), 0.35, (0.8, 0.8, 1.3), sub=1)
     paint(heart, hexcol("bfe8ff"), ao=0.0, noise_amt=0, fn=lambda co, n: hexcol("ffffff") if n.z > 0.5 else (ICE_D if n.z < -0.3 else None))
@@ -616,7 +641,7 @@ def _cold_heart(frozen):
         r = rnd(17)
         shell = lathe("sh", [(2.6, 0.0), (2.5, 1.5), (2.2, 3.5), (1.9, 5.2), (1.6, 6.0), (1.2, 6.3)], 7)
         displace(shell, 0.35, 1.2, "VORONOI")
-        paint(shell, ICE, ao=0.25, ao_h=1.5, noise_amt=0.08, fn=_ice_fn(ICE, snow_z=5.0, snow_n=0.5))
+        paint(shell, ICE, ao=0.25, ao_h=1.5, noise_amt=0.08, fn=_glacier_fn(ICE, snow_z=5.0, snow_n=0.5), mat="ice")
         parts2 = [shell]
         for k in range(9):
             a = k * 2 * math.pi / 9 + r.uniform(-0.2, 0.2)
@@ -625,17 +650,17 @@ def _cold_heart(frozen):
             tilt = r.uniform(0.35, 0.7)
             sp = cyl("sp", (math.cos(a) * 2.1, math.sin(a) * 2.1, z), 0.45, 0.0, ln,
                      (0, tilt, a), segs=5)
-            paint(sp, ICE_L, ao=0.0, noise_amt=0.05, fn=lambda co, n: ICE if n.z < 0.0 else None)
+            paint(sp, ICE_L, ao=0.0, noise_amt=0.05, fn=lambda co, n: ICE if n.z < 0.0 else None, mat="ice")
             parts2.append(sp)
         cap = sphere("cp", (0, 0, 9.55), 1.0, (1.0, 1.0, 0.55))
         displace(cap, 0.08, 0.3)
-        paint(cap, SNOW, ao=0.0, fn=lambda co, n: SNOW_SH if n.z < 0.2 else None)
+        paint(cap, SNOW, ao=0.0, fn=lambda co, n: SNOW_SH if n.z < 0.2 else None, mat="snow")
         parts2.append(cap)
         _icicles(parts2, -1.2, 1.2, -1.35, 9.1, 7, 31, (0.5, 1.3), 0.09)
         for k in range(6):   # наледь на кладке выше панциря
             a = k * math.pi / 3 + 0.4
             fr = sphere("fr", (math.cos(a) * 1.2, math.sin(a) * 1.2, r.uniform(6.6, 8.4)), 0.35, (1.0, 1.0, 1.6))
-            paint(fr, ICE_L, ao=0.0)
+            paint(fr, ICE_L, ao=0.0, mat="ice")
             parts2.append(fr)
         c = join(parts2, "Crust")
         set_parent(c, t)
@@ -643,7 +668,7 @@ def _cold_heart(frozen):
         for k in range(8):   # иней и капель на кладке
             a = k * math.pi / 4
             fr = sphere("fr", (math.cos(a) * 1.4, math.sin(a) * 1.4, 8.95), 0.18, (1.6, 1.0, 0.35))
-            paint(fr, SNOW, ao=0.0)
+            paint(fr, SNOW, ao=0.0, mat="snow")
             set_parent(fr, t)
     empty("FirePoint", (0, 0, 9.5), t)
 

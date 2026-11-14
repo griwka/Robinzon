@@ -3,6 +3,7 @@
 import math
 
 from mathutils import Vector
+from mathutils import noise as _nz
 
 from kit import (box, cyl, displace, empty, hexcol, ico, join, lathe, leaf, mix, paint, remesh, rnd, set_origin,
                  set_parent, shade, sphere, subsurf, tube)
@@ -35,8 +36,9 @@ def banyan_giant():
         parts.append(tube("br", [(0, 0, z0), (math.cos(a) * 6, math.sin(a) * 6, z0 + 3), (math.cos(a) * 11, math.sin(a) * 11, z0 + 4)], [1.0, 0.6, 0.25], 8))
     for p in parts:
         displace(p, 0.25, 0.8)
-        paint(p, BARK, ao=0.3, ao_h=3.0, noise_amt=0.15, nscale=0.8,
-              fn=lambda co, n: hexcol("5f8a3a") if (n.z > 0.4 and co.z < 6) else (0.8 if math.sin(co.z * 2 + math.atan2(co.y, co.x) * 7) > 0.75 else None))
+        # борозды коры вдоль стволов рисует запекание ("bark"); мох — на корнях снизу
+        paint(p, BARK, ao=0.3, ao_h=3.0, noise_amt=0.15, nscale=0.8, mat="giant_bark",
+              fn=lambda co, n: hexcol("5f8a3a") if (n.z > 0.4 and co.z < 6 and _nz.noise(co * 0.7) > -0.25) else None)
     join(parts, "Trunk")
     # воздушные корни — свисают с ветвей
     roots = []
@@ -47,7 +49,7 @@ def banyan_giant():
         roots.append(tube("ar", [(math.cos(a) * r, math.sin(a) * r, top), (math.cos(a) * r * 1.02, math.sin(a) * r * 1.02, top * 0.5), (math.cos(a) * r, math.sin(a) * r, -0.2)],
                           [0.12, 0.1, 0.16], 6))
     for rt in roots:
-        paint(rt, shade(BARK, 1.1), ao=0.0, noise_amt=0.1)
+        paint(rt, shade(BARK, 1.1), ao=0.0, noise_amt=0.1, mat="bark")
     join(roots, "AerialRoots")
     # крона
     blobs = []
@@ -79,7 +81,9 @@ def deck():
         parts.append(r)
     for x, y in ((-1.8, 1.4), (1.6, 1.3)):
         bk = lathe("bs", [(0.0, 0.07), (0.25, 0.07), (0.3, 0.4), (0.0, 0.4)], 12, loc=(x, y, 0))
-        paint(bk, hexcol("c9a050"), ao=0.0, fn=lambda co, n: 0.8 if int(co.z * 30) % 2 else None)
+        # плетёная корзина: ряды прутьев тонкими швами и стойки (без полос «через одну»)
+        paint(bk, hexcol("c9a050"), ao=0.0, mat="bamboo",
+              fn=lambda co, n: 0.7 if ((co.z * 22) % 1.0 < 0.14 or (math.atan2(co.y - 0.0, co.x) * 2.5) % 1.0 < 0.06) else None)
         parts.append(bk)
     join(parts, "Deck")
 
@@ -393,7 +397,7 @@ def treehouse_ruin():
     for k in range(5):
         parts.append(plank("db", (-0.4 + k * 0.25, -0.2 + (k % 3) * 0.3, 0.06 + 0.04 * k), (0.9, 0.18, 0.05), (0.1 * k, 0.05, 0.6 * k)))
     tarp = box("tp", (0.2, 0.2, 0.15), (1.4, 1.2, 0.04), (0.15, -0.1, 0.3), bev=0.02)
-    paint(tarp, hexcol("c9bfa0"), ao=0.0, fn=lambda co, n: hexcol("6f8a4a") if math.sin(co.x * 6 + co.y * 5) > 0.6 else None)
+    paint(tarp, hexcol("c9bfa0"), ao=0.0, mat="canvas", fn=lambda co, n: hexcol("6f8a4a") if _nz.noise(co * 3.0) > 0.3 else None)
     parts.append(tarp)
     join(parts, "TreehouseRuin")
 
@@ -414,7 +418,7 @@ def treehouse():
             w = box("wb", (p.x, p.y, z), (ln if side % 2 == 0 else 0.08, 0.08 if side % 2 == 0 else ln, 0.3), bev=0.02)
             if side == 0 and abs(k - 1.5) < 2 and True:
                 pass
-            paint(w, shade(hexcol("c08a50"), 0.9 + 0.1 * (k % 2)), ao=0.2, ao_h=0.5, fn=lambda co, n: 0.82 if math.sin(co.x * 20 + co.y * 20) > 0.8 else None)
+            paint(w, shade(hexcol("c08a50"), (0.92, 1.0, 0.95, 1.04)[(k + side) % 4]), ao=0.2, ao_h=0.5, mat="wood")
             parts.append(w)
     door = box("dr", (0, -0.98, 0.6), (0.6, 0.04, 1.1), bev=0.02)
     paint(door, hexcol("6b3a22"), ao=0.0)
@@ -423,7 +427,9 @@ def treehouse():
     parts += [door, win]
     roof = cyl("rf", (0, 0, 2.05), 1.75, 0.08, 1.1, (0, 0, math.pi / 4), segs=4)
     displace(roof, 0.05, 0.08)
-    paint(roof, hexcol("4f8a3a"), ao=0.0, noise_amt=0.15, nscale=12, fn=lambda co, n: 0.8 if math.sin(co.z * 40) > 0.7 else None)
+    # крыша из листьев: ряды внахлёст с зубчатым краем (тень под каждым рядом)
+    paint(roof, hexcol("4f8a3a"), ao=0.0, noise_amt=0.15, nscale=12, mat="leaf",
+          fn=lambda co, n: 0.74 if (co.z * 6 + 0.12 * math.sin(math.atan2(co.y, co.x) * 14)) % 1.0 < 0.13 else None)
     parts.append(roof)
     vane = log("vn", (0, 0, 3.1), (0, 0, 3.6), 0.02, rings=False)
     bird = leaf("vb", (-0.2, 0, 3.6), (1, 0, 0), 0.4, 0.06, droop=0.0, fold=0.0, up=(0, 1, 0))

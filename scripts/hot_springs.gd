@@ -58,6 +58,15 @@ func _ready() -> void:
 		cs.shape = b
 		cs.position.y = 1.3
 		hb.add_child(cs)
+		# столбы навеса и бочка у крыльца стоят вне коробки стен — свои формы (иначе сквозь них проходили)
+		for spec in [[Vector3(-1.3, 1.0, 1.8), 0.12, 2.0], [Vector3(1.3, 1.0, 1.8), 0.12, 2.0], [Vector3(1.6, 0.35, 1.2), 0.33, 0.7]]:
+			var pc := CollisionShape3D.new()
+			var cyl := CylinderShape3D.new()
+			cyl.radius = float(spec[1])
+			cyl.height = float(spec[2])
+			pc.shape = cyl
+			pc.position = spec[0]
+			hb.add_child(pc)
 		clinic.add_child(hb)
 	var vera := NPCPerson.new()
 	vera.npc_id = "vera"

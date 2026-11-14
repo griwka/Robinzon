@@ -123,6 +123,10 @@
   Направление волокон — атрибут `u0` от `kit.tube`/`lathe`/`cyl`, у ящиков — оси формы. Размер атласа — по площади (512/1024),
   свой — `TEX_SIZE`. Узоры для текстур пишите без полос «через одну» и `sin`-полос пятнами (станут «зеброй»): обшивка — `boards()`,
   кладка — `masonry()` (`models_buildings.py`), пятна (ржавчина, мох) — по шуму `mathutils.noise`.
+- **Текстуры особых мест** (v1.0.10, список `PLACES` в `build.py`, семейство `"places"`, атлас 256–1024 по площади, крупнее —
+  `PLACES_SIZE`, больше места сетке — `PLACES_BOOST`): всё от построек плюс свои виды в `tools/blender/texbake_places.py` — `mat="ashlar"|"damp_stone"|"giant_bark"|"concrete"|
+  "rustdoor"|"glacier"|"ice"|"snow"|"basalt"|"lava_rock"|"carved"|"wet_wood"|"glass"|"brass"|"plaster"`, цвета мест — `texbake_places.KNOWN`.
+  Лёд мест — `models_ice._glacier_fn` (старый `_ice_fn` с `sin`-полосами — у льдин и ларцов). `storm_wall` не запекается (свой шейдер).
 - **Живость моделей:** складки ткани, пряди, шерсть у запечённых моделей рисует `texbake.detail` (по пикселям). Прежние
   `kit.liven` / `kit.liven_fur` (то же по вершинам) остались в `kit.py` для моделей на цвете вершин, `build.py` их больше не зовёт.
   Общие помощники дерева: `kit.bark_trunk`, `wood_cap` (торец с кольцами), `splinters`, `bark_fn`, `smooth_path`; `log()`/`plank()`

@@ -464,12 +464,13 @@ def bake_model(name, family, size=None, boost=None, seed=0, default="fur", repor
     objs = [o for o in bpy.context.scene.objects if o.type == "MESH" and len(o.data.polygons)]
     if not objs:
         return 0
-    build = family == "build"
+    build = family in ("build", "places")      # "places" — особые места: свои виды в texbake_places
     if boost is None:
         boost = {} if build else ({"Head": 1.6} if family == "people" else {"Head": 1.35})
     area = surface_area(objs)
     # постройки: мелочь ~512, крупное — 1024 (≈1 см на пиксель у хижины)
-    size = size or (pick_size(area, density=150.0, lo=512) if build else pick_size(area))
+    size = size or ((pick_size(area, density=70.0, lo=256) if family == "places" else pick_size(area, density=150.0, lo=512))
+                    if build else pick_size(area))
     unwrap(objs, boost)
     g = gather(objs)
     tri, xs, ys, bary = rasterize(g["uv"], size)
@@ -480,11 +481,14 @@ def bake_model(name, family, size=None, boost=None, seed=0, default="fur", repor
     col = eval_programs(pid, P, N, vc)
     col = eval_overlays(g["ovl"][tri], P, N, col)
     if build:
-        kind = kinds_build(pid)
+        kind = kinds_build(pid, places=family == "places")
         uok = g["uok"][tri]
         U = local_frames(pid, P, _interp(g["u0"], tri, bary), uok, seed)
         px = math.sqrt(area / max(1, len(tri)))
         col = detail_build(kind, col, P, N, U, uok, px, seed)
+        if family == "places":
+            import texbake_places
+            col = texbake_places.detail(kind, col, P, N, U, uok, px, seed)
         if report:
             print("  %d px, %.1f мм на пиксель" % (size, px * 1000))
             report_kinds(name, pid, kind)
@@ -587,7 +591,7 @@ def guess_build(color):
     return "plain"
 
 
-def kinds_build(pid):
+def kinds_build(pid, places=False):
     kind = np.empty(len(pid), object)
     for p in np.unique(pid):
         idx = pid == p
@@ -597,9 +601,14 @@ def kinds_build(pid):
             continue
         m = prog["mat"]
         if m is None:
-            m = "clean" if prog["noise_amt"] == 0 else guess_build(prog["color"])
+            m = "clean" if prog["noise_amt"] == 0 else ((places and _places_guess(prog["color"])) or guess_build(prog["color"]))
         kind[idx] = m
     return kind
+
+
+def _places_guess(color):
+    import texbake_places
+    return texbake_places.guess(color)
 
 
 def report_kinds(name, pid, kind):

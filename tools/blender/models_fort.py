@@ -62,8 +62,19 @@ def fort_gate():
     parts += [arch, sign]
     join(parts, "Gate")
     for sx, nm in ((-1, "DoorL"), (1, "DoorR")):
-        door = box(nm, (sx * 0.8, 0, 1.5), (1.6, 0.18, 3.0), bev=0.03)
-        paint(door, hexcol("7a5232"), ao=0.0, fn=lambda co, n: 0.8 if int((co.x + 4) * 5) % 2 else (hexcol("3a3a3a") if abs(co.z - 2.3) < 0.08 or abs(co.z - 0.7) < 0.08 else None))
+        door = box(nm + "_b", (sx * 0.8, 0, 1.5), (1.6, 0.18, 3.0), bev=0.03)
+        # доски створки вертикальные (швы поперёк x), две кованые полосы с гвоздями
+        paint(door, hexcol("7a5232"), ao=0.0, fn=boards(3.2, axis=0), mat="wood")
+        dp = [door]
+        for z in (0.7, 2.3):
+            band = box("bd", (sx * 0.8, 0, z), (1.5, 0.22, 0.14), bev=0.02)
+            paint(band, hexcol("3a3a3a"), ao=0.0, mat="iron")
+            dp.append(band)
+            for k in range(5):
+                nl = sphere("nl", (sx * 0.8 - 0.6 + k * 0.3, -0.115, z), 0.025, segs=6, rings=4)
+                paint(nl, hexcol("2a2a2e"), ao=0.0, mat="iron")
+                dp.append(nl)
+        door = join(dp, nm)
         set_origin(door, (sx * 1.6, 0, 0))
 
 
@@ -152,7 +163,9 @@ def fisher_hut():
             bm.faces.new((vs[i][j], vs[i + 1][j], vs[i + 1][j + 1], vs[i][j + 1]))
     net = from_bm("nt", bm)
     solidify(net, 0.02)
-    paint(net, hexcol("c9b88a"), ao=0.0, fn=lambda co, n: 0.6 if (int(co.y * 20) + int(co.z * 20)) % 2 else None)
+    # сеть: светлые верёвочки ячейками, между ними — тень (не «шахматка»)
+    paint(net, hexcol("c9b88a"), ao=0.0, mat="rope",
+          fn=lambda co, n: None if ((co.y * 11) % 1.0 < 0.2 or ((co.z + 0.03 * math.sin(co.y * 9)) * 11) % 1.0 < 0.2) else 0.42)
     parts.append(net)
     for y in (-1.1, 1.1):
         parts.append(log("np", (1.7, y, 0), (1.7, y, 1.6), 0.04, rings=False))

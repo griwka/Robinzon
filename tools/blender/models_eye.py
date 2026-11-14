@@ -82,9 +82,33 @@ def lyova():
 
 
 # ================================================================== сад деда
+def _shingles(base, moss):
+    """Дощатая кровля (скат вдоль X): ряды дранки снизу вверх, у нижнего края ряда — тень, стыки со сдвигом через ряд,
+    у каждой дощечки свой тон; мох пятнами по шуму (а не полосами)."""
+    from mathutils import noise as _nz
+
+    def f(co, n):
+        if n.z < 0.3:
+            return None
+        if _nz.noise(co * 1.3) + 0.4 * _nz.noise(co * 4.0) > 0.32:
+            return moss
+        u = co.z / 0.11
+        r = math.floor(u)
+        fu = u - r
+        v = co.x / 0.22 + 0.5 * (r % 2) + 0.15 * _nz.noise((r * 1.3, 0.0, 0.5))
+        fv = v - math.floor(v)
+        if fu < 0.14:
+            return 0.62
+        if fv < 0.07:
+            return 0.72
+        return 0.9 + 0.16 * (_nz.noise((math.floor(v) * 1.9, r * 2.7, 3.0)) * 0.5 + 0.5)
+    return f
+
+
 def grandfather_house():
     """Домик деда: низ из чёрного камня, стены из старых досок, двускатная крыша со мхом, крыльцо с навесом,
     дверь, окно со ставнями, труба. Перед домом (−Y) — крыльцо."""
+    from models_buildings import boards, masonry
     parts = []
     r = rnd(31)
     W, D, H = 3.6, 3.0, 2.3
@@ -101,12 +125,13 @@ def grandfather_house():
             x, y = -W / 2, D / 2 - (t - 0.75) / 0.25 * D
         parts.append(stone("fs", (x, y, 0.25), r.uniform(0.32, 0.42), k, BLACK_L))
     base = box("bs", (0, 0, 0.4), (W, D, 0.8), bev=0.04)
-    paint(base, BLACK_L, ao=0.2, fn=lambda co, n: shade(BLACK_L, 0.8) if (co.z * 5 + (co.x + co.y) * 1.3) % 1.0 < 0.1 else None)
+    paint(base, BLACK_L, ao=0.2, fn=masonry(BLACK_L, course=0.2, block=0.42, mortar=shade(BLACK_L, 0.72)), mat="ashlar")
     parts.append(base)
     # дощатые стены
     walls = box("wl", (0, 0, 0.8 + (H - 0.8) / 2), (W - 0.1, D - 0.1, H - 0.8), bev=0.02)
-    paint(walls, WOOD_OLD, ao=0.15, fn=lambda co, n: shade(WOOD_OLD, 0.78) if (co.z * 4.2) % 1.0 < 0.08 else
-          (hexcol("b89a6a") if 1.3 < co.z < 1.75 and co.x > 1.0 and n.y > 0.5 else None))
+    _wb = boards(4.2)
+    paint(walls, WOOD_OLD, ao=0.15, mat="wood",
+          fn=lambda co, n: hexcol("b89a6a") if 1.3 < co.z < 1.75 and co.x > 1.0 and n.y > 0.5 else _wb(co, n))
     parts.append(walls)
     for sx in (-1, 1):
         for sy in (-1, 1):
@@ -114,8 +139,7 @@ def grandfather_house():
     # двускатная крыша вдоль X, конёк на 3.3 м
     for sy in (-1, 1):
         roof = box("rf", (0, sy * 0.95, 2.82), (W + 0.6, 2.1, 0.14), (-sy * 0.5, 0, 0), bev=0.03)
-        paint(roof, hexcol("8a5a3a"), ao=0.0, fn=lambda co, n: (MOSS if math.sin(co.x * 3.1 + co.y * 2.0) > 0.55 else
-                                                               (shade(hexcol("8a5a3a"), 0.8) if (co.x * 2.5) % 1.0 < 0.1 else None)))
+        paint(roof, hexcol("8a5a3a"), ao=0.0, fn=_shingles(hexcol("8a5a3a"), MOSS), mat="wood")
         parts.append(roof)
     for sx in (-1, 1):
         bm = bmesh.new()
@@ -123,22 +147,22 @@ def grandfather_house():
              bm.verts.new((sx * (W / 2 - 0.05), 0, 3.2))]
         bm.faces.new(v if sx > 0 else v[::-1])
         g = from_bm("gb", bm, smooth=False)
-        paint(g, WOOD_W, ao=0.0)
+        paint(g, WOOD_W, ao=0.0, fn=boards(4.2), mat="wood")
         parts.append(g)
     ridge = tube("rg", [(-W / 2 - 0.3, 0, 3.32), (W / 2 + 0.3, 0, 3.32)], 0.08, 8)
     paint(ridge, hexcol("6a4a2e"), ao=0.0)
     parts.append(ridge)
     chim = box("ch", (W / 2 - 0.6, 0.6, 3.2), (0.5, 0.5, 1.2), bev=0.03)
-    paint(chim, BLACK_L, ao=0.0, fn=lambda co, n: shade(BLACK_L, 0.75) if (co.z * 6) % 1.0 < 0.12 else None)
+    paint(chim, BLACK_L, ao=0.0, fn=masonry(BLACK_L, course=0.17, block=0.25, mortar=shade(BLACK_L, 0.72)), mat="ashlar")
     parts.append(chim)
     # дверь и окно — на передней стене (−Y)
     door = box("dr", (-0.6, -D / 2 - 0.03, 1.05), (0.9, 0.08, 1.8), bev=0.02)
-    paint(door, hexcol("5a3a22"), ao=0.0, fn=lambda co, n: shade(hexcol("5a3a22"), 0.8) if (co.x * 7) % 1.0 < 0.1 else None)
+    paint(door, hexcol("5a3a22"), ao=0.0, fn=boards(7, axis=0), mat="wood")
     knob = sphere("kn", (-0.25, -D / 2 - 0.09, 1.0), 0.04)
     paint(knob, BRONZE, ao=0.0)
     parts += [door, knob]
     win = box("wn", (0.85, -D / 2 - 0.02, 1.45), (0.8, 0.06, 0.65))
-    paint(win, hexcol("bfe0f0"), ao=0.0, noise_amt=0)
+    paint(win, hexcol("bfe0f0"), ao=0.0, noise_amt=0, mat="glass")
     parts.append(win)
     for x, z, sx, sz in ((0.85, 1.45, 0.06, 0.7), (0.85, 1.45, 0.85, 0.06)):
         f = box("wf", (x, -D / 2 - 0.06, z), (sx, 0.05, sz))
@@ -146,7 +170,7 @@ def grandfather_house():
         parts.append(f)
     for sx in (-1, 1):
         sh = box("sh", (0.85 + sx * 0.62, -D / 2 - 0.06, 1.45), (0.4, 0.05, 0.75), (0, sx * 0.25, 0))
-        paint(sh, hexcol("4a7a8a"), ao=0.0, fn=lambda co, n: 0.85 if (co.z * 9) % 1.0 < 0.15 else None)
+        paint(sh, hexcol("4a7a8a"), ao=0.0, fn=lambda co, n: 0.72 if (co.z * 9) % 1.0 < 0.15 else None, mat="painted")
         parts.append(sh)
     # крыльцо и навес
     deck = plank("pd", (-0.2, -D / 2 - 0.45, 0.22), (2.6, 0.9, 0.12), col=WOOD_W)
@@ -154,7 +178,7 @@ def grandfather_house():
     for x in (-1.4, 1.0):
         parts.append(plank("pp", (x, -D / 2 - 0.82, 1.15), (0.1, 0.1, 1.9), col=hexcol("6a4a2e")))
     awn = box("aw", (-0.2, -D / 2 - 0.55, 2.15), (2.9, 1.2, 0.08), (-0.25, 0, 0), bev=0.02)
-    paint(awn, hexcol("8a5a3a"), ao=0.0, fn=lambda co, n: MOSS if math.sin(co.x * 4.0) > 0.6 else None)
+    paint(awn, hexcol("8a5a3a"), ao=0.0, fn=_shingles(hexcol("8a5a3a"), MOSS), mat="wood")
     parts.append(awn)
     # фото на стене у двери (дед в лётной куртке с попугаем)
     ph = box("ph", (0.05, -D / 2 - 0.05, 1.55), (0.32, 0.03, 0.4))
@@ -173,7 +197,7 @@ def perch():
         ft = plank("ft", (0, 0, 0.05), (0.9, 0.1, 0.08), (0, 0, a), col=hexcol("6a4a2e"))
         parts.append(ft)
     pole = tube("pl", [(0, 0, 0.05), (0.02, 0, 0.8), (0, 0.01, 1.45)], [0.05, 0.045, 0.04], 8)
-    paint(pole, WOOD_W, ao=0.0, fn=lambda co, n: shade(WOOD_W, 0.85) if (co.z * 6) % 1.0 < 0.15 else None)
+    paint(pole, WOOD_W, ao=0.0, fn=lambda co, n: shade(WOOD_W, 0.8) if (co.z * 6) % 1.0 < 0.06 else None, mat="wood")
     bar = tube("br", [(-0.35, 0, 1.45), (0.35, 0, 1.45)], 0.035, 8)
     paint(bar, hexcol("c8a070"), ao=0.0, fn=lambda co, n: shade(hexcol("c8a070"), 0.7) if abs(co.x) < 0.12 else None)
     cup = lathe("cp", [(0.0, 1.38), (0.1, 1.39), (0.12, 1.47), (0.11, 1.48), (0.0, 1.43)], 12, loc=(0.42, 0, 0))
@@ -256,7 +280,7 @@ def wild_bed():
     for sx in (-1, 1):
         parts.append(plank("fy", (sx * 0.86, 0, 0.1), (0.08, 0.9, 0.2), col=hexcol("7a5a3a"), seed=sx + 4))
     soil = box("sl", (0, 0, 0.12), (1.66, 0.82, 0.12))
-    paint(soil, hexcol("6a4a34"), ao=0.0, noise_amt=0.2, nscale=8)
+    paint(soil, hexcol("6a4a34"), ao=0.0, noise_amt=0.2, nscale=8, mat="soil")
     parts.append(soil)
     for k in range(16):
         x, y = r.uniform(-0.75, 0.75), r.uniform(-0.35, 0.35)
@@ -387,11 +411,15 @@ def _ring_wall(name, r_out, r_in, z0, z1, gap_a, gap_w, gap_top, segs=48):
 
 
 def _railing(parts, r, z, n):
+    rail = []
     for k in range(n):
         a = 2 * math.pi * k / n
-        parts.append(tube("rp", [(math.cos(a) * r, math.sin(a) * r, z), (math.cos(a) * r, math.sin(a) * r, z + 1.12)], 0.045, 6))
+        rail.append(tube("rp", [(math.cos(a) * r, math.sin(a) * r, z), (math.cos(a) * r, math.sin(a) * r, z + 1.12)], 0.045, 6))
     for zz in (z + 0.55, z + 1.12):
-        parts.append(tube("rr", [(math.cos(a) * r, math.sin(a) * r, zz) for a in [k * 2 * math.pi / 64 for k in range(65)]], 0.04, 6, caps=False))
+        rail.append(tube("rr", [(math.cos(a) * r, math.sin(a) * r, zz) for a in [k * 2 * math.pi / 64 for k in range(65)]], 0.04, 6, caps=False))
+    for p in rail:   # кованые перила: тёмное железо (раньше — без раскраски, чёрные)
+        paint(p, hexcol("2e2a2e"), ao=0.0, noise_amt=0.05, mat="iron")
+    parts += rail
 
 
 def _hatch(parts, d, rad, z):
@@ -406,7 +434,7 @@ def _corbels(parts, r0, r1, z, n):
     for k in range(n):
         a = 2 * math.pi * (k + 0.5) / n
         c = box("cb", (math.cos(a) * (r0 + r1) / 2, math.sin(a) * (r0 + r1) / 2, z - 0.25), (r1 - r0, 0.4, 0.5), (0, 0, a), bev=0.04)
-        paint(c, BLACK_L, ao=0.0)
+        paint(c, BLACK_L, ao=0.0, mat="stone")
         parts.append(c)
 
 
@@ -414,15 +442,16 @@ def great_lighthouse():
     """Великий маяк: три яруса. Низ — сплошная кладка из чёрного камня, балкон с перилами и люком;
     середина — полая, с дверью на первом балконе и окнами-бойницами (внутри — лестница, её ставит игра);
     верх — снова кладка, резной пояс с огнями маяков; наверху площадка с перилами и каменная корона."""
+    # чёрный камень маяка — без лишайника и мха (стоит посреди шторма): зёрна, трещины, сколы ("stone")
     parts = []
     # основание и нижний ярус
     low = lathe("lw", [(4.6, -0.6), (4.5, 0.3), (4.1, 0.45), (4.05, H1 - 0.4)], 64)
-    paint(low, BLACK, ao=0.3, ao_h=1.5, noise_amt=0.05, fn=_stone_fn(BLACK))
+    paint(low, BLACK, ao=0.3, ao_h=1.5, noise_amt=0.05, fn=_stone_fn(BLACK), mat="stone")
     parts.append(low)
     # балкон 1: плита (внутри — дощатый пол средней части), корбели, перила, люк над подъёмом
     s1 = lathe("s1", [(0.0, H1 - 0.4), (6.2, H1 - 0.4), (6.2, H1), (0.0, H1)], 64)
-    paint(s1, BLACK_L, ao=0.0, fn=lambda co, n: (hexcol("a07a50") if (co.x * co.x + co.y * co.y) < 3.3 * 3.3 and n.z > 0.5 else
-                                                 (shade(BLACK_L, 1.2) if n.z > 0.5 else None)))
+    paint(s1, BLACK_L, ao=0.0, mat="stone", fn=lambda co, n: (hexcol("a07a50") if (co.x * co.x + co.y * co.y) < 3.3 * 3.3 and n.z > 0.5 else
+                                                               (shade(BLACK_L, 1.2) if n.z > 0.5 else None)))
     parts.append(s1)
     _corbels(parts, 4.05, 6.0, H1 - 0.4, 20)
     _railing(parts, 6.08, H1, 28)
@@ -430,7 +459,7 @@ def great_lighthouse():
     # средний ярус — полый, дверь на стороне d = +PI/2
     dx, dy = bdir(math.pi / 2)
     mid = _ring_wall("md", 3.85, 3.3, H1, H2 - 0.4, math.atan2(dy, dx), 0.28, H1 + 2.6)
-    paint(mid, BLACK, ao=0.0, fn=lambda co, n: (hexcol("8a7a6a") if (co.x * co.x + co.y * co.y) < 3.5 * 3.5 else
+    paint(mid, BLACK, ao=0.0, mat="stone", fn=lambda co, n: (hexcol("8a7a6a") if (co.x * co.x + co.y * co.y) < 3.5 * 3.5 else
                                                (hexcol("2a2228") if 13.0 < co.z < 14.6 and (math.atan2(co.y, co.x) * 4 / math.pi) % 1.0 < 0.1 else
                                                 _stone_fn(BLACK)(co, n))))
     parts.append(mid)
@@ -441,18 +470,19 @@ def great_lighthouse():
     a = math.atan2(dy, dx)
     frame.append(box("dl", (math.cos(a) * 3.88, math.sin(a) * 3.88, H1 + 2.7), (0.35, 2.4, 0.3), (0, 0, a), bev=0.03))
     for f in frame:
-        paint(f, hexcol("c9a050"), ao=0.0, fn=lambda co, n: shade(hexcol("c9a050"), 0.8) if (co.z * 3) % 1.0 < 0.1 else None)
+        paint(f, hexcol("c9a050"), ao=0.0, fn=lambda co, n: shade(hexcol("c9a050"), 0.8) if (co.z * 3) % 1.0 < 0.1 else None, mat="brass")
     parts += frame
     # балкон 2 (он же потолок средней части)
     s2 = lathe("s2", [(0.0, H2 - 0.4), (6.0, H2 - 0.4), (6.0, H2), (0.0, H2)], 64)
-    paint(s2, BLACK_L, ao=0.0, fn=lambda co, n: shade(BLACK_L, 1.2) if n.z > 0.5 else (hexcol("8a7a6a") if n.z < -0.5 and (co.x * co.x + co.y * co.y) < 3.3 * 3.3 else None))
+    paint(s2, BLACK_L, ao=0.0, mat="stone",
+          fn=lambda co, n: shade(BLACK_L, 1.2) if n.z > 0.5 else (hexcol("8a7a6a") if n.z < -0.5 and (co.x * co.x + co.y * co.y) < 3.3 * 3.3 else None))
     parts.append(s2)
     _corbels(parts, 3.85, 5.8, H2 - 0.4, 20)
     _railing(parts, 5.88, H2, 28)
     _hatch(parts, math.pi + 0.4, 4.6, H2)
     # верхний ярус с резным поясом: семь огоньков — семь маяков архипелага
     up = lathe("up", [(3.55, H2), (3.5, H3 - 0.4)], 64)
-    paint(up, BLACK, ao=0.0, fn=lambda co, n: (hexcol("c9a050") if 22.4 < co.z < 22.7 else _stone_fn(BLACK)(co, n)))
+    paint(up, BLACK, ao=0.0, mat="stone", fn=lambda co, n: (hexcol("c9a050") if 22.4 < co.z < 22.7 else _stone_fn(BLACK)(co, n)))
     parts.append(up)
     cols = ("ffc070", "ffb050", "ffd27a", "cfe4ff", "a8e0ff", "ff7a3a", "d8ffa0")
     for k, c in enumerate(cols):
@@ -462,7 +492,7 @@ def great_lighthouse():
         parts.append(g)
     # площадка на вершине, перила, люк, корона из шести столбиков
     s3 = lathe("s3", [(0.0, H3 - 0.4), (5.2, H3 - 0.4), (5.2, H3), (0.0, H3)], 64)
-    paint(s3, BLACK_L, ao=0.0, fn=lambda co, n: (hexcol("c9a050") if n.z > 0.5 and 2.6 < math.hypot(co.x, co.y) < 2.75 else
+    paint(s3, BLACK_L, ao=0.0, mat="stone", fn=lambda co, n: (hexcol("c9a050") if n.z > 0.5 and 2.6 < math.hypot(co.x, co.y) < 2.75 else
                                                 (shade(BLACK_L, 1.25) if n.z > 0.5 else None)))
     parts.append(s3)
     _corbels(parts, 3.5, 5.0, H3 - 0.4, 18)
@@ -471,10 +501,10 @@ def great_lighthouse():
     for k in range(6):
         a = 2 * math.pi * k / 6 + 0.26
         col = tube("cn", [(math.cos(a) * 5.0, math.sin(a) * 5.0, H3), (math.cos(a) * 4.9, math.sin(a) * 4.9, H3 + 4.4)], [0.2, 0.16], 8)
-        paint(col, BLACK_L, ao=0.0, fn=lambda co, n: hexcol("c9a050") if co.z > H3 + 4.1 else None)
+        paint(col, BLACK_L, ao=0.0, fn=lambda co, n: hexcol("c9a050") if co.z > H3 + 4.1 else None, mat="stone")
         parts.append(col)
     crown = tube("cw", [(math.cos(a) * 4.9, math.sin(a) * 4.9, H3 + 4.5) for a in [k * 2 * math.pi / 48 for k in range(49)]], 0.22, 8, caps=False)
-    paint(crown, BRONZE, ao=0.0)
+    paint(crown, BRONZE, ao=0.0, mat="brass")
     parts.append(crown)
     join(parts, "GreatLighthouse")
 
@@ -486,10 +516,10 @@ def tower_holds():
         z = 0.2 + k * 0.5
         x = -0.22 if k % 2 == 0 else 0.22
         h = box("hl", (x, -0.05, z), (0.34, 0.24, 0.11), (0, 0, 0.08 * (1 - 2 * k)), bev=0.03)
-        paint(h, BLACK_L, ao=0.0, fn=lambda co, n: shade(BLACK_L, 1.3) if n.z > 0.5 else None)
+        paint(h, BLACK_L, ao=0.0, fn=lambda co, n: shade(BLACK_L, 1.3) if n.z > 0.5 else None, mat="stone")
         parts.append(h)
     sb = tube("sb", [(0.0, 0.0, 0.62), (0.0, -0.14, 0.62), (0.0, -0.14, 0.82), (0.0, 0.0, 0.82)], 0.02, 6)
-    paint(sb, hexcol("6a5a4a"), ao=0.0)
+    paint(sb, hexcol("6a5a4a"), ao=0.0, mat="rust")
     parts.append(sb)
     join(parts, "TowerHolds")
 
@@ -498,14 +528,14 @@ def tower_ledge():
     """Уступ для отдыха на стене маяка: каменная полка и кольцо, за которое держатся."""
     parts = []
     shelf = box("sf", (0, -0.22, -0.02), (1.0, 0.46, 0.16), bev=0.04)
-    paint(shelf, BLACK_L, ao=0.0, fn=lambda co, n: shade(BLACK_L, 1.3) if n.z > 0.5 else None)
+    paint(shelf, BLACK_L, ao=0.0, fn=lambda co, n: shade(BLACK_L, 1.3) if n.z > 0.5 else None, mat="stone")
     parts.append(shelf)
     for sx in (-1, 1):
         br = box("br", (sx * 0.38, -0.1, -0.18), (0.1, 0.2, 0.2), (0.6, 0, 0))
-        paint(br, BLACK, ao=0.0)
+        paint(br, BLACK, ao=0.0, mat="stone")
         parts.append(br)
     ring = tube("rg", [(0.32 + 0.09 * math.cos(a), -0.02, 0.55 + 0.09 * math.sin(a)) for a in [k * math.pi / 8 for k in range(17)]], 0.018, 6, caps=False)
-    paint(ring, hexcol("8a7a5a"), ao=0.0)
+    paint(ring, hexcol("8a7a5a"), ao=0.0, mat="iron")
     parts.append(ring)
     join(parts, "TowerLedge")
 
@@ -515,9 +545,9 @@ def great_fire():
     над ней — оправа линзы на четырёх изогнутых стойках. FirePoint — где горит огонь."""
     parts = []
     base = lathe("bs", [(2.4, 0.0), (2.3, 0.35), (1.8, 0.45), (0.0, 0.45)], 48)
-    paint(base, BLACK_L, ao=0.0, fn=lambda co, n: hexcol("c9a050") if 0.18 < co.z < 0.24 else None)
+    paint(base, BLACK_L, ao=0.0, fn=lambda co, n: hexcol("c9a050") if 0.18 < co.z < 0.24 else None, mat="carved")
     bowl = lathe("bw", [(0.0, 0.4), (1.5, 0.45), (2.0, 0.75), (2.25, 1.15), (2.15, 1.25), (1.85, 1.1), (1.2, 0.9), (0.0, 0.85)], 48)
-    paint(bowl, BRONZE, ao=0.0, fn=lambda co, n: (hexcol("3a2a2a") if n.z > 0.6 and math.hypot(co.x, co.y) < 1.9 else
+    paint(bowl, BRONZE, ao=0.0, mat="brass", fn=lambda co, n: (hexcol("3a2a2a") if n.z > 0.6 and math.hypot(co.x, co.y) < 1.9 else
                                                  (shade(BRONZE, 1.3) if 0.95 < co.z < 1.02 else None)))
     parts += [base, bowl]
     r = rnd(5)
@@ -531,14 +561,14 @@ def great_fire():
         a = math.pi / 4 + k * math.pi / 2
         st = tube("st", [(math.cos(a) * 2.15, math.sin(a) * 2.15, 1.2), (math.cos(a) * 2.0, math.sin(a) * 2.0, 2.6),
                          (math.cos(a) * 1.15, math.sin(a) * 1.15, 3.6)], [0.09, 0.08, 0.06], 8)
-        paint(st, BRONZE, ao=0.0)
+        paint(st, BRONZE, ao=0.0, mat="brass")
         parts.append(st)
     ring = tube("rg", [(math.cos(a) * 1.05, math.sin(a) * 1.05, 3.65) for a in [k * 2 * math.pi / 32 for k in range(33)]], 0.09, 8, caps=False)
-    paint(ring, shade(BRONZE, 1.15), ao=0.0)
+    paint(ring, shade(BRONZE, 1.15), ao=0.0, mat="brass")
     parts.append(ring)
     b = join(parts, "GreatFire")
     lens = cyl("Lens", (0, 0, 3.6), 1.0, 1.0, 0.1, segs=32)
-    paint(lens, hexcol("4a3a6a"), ao=0.0, noise_amt=0, fn=lambda co, n: hexcol("8a7ab8") if n.z > 0.5 and co.x < -0.2 else None)
+    paint(lens, hexcol("4a3a6a"), ao=0.0, noise_amt=0, mat="glass", fn=lambda co, n: hexcol("8a7ab8") if n.z > 0.5 and co.x < -0.2 else None)
     set_parent(lens, b)
     empty("FirePoint", (0, 0, 0.95), b)
 

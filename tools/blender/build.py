@@ -44,8 +44,30 @@ BOATS = ["raft", "canoe", "lifeboat", "boat_wreck", "stepa_boat", "stepa_boat_wr
 # своё разрешение атласа (иначе — по площади модели): шхуна 15 м и хижина (бамбук + три яруса соломы) — крупнее
 TEX_SIZE = {"albatros": 2048, "albatros_wreck": 2048, "hut": 2048}
 
+# особые и сюжетные места (v1.0.10): форт, баньян, бункер, ледник, храм, лагерь на сваях, маяки — семейство "places"
+# (виды поверхности мест — texbake_places.py: тёсаный камень, бетон, ржавое железо, лёд, базальт, резьба, мокрые сваи)
+PLACES = ["fort_wall", "fort_gate", "gatehouse", "lever", "cellar_wall", "fresco_slab", "fisher_hut",
+          "banyan_giant", "deck", "fire_bowl", "treehouse", "treehouse_ruin",
+          "met_station", "bunker_wall", "bunker_ceiling", "bunker_deck", "ladder", "bunker_rail", "bunker_chain",
+          "bunker_lamp", "bunker_shelves", "bunker_crates", "bunker_hatch", "bunker_hatch_inner", "generator",
+          "generator_broken", "station_desk", "radio", "radio_broken", "graves", "storm_tower", "storm_tower_ruin",
+          "glacier_wall", "ice_steps", "frozen_waterfall", "ice_ledge", "observatory", "telescope", "star_dial",
+          "star_ring_1", "star_ring_2", "star_ring_3", "ice_tower", "ice_tower_frozen",
+          "hot_springs", "clinic", "crater_wall", "rock_holds", "lava_rim", "temple_facade", "temple_door", "monolith",
+          "lava_chute", "lava_bowl", "lava_crack", "cold_stone", "volcano_tower", "volcano_tower_ruin",
+          "stilt_platform", "stilt_pier", "stilt_hut", "signal_rock", "standing_stone", "screen_rock", "fog_tower",
+          "fog_tower_ruin",
+          "great_lighthouse", "tower_holds", "tower_ledge", "great_fire", "grandfather_house", "grandpa_bench",
+          "order_board", "perch", "wild_bed",
+          "lighthouse_ruin", "old_camp"]
+# атлас мест — по площади (70 пикселей на метр, 256–1024); крупнее — то, что видно вплотную или очень большое
+PLACES_SIZE = {"banyan_giant": 2048, "great_lighthouse": 2048, "bunker_wall": 2048, "grandfather_house": 2048,
+               "fresco_slab": 512, "cellar_wall": 512, "bunker_ceiling": 1024}
+# кому в атласе больше места (имя сетки → во сколько раз крупнее): у баньяна огромная крона съедала ствол у ярусов
+PLACES_BOOST = {"banyan_giant": {"Trunk": 4.0, "AerialRoots": 2.0}}
+
 # эти модели запекаются в текстуру (texbake.py): чёткие границы цветов, ткань, пряди, шерсть, перья, дерево, камень
-TEXTURED = PEOPLE + ANIMALS + WEAR + BUILDINGS + BOATS
+TEXTURED = PEOPLE + ANIMALS + WEAR + BUILDINGS + BOATS + PLACES
 
 
 def all_builders():
@@ -96,7 +118,10 @@ def main():
         kit.reset()
         builders[name]()
         size = 0
-        if name in BUILDINGS or name in BOATS:
+        if name in PLACES:
+            size = texbake.bake_model(name, "places", size=PLACES_SIZE.get(name), boost=PLACES_BOOST.get(name),
+                                      seed=len(name), report=report)
+        elif name in BUILDINGS or name in BOATS:
             # дерево, солома, камень, металл, верёвка — texbake.detail_build
             size = texbake.bake_model(name, "build", size=TEX_SIZE.get(name), seed=len(name), report=report)
         elif name in TEXTURED:
