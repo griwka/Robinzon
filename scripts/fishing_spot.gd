@@ -103,7 +103,7 @@ func interact(_player: Node) -> void:
 	match state:
 		IDLE:
 			state = WAITING
-			_timer = randf_range(1.5, 4.0) * (Game.LANTERN_BITE if Game.night_light() else 1.0)   # ночью рыба идёт на свет
+			_timer = randf_range(1.5, 4.0) * (Game.LANTERN_BITE if Game.night_light() else 1.0) * Cooking.bite_mult()   # ночью рыба идёт на свет; блюда — «Рыбацкая удача»
 			bobber.visible = true
 			bobber.position = Vector3(0, 0.05, 0)
 			Audio.play("water", -8.0, 0.2)
@@ -117,7 +117,7 @@ func interact(_player: Node) -> void:
 
 ## Шанс редкой рыбы (в коллекцию): ночью с фонарём — в полтора раза выше.
 func rare_chance() -> float:
-	return (0.35 if ice else 0.3) * (Game.LANTERN_RARE if Game.night_light() else 1.0)
+	return (0.35 if ice else 0.3) * (Game.LANTERN_RARE if Game.night_light() else 1.0) * Cooking.rare_mult()
 
 
 func catch() -> void:

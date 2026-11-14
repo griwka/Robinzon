@@ -1292,6 +1292,7 @@ func open_collections() -> void:
 func _fill_collections() -> void:
 	var body := _clear(col_panel)
 	_fill_replays(body)
+	CookUI.fill_book(self, body)   # кулинарная книга (после финала)
 	for cid in Data.COLLECTIONS:
 		var col: Dictionary = Data.COLLECTIONS[cid]
 		var have: Dictionary = Game.collections.get(cid, {})

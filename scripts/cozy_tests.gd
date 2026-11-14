@@ -1,0 +1,174 @@
+class_name CozyTests
+extends RefCounted
+## Автотест кулинарии и уюта («вечная игра»). Зовётся из dev_tools.gd: после финала главы 8 (_test_ending)
+## и отдельно, быстро: --autotest --cozyonly. Пишет только в сохранение тестов (save_dev*.json).
+
+
+static func _ok(dev: Node, cond: bool, what: String) -> void:
+	dev.call("_check", cond, what)
+
+
+static func run(dev: Node) -> void:
+	print("--- кулинария и уют ---")
+	var saved_inv: Dictionary = Game.inventory.duplicate()
+	var saved_flags: Dictionary = Game.flags.duplicate(true)
+	var saved_unl: Dictionary = Game.unlocked.duplicate()
+	var saved_stats: Dictionary = Game.stats.duplicate(true)
+	var saved_hunger := Game.hunger
+	_cooking(dev)
+	Game.inventory = saved_inv
+	Game.flags = saved_flags
+	Game.unlocked = saved_unl
+	Game.stats = saved_stats
+	Game.hunger = saved_hunger
+	Game.inventory_changed.emit()
+
+
+static func _cooking(dev: Node) -> void:
+	var main: Node = dev.get("main")
+	var hud: HUD = main.get("hud")
+	# до финала котелка нет, после — есть (и в старом сохранении тоже: миграция)
+	var was_sea: bool = Game.flags.get("ending_open_sea", false)
+	var was_keeper: bool = Game.flags.get("ending_keeper", false)
+	Game.flags.erase("ending_open_sea")
+	Game.flags.erase("ending_keeper")
+	Game.unlocked.erase("cook_pot")
+	CozyLife.migrate()
+	_ok(dev, not Game.unlocked.has("cook_pot"), "до финала котелок закрыт")
+	Game.flags["ending_keeper"] = true
+	CozyLife.migrate()
+	_ok(dev, Game.unlocked.has("cook_pot"), "после финала котелок открыт (в старом сохранении — миграцией)")
+	Game.flags.erase("ending_keeper")
+	if was_sea:
+		Game.flags["ending_open_sea"] = true
+	if was_keeper or not was_sea:
+		Game.flags["ending_keeper"] = true
+
+	# данные: у каждого рецепта своё блюдо, свой набор, продукты настоящие
+	var bad: Array[String] = []
+	var seen := {}
+	for r in Cooking.RECIPES:
+		var id: String = r["id"]
+		var it: Dictionary = Data.ITEMS.get(id, {})
+		if it.get("cat", "") != "food" or not it.has("food") or not Data.SELL_PRICES.has(id):
+			bad.append(id + ": нет предмета, сытости или цены")
+		var n := Cooking.units(r["in"])
+		if n < Cooking.MIN_UNITS or n > Cooking.MAX_UNITS:
+			bad.append(id + ": продуктов не 2–4")
+		var keys: Array = r["in"].keys()
+		keys.sort()
+		var sig := ""
+		for k in keys:
+			sig += "%s%d," % [k, int(r["in"][k])]
+			if not Cooking.is_ingredient(k):
+				bad.append("%s: %s нельзя положить в котелок" % [id, k])
+		if seen.has(sig):
+			bad.append("%s и %s: один и тот же набор" % [id, seen[sig]])
+		seen[sig] = id
+	for c in Cooking.classic_recipes():
+		var ck: Array = c["in"].keys()
+		ck.sort()
+		var csig := ""
+		for k in ck:
+			csig += "%s%d," % [k, int(c["in"][k])]
+		if seen.has(csig):
+			bad.append("%s совпадает с обычным рецептом %s" % [seen[csig], c["id"]])
+	_ok(dev, bad.is_empty(), "рецепты котелка: %d штук, наборы не повторяются (%s)" % [Cooking.RECIPES.size(), "; ".join(bad)])
+
+	# котелок — постройка, у него открывается окно
+	var pot: Building = dev.call("_build", "cook_pot")
+	_ok(dev, pot is CookPot and pot.is_in_group("interactable"), "котелок построен, к нему можно подойти")
+	pot.interact(main.get("player"))
+	var cl := dev.get_tree().get_first_node_in_group("cozy_life") as CozyLife
+	_ok(dev, cl != null and cl.cook_ui != null and cl.cook_ui.panel.visible, "у котелка открывается окно готовки")
+
+	# проба: совпало — блюдо и запись в книгу
+	Game.flags.erase("cookbook")
+	Game.flags.erase("buffs")
+	Game.inventory = {"potato": 3, "carrot": 3, "tomato": 3, "coconut": 2, "fish": 4, "banana": 2}
+	_ok(dev, not Cooking.known("veg_stew") and Cooking.known_count() == 0, "книга пустая: рецепты ещё не найдены")
+	cl.cook_ui.put("potato")
+	cl.cook_ui.put("carrot")
+	cl.cook_ui.put("tomato")
+	cl.cook_ui.boil()
+	_ok(dev, Game.count("veg_stew") == 1 and Cooking.known("veg_stew") and Game.count("potato") == 2,
+		"три овоща в котелке — овощное рагу, рецепт записан в книгу")
+	_ok(dev, Cooking.cook_known("veg_stew") == "veg_stew" and Game.count("veg_stew") == 2, "знакомое блюдо варится одной кнопкой")
+	# не совпало — каша-неудача: съедобна, не продаётся
+	var got := Cooking.cook({"carrot": 1, "coconut": 1})
+	_ok(dev, got == Cooking.FLOP and Game.count(Cooking.FLOP) == 1 and Game.count("coconut") == 1, "случайный набор — каша-неудача, продукты потрачены")
+	_ok(dev, Game.sell_price("marta", Cooking.FLOP) == 0 and int(Data.ITEMS[Cooking.FLOP]["food"]) > 0, "кашу-неудачу можно съесть, но нельзя продать")
+	_ok(dev, Cooking.cook({"fish": 1}) == "" and Cooking.cook({"fish": 4, "banana": 1}) == "" and Game.count("fish") == 4,
+		"один продукт или пять — котелок не варит и ничего не тратит")
+	_ok(dev, Cooking.cook({"wood": 2}) == "", "несъедобное в котелок не кладут")
+	# обычные рецепты (похлёбка у костра) получаются и в котелке
+	Game.inventory["potato"] = 2
+	_ok(dev, Cooking.cook({"fish": 2, "potato": 1}) == "fish_soup", "обычный рецепт (рыбная похлёбка) получается и в котелке")
+	# все рецепты достижимы игрой: каждый варится и даёт своё блюдо
+	var wrong: Array[String] = []
+	for r in Cooking.RECIPES:
+		Game.inventory = (r["in"] as Dictionary).duplicate()
+		if Cooking.cook(r["in"]) != r["id"] or Game.count(r["id"]) != 1:
+			wrong.append(r["id"])
+	_ok(dev, wrong.is_empty() and Cooking.known_count() == Cooking.RECIPES.size(), "каждый рецепт варится, книга собрана целиком (%s)" % ", ".join(wrong))
+
+	# польза блюд: мягкая и на время
+	Game.flags.erase("buffs")
+	Game.hunger = 50.0
+	var regen0 := Game.hunger_regen()
+	Game.inventory = {"veg_stew": 1, "banana": 1, "coconut_fish": 1, "banana_pancakes": 1, "cabbage_soup": 1}
+	Game.eat_best_food()
+	_ok(dev, Game.count("veg_stew") == 1 and Game.count("banana") == 0, "Q сначала ест простую еду, блюда с пользой бережёт")
+	Game.hunger = 30.0
+	regen0 = Game.hunger_regen()
+	Game.eat_item("veg_stew")
+	_ok(dev, Cooking.has_buff("regen") and Game.hunger_regen() > regen0, "рагу: бодрость — силы возвращаются быстрее")
+	Game.eat_item("coconut_fish")
+	_ok(dev, Cooking.bite_mult() < 1.0 and Cooking.rare_mult() > 1.0, "рыба в кокосовом молоке: рыбацкая удача")
+	Game.hunger = 90.0
+	var sp0 := Game.hunger_speed()
+	Game.eat_item("banana_pancakes")
+	_ok(dev, Game.hunger_speed() > sp0 and Game.hunger_speed() < sp0 * 1.15, "оладьи: шаг чуть быстрее (не больше +15 %)")
+	_ok(dev, is_equal_approx(CozyLife.night_hunger(), 1.0), "без тёплой еды ночь — как обычно")
+	Game.hunger = 40.0
+	Game.eat_item("cabbage_soup")
+	_ok(dev, CozyLife.night_hunger() < 1.0, "щи: за ночь проголодаешься меньше")
+	Cooking.tick(10000.0)
+	_ok(dev, not Cooking.has_buff("regen") and not Cooking.has_buff("luck") and is_equal_approx(Cooking.speed_mult(), 1.0),
+		"польза проходит сама, без вреда")
+
+	# продажа и заказы
+	Game.unlocked["shop_marta"] = true
+	var mult := Game.sell_mult()
+	_ok(dev, Game.sell_price("marta", "veg_stew") == maxi(1, int(round(Data.SELL_PRICES["veg_stew"] * 1.25 * mult))), "Марта берёт блюда из котелка на четверть дороже")
+	Game.inventory = {"veg_stew": 2}
+	Game.sell("marta", "veg_stew", 2)
+	_ok(dev, Game.count("coins") == Game.sell_price("marta", "veg_stew") * 2 and Game.count("veg_stew") == 0, "блюда продаются торговцам")
+	var dish_orders := 0
+	for o in OrderBoard.POOL:
+		if not Cooking.recipe(o[1]).is_empty():
+			dish_orders += 1
+	_ok(dev, dish_orders >= 3, "на доске заказов есть блюда из котелка (%d)" % dish_orders)
+
+	# кулинарная книга видна в окне коллекций
+	hud.open_collections()
+	var texts: Array[String] = []
+	for l in hud._body(hud.col_panel).find_children("*", "Label", true, false):
+		texts.append((l as Label).text)
+	var joined := "\n".join(texts)
+	_ok(dev, joined.contains("Кулинарная книга — %d из %d" % [Cooking.RECIPES.size(), Cooking.RECIPES.size()]) and joined.contains("Овощное рагу"),
+		"кулинарная книга показана в окне коллекций")
+	hud.close_all()
+
+	# сохранение: книга и действующая польза переживают запись и загрузку
+	Game.inventory = {"veg_stew": 1}
+	Game.hunger = 20.0
+	Game.eat_item("veg_stew")
+	main.call("_save")
+	Game.flags.erase("cookbook")
+	Game.flags.erase("buffs")
+	Game.unlocked.erase("cook_pot")
+	var loaded := Game.load_game()
+	_ok(dev, not loaded.is_empty() and Cooking.known("veg_stew") and Cooking.has_buff("regen") and Game.unlocked.has("cook_pot"),
+		"книга, польза и котелок сохраняются и загружаются")
+	pot.queue_free()

@@ -2071,6 +2071,8 @@ func _test_ending() -> void:
 	_check(ok and Game.count("coins") - coins == OrderBoard.reward(ids[0]) and OrderBoard.done(ids[0]), "заказ выполнен и оплачен")
 	_check(not OrderBoard.fulfil(ids[0]), "один заказ — один раз")
 	_flush()
+	CozyTests.run(self)   # кулинария и уют «вечной игры»
+	_flush()
 	Game.delete_save()   # после титров игра сохранилась — следующему автотесту это не нужно
 
 
@@ -3364,6 +3366,13 @@ func _autotest() -> void:
 		_check(not _reachable(poi_id), "к месту «%s» не пройти без инструментов" % poi_id)
 
 	var ch := int(args.get("chapter", "1")) - 1
+	if args.has("cozyonly"):   # быстро: только кулинария и уют (как после финала)
+		Game.flags["ending_keeper"] = true
+		CozyTests.run(self)
+		_flush()
+		print("=== %s (%d ошибок) ===" % ["PASSED" if fails.is_empty() else "FAILED", fails.size()])
+		get_tree().quit(1 if not fails.is_empty() else 0)
+		return
 	if args.has("cliponly"):   # быстро: только проверка, что инструменты не входят в героя
 		for i in 120:   # герой стоит на земле (в прыжке руки разведены — проверка была бы мягче)
 			if p.is_on_floor():
