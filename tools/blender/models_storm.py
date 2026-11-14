@@ -279,15 +279,19 @@ def met_station():
     parts = []
     house = box("mh", (0, 0, 1.3), (3.0, 2.4, 2.6), bev=0.06)
     paint(house, hexcol("c8c2b4"), ao=0.3, ao_h=0.6, noise_amt=0.1, nscale=4,
-          fn=lambda co, n: (hexcol("8a8478") if co.z < 0.5 else (0.9 if math.sin(co.z * 3 + co.x * 2) > 0.92 else None)))
+          fn=lambda co, n: hexcol("8a8478") if co.z < 0.5 else None, mat="concrete")
     roof = box("mr", (0, 0, 2.65), (3.3, 2.7, 0.15), bev=0.03)
     paint(roof, hexcol("6b6660"), ao=0.0)
     door = box("md", (-0.7, -1.22, 1.0), (0.8, 0.06, 1.9), bev=0.03)
     paint(door, hexcol("4f7a5a"), ao=0.0, fn=lambda co, n: IRON if abs(co.x + 0.4) < 0.04 and abs(co.z - 1.0) < 0.06 else None)
     win = box("mw", (0.7, -1.22, 1.5), (0.9, 0.06, 0.7), bev=0.02)
-    paint(win, hexcol("3a4a5a"), ao=0.0, fn=lambda co, n: hexcol("e8dcc0") if (abs(co.x - 0.7) < 0.03 or abs(co.z - 1.5) < 0.03) else None)
+    paint(win, hexcol("3a4a5a"), ao=0.0, mat="glass", fn=lambda co, n: hexcol("e8dcc0") if (abs(co.x - 0.7) < 0.03 or abs(co.z - 1.5) < 0.03) else None)
     sign = box("ms", (0.0, -1.24, 2.25), (1.4, 0.04, 0.32), bev=0.01)
-    paint(sign, hexcol("e8dcc0"), ao=0.0, fn=lambda co, n: hexcol("2a2a2a") if (n.y < -0.5 and abs(co.z - 2.25) < 0.06 and int(co.x * 12) % 2) else None)
+    # надпись «ВЕТЕР-3»: буквы разной ширины с пробелом (не полосы «через одну»)
+    paint(sign, hexcol("e8dcc0"), ao=0.0, mat="painted",
+          fn=lambda co, n: hexcol("2a2a2a") if (n.y < -0.5 and abs(co.z - 2.25) < 0.06 and abs(co.x) < 0.55
+                                                and (co.x * 11 + 0.3 * math.sin(co.x * 23)) % 1.0 < 0.62
+                                                and not (0.08 < co.x < 0.17)) else None)
     parts += [house, roof, door, win, sign]
     # мачта антенны (решётчатая) на крыше
     mx, my = 1.0, 0.6
@@ -328,7 +332,8 @@ def met_station():
         for sy in (-1, 1):
             parts.append(log("bl", (2.3 + sx * 0.2, -0.6 + sy * 0.2, 0), (2.3 + sx * 0.2, -0.6 + sy * 0.2, 1.0), 0.03, col=hexcol("e8e2d8"), rings=False))
     booth = box("bt", (2.3, -0.6, 1.25), (0.55, 0.55, 0.55), bev=0.02)
-    paint(booth, hexcol("f2ede2"), ao=0.0, fn=lambda co, n: 0.85 if int(co.z * 25) % 2 else None)
+    # будка с жалюзи: тень под каждой планкой (узкая), а не полосы через одну
+    paint(booth, hexcol("f2ede2"), ao=0.0, mat="painted", fn=lambda co, n: 0.72 if (abs(n.z) < 0.5 and (co.z * 14) % 1.0 < 0.22) else None)
     broof = box("btr", (2.3, -0.6, 1.56), (0.65, 0.65, 0.06), bev=0.01)
     paint(broof, hexcol("e8e2d8"), ao=0.0)
     cab = box("cb", (-1.75, 0.2, 0.6), (0.4, 0.5, 1.2), bev=0.03)
@@ -362,12 +367,13 @@ def _glyph_fn(base):
 
 def bunker_wall():
     """Стена шахты Хранителей: панель 12 × 4.5 м из тёмного камня с вырезанными знаками (знаки — на −Y),
-    поверх — провода метеорологов на скобах."""
-    back = box("bw", (0, 0.2, 2.25), (12.0, 0.3, 4.5))
-    paint(back, shade(BUNKER, 0.7), ao=0.0)
-    face = dense_panel("bf", (0, 0.04, 2.25), 12.0, 4.5, 0.12)
+    поверх — провода метеорологов на скобах. Панель на 0,3 м шире шахты с каждой стороны: края уходят за соседнюю
+    стену, и в углах нет просветов (лицо стены стоит чуть внутри шахты)."""
+    back = box("bw", (0, 0.2, 2.25), (12.6, 0.3, 4.5))
+    paint(back, shade(BUNKER, 0.7), ao=0.0, mat="damp_stone")
+    face = dense_panel("bf", (0, 0.04, 2.25), 12.6, 4.5, 0.12)
     displace(face, 0.05, 0.2)
-    paint(face, BUNKER, ao=0.25, ao_h=0.5, noise_amt=0.1, nscale=3, fn=_glyph_fn(BUNKER))
+    paint(face, BUNKER, ao=0.25, ao_h=0.5, noise_amt=0.1, nscale=3, fn=_glyph_fn(BUNKER), mat="damp_stone")
     parts = [back, face]
     pts = [(-6.0, -0.05, 3.6)] + [(-6 + k * 1.0, -0.06, 3.6 - 0.12 * math.sin(k * 1.3)) for k in range(1, 13)]
     for c, dz in ((hexcol("1d1d1d"), 0.0), (hexcol("8a2a22"), -0.08)):
@@ -382,9 +388,9 @@ def bunker_wall():
 
 
 def bunker_ceiling():
-    c = box("bc", (0, 0, 0.3), (12.0, 12.0, 0.6))
+    c = box("bc", (0, 0, 0.3), (12.8, 12.8, 0.6))   # шире шахты: края заходят за стены, у стыка нет щели
     displace(c, 0.05, 0.3)
-    paint(c, shade(BUNKER, 0.8), ao=0.0, noise_amt=0.12, nscale=2)
+    paint(c, shade(BUNKER, 0.8), ao=0.0, noise_amt=0.12, nscale=2, mat="damp_stone")
     hatch = cyl("bh", (-4.6, 4.6, -0.02), 0.6, 0.6, 0.08, segs=16)
     paint(hatch, hexcol("e8d0a0"), ao=0.0, noise_amt=0)   # светлое пятно люка наверху
     join([c, hatch], "BunkerCeiling")
@@ -393,13 +399,13 @@ def bunker_ceiling():
 def bunker_deck():
     """Ярус: каменная плита 12 × 6.5 м, по ней — железный настил с заклёпками. Верх — на нуле."""
     slab = box("ds", (0, 0, -0.31), (12.0, 6.5, 0.6))
-    paint(slab, shade(BUNKER, 0.8), ao=0.0, noise_amt=0.1)
+    paint(slab, shade(BUNKER, 0.8), ao=0.0, noise_amt=0.1, mat="damp_stone")
     parts = [slab]
     for k in range(5):
         pl = dense_panel("dp", (-4.8 + k * 2.4, 0, 0.02), 2.3, 6.3, 0.1, facing="z")
         paint(pl, STEEL, ao=0.0, noise_amt=0.12, nscale=6,
-              fn=lambda co, n: 0.8 if ((co.x * 6 + co.y * 6) % 1.0 < 0.15 or (co.x * 6 - co.y * 6) % 1.0 < 0.15)
-              else (0.88 if math.sin(co.x * 3 + co.y * 5) > 0.7 else None))
+              fn=lambda co, n: 0.8 if ((co.x * 6 + co.y * 6) % 1.0 < 0.15 or (co.x * 6 - co.y * 6) % 1.0 < 0.15) else None,
+              mat="iron")
         parts.append(pl)
     join(parts, "BunkerDeck")
 
@@ -424,7 +430,7 @@ def bunker_rail():
     for z in (0.55, 1.08):
         parts.append(tube("rr", [(-0.5, 0, z), (0.5, 0, z)], 0.025, 6))
     for p in parts:
-        paint(p, hexcol("d9a520"), ao=0.0, fn=lambda co, n: hexcol("2a2a2a") if int((co.x + co.z) * 5) % 2 else None)
+        paint(p, hexcol("d9a520"), ao=0.0, fn=lambda co, n: hexcol("2a2a2a") if int((co.x + co.z) * 5) % 2 else None, mat="rustdoor")
     join(parts, "Rail")
 
 
@@ -433,7 +439,7 @@ def bunker_chain():
     parts = []
     for sx in (-1, 1):
         post = tube("cp", [(sx * 0.8, 0, 0), (sx * 0.8, 0, 1.1)], 0.04, 8)
-        paint(post, hexcol("d9a520"), ao=0.0)
+        paint(post, hexcol("d9a520"), ao=0.0, mat="rustdoor")
         parts.append(post)
     for k in range(16):
         t = k / 15
@@ -497,7 +503,7 @@ def bunker_crates():
     r = rnd(12)
     for i, (x, y, z, s) in enumerate(((0, 0, 0.3, 0.6), (0.65, 0.1, 0.25, 0.5), (0.2, 0.05, 0.85, 0.5))):
         c = box("cr", (x, y, z), (s, s, s), (0, 0, r.uniform(-0.2, 0.2)), bev=0.02)
-        paint(c, hexcol("8a7a5a"), ao=0.0, fn=lambda co, n: 0.8 if (abs(co.x) % 0.3 < 0.03) else None)
+        paint(c, hexcol("8a7a5a"), ao=0.0, fn=lambda co, n: 0.62 if (abs(co.x) % 0.3 < 0.03) else None, mat="wood")
         parts.append(c)
     drum = cyl("dr", (-0.6, 0.3, 0.0), 0.28, 0.28, 0.85, segs=16)
     paint(drum, hexcol("3a5a7a"), ao=0.0, fn=lambda co, n: shade(hexcol("3a5a7a"), 0.7) if abs(co.z % 0.28) < 0.03 else _rust_fn(hexcol("3a5a7a"))(co, n))
@@ -508,17 +514,17 @@ def bunker_crates():
 def bunker_hatch():
     """Люк в бункер на поверхности: бетонное кольцо, откинутая стальная крышка, поручни лестницы."""
     ring = lathe("hr", [(0.55, 0.0), (0.75, 0.0), (0.72, 0.25), (0.55, 0.25)], 24)
-    paint(ring, CONCRETE, ao=0.0, noise_amt=0.15, nscale=6)
+    paint(ring, CONCRETE, ao=0.0, noise_amt=0.15, nscale=6, mat="concrete")
     hole = cyl("hh", (0, 0, 0.02), 0.56, 0.56, 0.02, segs=24)
     paint(hole, hexcol("120f0c"), ao=0.0, noise_amt=0)
     lid = cyl("hl", (0, 0.62, 0.25), 0.6, 0.6, 0.08, (math.radians(-105), 0, 0), 24)
-    paint(lid, PAINT_GREEN, ao=0.0, fn=lambda co, n: 0.75 if int(abs(co.x) * 8) % 3 == 0 else _rust_fn(PAINT_GREEN)(co, n))
+    paint(lid, PAINT_GREEN, ao=0.0, fn=_rust_fn(PAINT_GREEN), mat="rustdoor")
     wheel = tube("hw", [(math.cos(a) * 0.22, 0.68 + 0.05, 0.3 + 0.0 + math.sin(a) * 0.22 + 0.25) for a in [k * math.pi / 8 for k in range(17)]], 0.02, 5, caps=False)
     paint(wheel, hexcol("c0392b"), ao=0.0)
     parts = [ring, hole, lid, wheel]
     for sx in (-1, 1):
         h = tube("hg", [(sx * 0.25, -0.5, 0.0), (sx * 0.25, -0.5, 0.75), (sx * 0.25, -0.35, 0.85), (sx * 0.25, -0.2, 0.75), (sx * 0.25, -0.2, 0.1)], 0.025, 6)
-        paint(h, hexcol("d9a520"), ao=0.0)
+        paint(h, hexcol("d9a520"), ao=0.0, mat="rustdoor")
         parts.append(h)
     join(parts, "Hatch")
 
@@ -526,7 +532,7 @@ def bunker_hatch():
 def bunker_hatch_inner():
     """Внизу у выхода: жёлтая плита с полосами и стрелкой вверх."""
     pl = box("hp", (0, 0, 0.02), (1.2, 1.2, 0.04), bev=0.01)
-    paint(pl, hexcol("f2d14a"), ao=0.0, fn=lambda co, n: hexcol("1d1d1d") if ((co.x + co.y) % 0.3 < 0.12 and (abs(co.x) > 0.45 or abs(co.y) > 0.45)) else None)
+    paint(pl, hexcol("f2d14a"), ao=0.0, fn=lambda co, n: hexcol("1d1d1d") if ((co.x + co.y) % 0.3 < 0.12 and (abs(co.x) > 0.45 or abs(co.y) > 0.45)) else None, mat="rustdoor")
     ar = box("ha", (0, 0, 0.05), (0.18, 0.5, 0.02))
     head = cyl("hh", (0, 0.32, 0.04), 0.2, 0.0, 0.02, (0, 0, 0), 3)
     for o in (ar, head):
@@ -538,11 +544,16 @@ def bunker_hatch_inner():
 def _generator(broken):
     parts = []
     body = box("gb", (0, 0, 0.55), (1.3, 0.8, 1.1), bev=0.06)
-    paint(body, PAINT_GREEN, ao=0.25, fn=_rust_fn(PAINT_GREEN) if broken else (lambda co, n: 0.9 if int(co.z * 10) % 2 else None))
+    # починенный — чистая краска и решётка вентиляции сбоку; сломанный — ржавчина пятнами
+    paint(body, PAINT_GREEN, ao=0.25, mat="rustdoor" if broken else "painted",
+          fn=_rust_fn(PAINT_GREEN) if broken else (lambda co, n: 0.62 if (abs(n.y) > 0.8 and 0.25 < co.z < 0.6 and abs(co.x) < 0.45
+                                                                         and (co.z * 16) % 1.0 < 0.3) else None))
     parts.append(body)
     for sx in (-1, 1):
         fly = cyl("gf", (sx * 0.7, 0, 0.55), 0.38, 0.38, 0.1, (0, math.pi / 2 * sx, 0), 20)
-        paint(fly, IRON, ao=0.0, fn=lambda co, n: 0.7 if int(math.atan2(co.y, co.z) * 3) % 2 else None)
+        # маховик: шесть спиц и обод (между спицами — тень)
+        paint(fly, IRON, ao=0.0, mat="iron",
+              fn=lambda co, n: 0.62 if (math.hypot(co.y, co.z - 0.55) < 0.3 and (math.atan2(co.y, co.z - 0.55) * 3 / math.pi) % 1.0 > 0.22) else None)
         parts.append(fly)
     for k, x in enumerate((-0.35, 0.0, 0.35)):
         d = cyl("gd", (x, -0.41, 0.8), 0.11, 0.11, 0.03, (math.pi / 2, 0, 0), 14)
@@ -704,9 +715,12 @@ def graves():
         x = -1.2 + k * 0.8
         st_ = box("gs", (x, 0.3, 0.38), (0.45, 0.16, 0.76), (0.05 * (k - 1.5), 0, 0.04 * k), bev=0.05)
         displace(st_, 0.02, 0.2)
-        paint(st_, hexcol("9a9690"), ao=0.2, noise_amt=0.12, nscale=6,
-              fn=lambda co, n: (hexcol("5a5650") if (n.y < -0.5 and 0.35 < co.z < 0.65 and int(co.z * 30) % 3 == 0) else
-                                (hexcol("6f8a4a") if co.z > 0.7 and n.z > 0.5 else None)))
+        # выбитые строки: буквы с пробелами между словами, а не сплошные полосы
+        paint(st_, hexcol("9a9690"), ao=0.2, noise_amt=0.12, nscale=6, mat="ashlar",
+              fn=lambda co, n, x0=x: (hexcol("5a5650") if (n.y < -0.5 and 0.35 < co.z < 0.65 and (co.z * 30) % 3.0 < 0.75
+                                                         and abs(co.x - x0) < 0.16 and (co.x * 40) % 1.0 < 0.7
+                                                         and noise.noise(Vector((co.x * 6, co.z * 9, x0))) > -0.35) else
+                                     (hexcol("6f8a4a") if co.z > 0.7 and n.z > 0.5 else None)))
         parts.append(st_)
         fl = sphere("gf", (x + 0.05, 0.05, 0.05), 0.07, (1, 1, 0.5))
         paint(fl, hexcol("e8d84a") if k % 2 else hexcol("ffffff"), ao=0.0)
@@ -727,7 +741,7 @@ def _tower(restored):
     parts = []
     tower = lathe("tw", [(1.8, 0.0), (1.7, 0.5), (1.4, 3.5), (1.2, 7.0), (1.0, 9.0), (1.3, 9.3), (1.3, 9.6), (0.0, 9.6)], 18)
     displace(tower, 0.08, 0.5, "VORONOI")
-    paint(tower, DARK_STONE, ao=0.3, ao_h=1.2, noise_amt=0.12, nscale=3,
+    paint(tower, DARK_STONE, ao=0.3, ao_h=1.2, noise_amt=0.12, nscale=3, mat="ashlar",
           fn=lambda co, n: (hexcol("8a8296") if (co.z * 1.6) % 1.0 < 0.06 else
                             (hexcol("c9b890") if (abs(math.atan2(co.y, co.x) - 1.2) < 0.08 and int(co.z) % 2) else None)))
     parts.append(tower)
@@ -737,10 +751,12 @@ def _tower(restored):
     for k in range(4):   # каменные «рёбра» к шпилю
         a = k * math.pi / 2 + math.pi / 4
         rib = tube("rb", [(math.cos(a) * 1.1, math.sin(a) * 1.1, 9.6), (math.cos(a) * 0.5, math.sin(a) * 0.5, 11.0), (0, 0, 11.6)], 0.12, 6)
-        paint(rib, shade(DARK_STONE, 1.1), ao=0.0)
+        paint(rib, shade(DARK_STONE, 1.1), ao=0.0, mat="ashlar")
         parts.append(rib)
     spire = cyl("sp", (0, 0, 11.4), 0.18, 0.0, 2.2, segs=12)
-    paint(spire, VERDIGRIS if not restored else COPPER, ao=0.0, fn=lambda co, n: (COPPER if (not restored and math.sin(co.z * 8) > 0.6) else None))
+    # старый шпиль позеленел пятнами (патина по шуму), починенный — начищенная медь
+    paint(spire, COPPER, ao=0.0, mat="brass",
+          fn=lambda co, n: (VERDIGRIS if (not restored and noise.noise(co * 3.0) > -0.25) else None))
     parts.append(spire)
     for k in range(6):
         a = 2 * math.pi * k / 6 + 0.2
@@ -755,12 +771,12 @@ def _tower(restored):
         parts.append(wire)
     t = join(parts, "StormTower")
     bowl = lathe("bw", [(0.0, 9.6), (0.6, 9.65), (0.85, 10.0), (0.75, 10.05), (0.0, 9.8)], 18)
-    paint(bowl, hexcol("6b5a3a"), ao=0.0)
+    paint(bowl, hexcol("6b5a3a"), ao=0.0, mat="iron")
     bowl.name = "Bowl"
     set_parent(bowl, t)
     if restored:
         dome = lathe("dm", [(0.82, 10.02), (0.8, 10.4), (0.6, 10.8), (0.3, 11.0), (0.0, 11.05)], 18)
-        paint(dome, GLASS, ao=0.0, noise_amt=0)
+        paint(dome, GLASS, ao=0.0, noise_amt=0.02, mat="glass")
         set_parent(dome, t)
         frame = tube("df", [(math.cos(a) * 0.83, math.sin(a) * 0.83, 10.03) for a in [k * math.pi / 8 for k in range(17)]], 0.03, 5, caps=False)
         paint(frame, COPPER, ao=0.0)

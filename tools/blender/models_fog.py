@@ -329,6 +329,14 @@ def albatros_lights():
 
 
 # ================================================================== лагерь на сваях
+def _pile(name, a, b, r, col):
+    """Свая: старое бревно без коры, внизу — мокрое, с зелёным налётом и ракушками у воды (texbake_places: "wet_wood").
+    Вода — примерно на 0,55 м ниже настила (Stilt camp: DECK_TOP)."""
+    t = tube(name, [a, b], [r, r * 0.95], 12)
+    paint(t, col, ao=0.0, noise_amt=0.08, nscale=10, mat="wet_wood")
+    return t
+
+
 def stilt_platform():
     """Помост на сваях 10 × 9 м (верх — z=0), доски, сваи уходят в воду, перила."""
     parts = []
@@ -338,7 +346,7 @@ def stilt_platform():
         parts.append(plank("pl", (r.uniform(-0.05, 0.05), y, -0.06), (10.0, 0.46, 0.12), col=hexcol("9a7a52"), seed=k))
     for x in (-4.6, -1.5, 1.5, 4.6):
         for y in (-4.0, 0.0, 4.0):
-            parts.append(log("st", (x, y, -3.0), (x, y, 0.0), 0.15, col=hexcol("5a4030")))
+            parts.append(_pile("st", (x, y, -3.0), (x, y, 0.0), 0.15, hexcol("6a5440")))
     for sx in (-1, 1):
         parts.append(log("rl", (sx * 4.9, -4.2, 0.9), (sx * 4.9, 4.2, 0.9), 0.05, rings=False))
         for y in (-4.0, 0.0, 4.0):
@@ -353,7 +361,7 @@ def stilt_pier():
         parts.append(plank("pl", (0, -2.25 + k * 0.5, -0.06), (2.2, 0.46, 0.12), col=hexcol("9a7a52"), seed=k))
     for y in (-2.2, 2.2):
         for x in (-1.0, 1.0):
-            parts.append(log("st", (x, y, -3.0), (x, y, 0.6), 0.12, col=hexcol("5a4030")))
+            parts.append(_pile("st", (x, y, -3.0), (x, y, 0.6), 0.12, hexcol("6a5440")))
     join(parts, "Pier")
 
 
@@ -361,14 +369,17 @@ def stilt_hut():
     """Хижина выживших: стены из жердей и парусины «Альбатроса», крыша из листьев, фонарь у входа."""
     parts = []
     walls = box("wl", (0, 0, 1.0), (2.2, 2.0, 2.0), bev=0.04)
-    paint(walls, hexcol("c9b890"), ao=0.25, ao_h=0.6, noise_amt=0.15, nscale=6,
-          fn=lambda co, n: (hexcol("8a6a4a") if int(co.x * 6 + co.y * 6) % 4 == 0 else (hexcol("e8443a") if 1.2 < co.z < 1.35 else None)))
+    # парусина на жердях: тёмные жерди тонкими стойками, красная полоса паруса
+    paint(walls, hexcol("c9b890"), ao=0.25, ao_h=0.6, noise_amt=0.15, nscale=6, mat="canvas",
+          fn=lambda co, n: (hexcol("8a6a4a") if (abs(n.z) < 0.5 and ((co.x + co.y) * 3.0) % 1.0 < 0.2) else
+                            (hexcol("e8443a") if 1.2 < co.z < 1.35 else None)))  # жерди через ~33 см
     door = box("dr", (0, -1.02, 0.8), (0.7, 0.05, 1.5), bev=0.02)
     paint(door, hexcol("3a2e24"), ao=0.0)
     parts += [walls, door]
     for sx in (-1, 1):
         rf = box("rf", (sx * 0.62, 0, 2.35), (1.4, 2.5, 0.12), (0, sx * 0.62, 0), bev=0.03)
-        paint(rf, hexcol("6a8a4a"), ao=0.0, noise_amt=0.2, nscale=12, fn=lambda co, n: 0.85 if int(co.y * 10) % 2 else None)
+        paint(rf, hexcol("6a8a4a"), ao=0.0, noise_amt=0.2, nscale=12, mat="leaf",
+              fn=lambda co, n: 0.74 if (n.z > 0.3 and (co.z * 7 + 0.1 * math.sin(co.y * 17)) % 1.0 < 0.14) else None)
         parts.append(rf)
     lamp = sphere("lm", (0.6, -1.15, 1.7), 0.1)
     paint(lamp, hexcol("ffd27a"), ao=0.0, noise_amt=0)
@@ -461,7 +472,7 @@ def signal_rock():
     """Сигнальный камень: большой валун в болоте, наверху — каменное кольцо для огня, вокруг — дрова. FirePoint — в кольце."""
     rk = ico("rk", (0, 0, 0.6), 1.4, (1.2, 1.0, 0.75), sub=3)
     displace(rk, 0.3, 0.8, "VORONOI")
-    paint(rk, STONE_G, ao=0.3, ao_h=0.6, noise_amt=0.1, fn=lambda co, n: MOSS if n.z > 0.5 and co.z < 1.2 else None)
+    paint(rk, STONE_G, ao=0.3, ao_h=0.6, noise_amt=0.1, fn=lambda co, n: MOSS if n.z > 0.5 and co.z < 1.2 else None, mat="ashlar")
     parts = [rk]
     for k in range(7):
         a = k * 2 * math.pi / 7
@@ -477,8 +488,11 @@ def standing_stone():
     """Стоячий камень святилища: высокий, чуть наклонённый, со стёртыми знаками и мхом."""
     s = _block("ss", 0.9, 0.6, 2.6, cuts=6)
     displace(s, 0.12, 0.6, "VORONOI")
-    paint(s, STONE_G, ao=0.2, ao_h=0.6, noise_amt=0.1,
-          fn=lambda co, n: (MOSS if (n.z > 0.5 or co.z < 0.3) else (hexcol("6a6e68") if math.sin(co.z * 9) > 0.85 and abs(n.y) > 0.6 else None)))
+    # стёртые знаки — извилистыми бороздками по шуму (не ровными полосами)
+    from mathutils import noise as _nz
+    paint(s, STONE_G, ao=0.2, ao_h=0.6, noise_amt=0.1, mat="ashlar",
+          fn=lambda co, n: (MOSS if (n.z > 0.5 or co.z < 0.3) else
+                            (hexcol("6a6e68") if (abs(n.y) > 0.6 and 0.6 < co.z < 2.2 and abs(_nz.noise(co * 3.5)) < 0.05) else None)))
     s.rotation_euler = (0.05, 0.04, 0)
     join([s], "Stone")
 
@@ -487,7 +501,7 @@ def screen_rock():
     """Скала-экран: гладкая светлая плита в скале, знак Ока; в середине — плита-проход Door (опускается)."""
     back = ico("bk", (0, 0.6, 1.8), 2.4, (1.3, 0.5, 0.95), sub=3)
     displace(back, 0.3, 0.8, "VORONOI")
-    paint(back, hexcol("6a6e68"), ao=0.3, ao_h=1.0, noise_amt=0.1, fn=lambda co, n: MOSS if n.z > 0.6 else None)
+    paint(back, hexcol("6a6e68"), ao=0.3, ao_h=1.0, noise_amt=0.1, fn=lambda co, n: MOSS if n.z > 0.6 else None, mat="ashlar")
     face = _block("fc", 4.6, 0.3, 3.4, cuts=14)
     face.location = (0, -0.2, 0)
 
@@ -497,11 +511,11 @@ def screen_rock():
             if abs(d - 0.55) < 0.06 or d < 0.1:
                 return hexcol("4a4e48")
         return None
-    paint(face, hexcol("c8ccc4"), ao=0.0, noise_amt=0.05, fn=eye)
+    paint(face, hexcol("c8ccc4"), ao=0.0, noise_amt=0.05, fn=eye, mat="carved")
     r = join([back, face], "ScreenRock")
     door = _block("dr", 1.4, 0.35, 2.0, cuts=4)
     door.location = (0, -0.38, 0)
-    paint(door, hexcol("b8bcb4"), ao=0.0, noise_amt=0.05, fn=lambda co, n: hexcol("8a8e88") if abs(co.x) < 0.02 else None)
+    paint(door, hexcol("b8bcb4"), ao=0.0, noise_amt=0.05, fn=lambda co, n: hexcol("8a8e88") if abs(co.x) < 0.02 else None, mat="carved")
     d = join([door], "Door")
     set_parent(d, r)
 
@@ -513,17 +527,20 @@ def _fog_tower(lit):
     tower = lathe("tw", [(1.7, 0.0), (1.6, 0.5), (1.35, 4.0), (1.15, 7.5), (1.35, 7.8), (1.35, 8.1), (0.0, 8.1)], 18)
     subsurf(tower, 2)
     displace(tower, 0.07, 0.5, "VORONOI")
-    paint(tower, STONE_G, ao=0.3, ao_h=1.2, noise_amt=0.1,
-          fn=lambda co, n: (MOSS if math.sin(co.x * 2 + co.z * 1.3) > 0.4 and co.z < 6.0 else (shade(STONE_G, 0.75) if (co.z * 1.7) % 1.0 < 0.07 else None)))
+    # мох пятнами по шуму (гуще внизу), швы рядов кладки
+    from mathutils import noise as _nz
+    paint(tower, STONE_G, ao=0.3, ao_h=1.2, noise_amt=0.1, mat="ashlar",
+          fn=lambda co, n: (MOSS if (_nz.noise(co * 0.8) + 0.35 * _nz.noise(co * 2.4) - 0.08 * co.z) > 0.05 and co.z < 6.5 else
+                            (shade(STONE_G, 0.75) if (co.z * 1.7) % 1.0 < 0.07 else None)))
     door = box("dr", (0, -1.5, 0.9), (0.8, 0.4, 1.7), bev=0.05)
     paint(door, hexcol("1a1e1a"), ao=0.0)
     parts += [tower, door]
     t = join(parts, "FogTower")
     if lit:
         base = box("bb", (0, 0, 8.3), (1.4, 1.4, 0.4), bev=0.04)
-        paint(base, hexcol("b8583a"), ao=0.0, fn=lambda co, n: hexcol("e8d8c0") if (co.z * 7) % 1.0 < 0.1 else None)
+        paint(base, hexcol("b8583a"), ao=0.0, fn=masonry(hexcol("b8583a"), course=0.1, block=0.24), mat="brick")
         bowl = lathe("bw", [(0.0, 8.5), (0.6, 8.55), (0.95, 8.95), (0.85, 9.0), (0.0, 8.75)], 18)
-        paint(bowl, hexcol("4a4c52"), ao=0.0, fn=lambda co, n: hexcol("3a2a5a") if n.z > 0.4 else None)
+        paint(bowl, hexcol("4a4c52"), ao=0.0, fn=lambda co, n: hexcol("3a2a5a") if n.z > 0.4 else None, mat="iron")
         set_parent(base, t)
         set_parent(bowl, t)
         empty("FirePoint", (0, 0, 8.85), t)

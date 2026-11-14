@@ -18,6 +18,7 @@
 - **Ни одно задание не должно стать невыполнимым** из-за действий игрока: валидатор + автотест.
 - **Экономика идёт за сюжетом:** монеты на покупки главы зарабатываются хозяйством.
 - **Каждую готовую часть — сразу в git (commit + push)**, вместе с моделями, иконками и звуками.
+- **Коммиты — без подписи ИИ:** не добавлять строку `Co-Authored-By: Claude …` и «Generated with Claude Code» (проект — автора).
 
 ## Устройство
 - **Весь контент — в `scripts/data.gd`:**
@@ -160,6 +161,10 @@
   `shell`, `driftwood`, `leather`, `cork`, `paper`, `brass`, `edge`, `forged`, `enamel`, `coal`, `ember`, `glass`, `rubber`, `water`, `fish`; остальное —
   `texbake.detail_build`. Ячеистый шум — `texbake_props.cells()`. Атлас 256–512 (инструменты — 512, скалы и ледяные стены — 1024,
   `texbake_props.TEX_SIZE`). Лёд мелочи красится `_snow_fn` (не `_ice_fn` с полосами), базальт — без `_basalt_fn`.
+- **Текстуры особых мест** (v1.0.11, список `PLACES` в `build.py`, семейство `"places"`, атлас 256–1024 по площади, крупнее —
+  `PLACES_SIZE`, больше места сетке — `PLACES_BOOST`): всё от построек плюс свои виды в `tools/blender/texbake_places.py` — `mat="ashlar"|"damp_stone"|"giant_bark"|"concrete"|
+  "rustdoor"|"glacier"|"ice"|"snow"|"basalt"|"lava_rock"|"carved"|"wet_wood"|"glass"|"brass"|"plaster"`, цвета мест — `texbake_places.KNOWN`.
+  Лёд мест — `models_ice._glacier_fn` (старый `_ice_fn` с `sin`-полосами — у льдин и ларцов). `storm_wall` не запекается (свой шейдер).
 - **Живость моделей:** складки ткани, пряди, шерсть у запечённых моделей рисует `texbake.detail` (по пикселям). Прежние
   `kit.liven` / `kit.liven_fur` (то же по вершинам) остались в `kit.py` для моделей на цвете вершин, `build.py` их больше не зовёт.
   Общие помощники дерева: `kit.bark_trunk`, `wood_cap` (торец с кольцами), `splinters`, `bark_fn`, `smooth_path`; `log()`/`plank()`

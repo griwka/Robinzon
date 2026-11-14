@@ -55,6 +55,20 @@ def _basalt_fn(base=BASALT):
     return f
 
 
+def _crater_fn(base=BASALT):
+    """Базальтовые столбы стены кратера (v1.0.10, запекается в текстуру): светлые торцы сверху, поперечные
+    трещины столбов на разной высоте (по шуму, а не полосами), окисел пятнами рисует texbake_places ("basalt")."""
+    def f(co, n):
+        if n.z > 0.6:
+            return shade(base, 1.25)
+        col = math.floor((co.x + 4.0) / 0.44)
+        z = co.z + 1.8 * _nz.noise((col * 1.7, 0.3, 0.0))
+        if (z / 1.35) % 1.0 < 0.025 and _nz.noise((col * 2.1, z * 0.3, 1.0)) > -0.3:
+            return shade(base, 0.55)
+        return None
+    return f
+
+
 # ================================================================== доктор Вера
 def vera():
     """Доктор Вера: около шестидесяти, полная и тёплая. Пёстрый платок, вязаная кофта поверх платья,
@@ -203,9 +217,11 @@ def hot_springs():
     for (x, y, rad) in ((-1.4, -0.2, 1.1), (1.3, 0.4, 0.95), (0.2, -1.6, 0.85)):
         basin = lathe("bs", [(rad + 0.25, 0.0), (rad + 0.3, 0.22), (rad + 0.05, 0.32), (rad - 0.05, 0.2), (0.0, 0.05)], 20, loc=(x, y, 0))
         displace(basin, 0.04, 0.2)
-        paint(basin, BASALT_L, ao=0.2, ao_h=0.3, fn=lambda co, n: hexcol("d8cfa8") if n.z > 0.6 and co.z > 0.25 else None)
+        paint(basin, BASALT_L, ao=0.2, ao_h=0.3, mat="basalt", fn=lambda co, n: hexcol("d8cfa8") if n.z > 0.6 and co.z > 0.25 else None)
         water = cyl("wt", (x, y, 0.2), rad - 0.02, rad - 0.02, 0.04, segs=20)
-        paint(water, WATER, ao=0.0, noise_amt=0, fn=lambda co, n: hexcol("bff4ee") if math.sin(co.x * 7 + co.y * 5) > 0.8 else None)
+        # блики на воде — извилистыми линиями по шуму (а не ровными полосами)
+        paint(water, WATER, ao=0.0, noise_amt=0,
+              fn=lambda co, n: hexcol("bff4ee") if abs(_nz.noise(co * 2.6) + 0.4 * _nz.noise(co * 6.0)) < 0.05 else None)
         parts += [basin, water]
         for k in range(5):
             a = r.uniform(0, 2 * math.pi)
@@ -219,25 +235,29 @@ def hot_springs():
 
 def clinic():
     """Лечебница Веры: домик из камня и досок, крыльцо, пучки трав под навесом, бочка, вывеска с листиком."""
+    from models_buildings import boards
     parts = []
     walls = box("wl", (0, 0, 1.0), (2.8, 2.2, 2.0), bev=0.04)
-    paint(walls, hexcol("e8dcc4"), ao=0.25, ao_h=0.6, fn=lambda co, n: (BASALT_L if co.z < 0.45 else None))
+    paint(walls, hexcol("e8dcc4"), ao=0.25, ao_h=0.6, fn=lambda co, n: (BASALT_L if co.z < 0.45 else None), mat="plaster")
     parts.append(walls)
     for sx in (-1, 1):
         rf = box("rf", (sx * 0.78, 0, 2.3), (1.75, 2.6, 0.08), (0, sx * 0.55, 0), bev=0.03)
-        paint(rf, hexcol("b8583a"), ao=0.0, fn=lambda co, n: 0.85 if int(co.y * 8) % 2 else None)
+        from models_fog import _tiles   # черепица рядами со сдвигом (как у домов на Туманном)
+        paint(rf, hexcol("b8583a"), ao=0.0, fn=_tiles(sx * 0.78, 2.3, sx * 0.55), mat="clay")
         parts.append(rf)
     door = box("dr", (0.4, -1.12, 0.8), (0.75, 0.06, 1.5), bev=0.03)
-    paint(door, hexcol("6f9a8a"), ao=0.0, fn=lambda co, n: hexcol("c9a050") if abs(co.x - 0.65) < 0.04 and abs(co.z - 0.85) < 0.05 else None)
+    paint(door, hexcol("6f9a8a"), ao=0.0, mat="painted",
+          fn=lambda co, n: hexcol("c9a050") if abs(co.x - 0.65) < 0.04 and abs(co.z - 0.85) < 0.05 else None)
     win = box("wn", (-0.75, -1.12, 1.2), (0.6, 0.05, 0.5), bev=0.02)
-    paint(win, hexcol("bfe8f0"), ao=0.0, fn=lambda co, n: hexcol("8a5a32") if abs(co.x + 0.75) < 0.03 or abs(co.z - 1.2) < 0.03 else None)
+    paint(win, hexcol("bfe8f0"), ao=0.0, mat="glass", fn=lambda co, n: hexcol("8a5a32") if abs(co.x + 0.75) < 0.03 or abs(co.z - 1.2) < 0.03 else None)
     porch = box("pr", (0, -1.5, 0.08), (2.8, 0.8, 0.12), bev=0.02)
-    paint(porch, hexcol("c99a5e"), ao=0.0, fn=lambda co, n: 0.88 if int(co.x * 6) % 2 else None)
+    _porch = boards(6, axis=0)
+    paint(porch, hexcol("c99a5e"), ao=0.0, mat="wood", fn=_porch)
     parts += [door, win, porch]
     for x in (-1.3, 1.3):
         parts.append(log("pp", (x, -1.8, 0.1), (x, -1.8, 1.9), 0.06))
     awn = box("aw", (0, -1.55, 1.95), (2.9, 0.9, 0.05), (-0.25, 0, 0), bev=0.02)
-    paint(awn, hexcol("4f9a8a"), ao=0.0, fn=lambda co, n: hexcol("f2ead8") if int(co.x * 4) % 2 else None)
+    paint(awn, hexcol("4f9a8a"), ao=0.0, fn=lambda co, n: hexcol("f2ead8") if int(co.x * 4) % 2 else None, mat="canvas")   # полосатая ткань навеса
     parts.append(awn)
     r = rnd(3)
     for k in range(6):   # пучки трав
@@ -248,12 +268,12 @@ def clinic():
         paint(bun, shade(hexcol("6f9a4a"), r.uniform(0.8, 1.15)), ao=0.0, noise_amt=0.2, nscale=30)
         parts += [st, bun]
     barrel = lathe("br", [(0.0, 0.0), (0.28, 0.0), (0.32, 0.35), (0.28, 0.7), (0.0, 0.7)], 14, loc=(1.6, -1.2, 0))
-    paint(barrel, hexcol("8a5a32"), ao=0.0, fn=lambda co, n: IRON if abs(co.z - 0.15) < 0.03 or abs(co.z - 0.55) < 0.03 else None)
+    paint(barrel, hexcol("8a5a32"), ao=0.0, mat="wood", fn=lambda co, n: IRON if abs(co.z - 0.15) < 0.03 or abs(co.z - 0.55) < 0.03 else None)
     sign = box("sg", (-1.25, -1.86, 1.55), (0.5, 0.04, 0.32), bev=0.02)
     paint(sign, hexcol("f2ead8"), ao=0.0,
           fn=lambda co, n: hexcol("4f9a4a") if n.y < -0.5 and (co.x + 1.25) ** 2 * 8 + (co.z - 1.55) ** 2 * 20 < 0.08 else None)
     chim = box("ch", (0.9, 0.5, 2.6), (0.35, 0.35, 0.8), bev=0.03)
-    paint(chim, BASALT_L, ao=0.0)
+    paint(chim, BASALT_L, ao=0.0, mat="basalt")
     parts += [barrel, sign, chim]
     join(parts, "Clinic")
 
@@ -492,11 +512,11 @@ def crater_wall():
         phi = x / R
         v.co.x = rr * math.sin(phi)
         v.co.y = R - rr * math.cos(phi)
-    paint(w, BASALT, ao=0.3, ao_h=1.5, noise_amt=0.08, fn=_basalt_fn())
+    paint(w, BASALT, ao=0.3, ao_h=1.5, noise_amt=0.08, fn=_crater_fn(), mat="basalt")
     lip = tube("lp", [(math.sin(a / R) * (R - 0.1), R - math.cos(a / R) * (R - 0.1), 8.0) for a in [-2.0 + k * 0.4 for k in range(11)]], 0.35, 8)
     lip.scale = (1.0, 1.0, 0.6)
     displace(lip, 0.1, 0.3)
-    paint(lip, hexcol("6a6060"), ao=0.0, noise_amt=0.15, fn=lambda co, n: hexcol("9a908a") if n.z > 0.6 else None)
+    paint(lip, hexcol("6a6060"), ao=0.0, noise_amt=0.15, fn=lambda co, n: hexcol("9a908a") if n.z > 0.6 else None, mat="lava_rock")
     join([w, lip], "CraterWall")
 
 
@@ -507,7 +527,7 @@ def rock_holds():
         z = 0.2 + k * 0.5
         x = -0.2 if k % 2 == 0 else 0.2
         h = box("hl", (x, -0.02, z), (0.32, 0.22, 0.1), (0, 0, 0.1 * (1 - 2 * k)), bev=0.03)
-        paint(h, BASALT_L, ao=0.0, fn=lambda co, n: shade(BASALT_L, 1.2) if n.z > 0.5 else None)
+        paint(h, BASALT_L, ao=0.0, fn=lambda co, n: shade(BASALT_L, 1.2) if n.z > 0.5 else None, mat="basalt")
         parts.append(h)
     crack = box("ck", (0.0, 0.06, 0.5), (0.05, 0.05, 0.9))
     paint(crack, hexcol("ff7a2a"), ao=0.0, noise_amt=0)
@@ -526,7 +546,9 @@ def lava_rim():
     for k in range(8):
         a = r.uniform(0, 2 * math.pi)
         dr = sphere("dr", (math.cos(a) * 3.4, math.sin(a) * 3.4, 0.08), 0.35, (1.4, 0.8, 0.3))
-        paint(dr, hexcol("2e2a28"), ao=0.0, fn=lambda co, n: LAVA if math.sin(co.x * 20 + co.y * 13) > 0.85 else None)
+        # застывший натёк: тёмная корка, по ней — светящиеся трещины (по шуму, а не полосами)
+        paint(dr, hexcol("2e2a28"), ao=0.0, mat="lava_rock",
+              fn=lambda co, n: LAVA if abs(_nz.noise(co * 5.0) + 0.3 * _nz.noise(co * 13.0)) < 0.045 else None)
         parts.append(dr)
     join(parts, "LavaRim")
 
@@ -538,7 +560,7 @@ def temple_facade():
     parts = []
     for sx in (-1, 1):
         col = box("cl", (sx * 1.25, -0.2, 1.6), (0.6, 0.7, 3.2), bev=0.06)
-        paint(col, RED_STONE, ao=0.25, ao_h=1.0, noise_amt=0.1,
+        paint(col, RED_STONE, ao=0.25, ao_h=1.0, noise_amt=0.1, mat="carved",
               fn=lambda co, n: (EMBER if (n.y < -0.5 and abs(math.sin(co.z * 4.0)) < 0.12) else None))
         parts.append(col)
     lintel = _slab("ln", (0, -0.25, 3.45), (3.4, 0.8, 0.7), cuts=14)
@@ -552,18 +574,18 @@ def temple_facade():
             if d < 0.42 and abs(math.sin(math.atan2(dz, dx) * 5)) < 0.25:
                 return hexcol("e8a050")
         return None
-    paint(lintel, RED_STONE, ao=0.0, noise_amt=0.1, fn=sun)
+    paint(lintel, RED_STONE, ao=0.0, noise_amt=0.1, fn=sun, mat="carved")
     parts.append(lintel)
     frame = box("fr", (0, 0.1, 1.5), (1.95, 0.4, 3.1))
     paint(frame, hexcol("1a1414"), ao=0.0)
     parts.append(frame)
     for k in range(3):
         st = box("sp", (0, -0.55 - k * 0.3, 0.06 + (2 - k) * 0.12), (2.6 - k * 0.1, 0.32, 0.14 + (2 - k) * 0.24), bev=0.03)
-        paint(st, BASALT_L, ao=0.0, noise_amt=0.1)
+        paint(st, BASALT_L, ao=0.0, noise_amt=0.1, mat="basalt")
         parts.append(st)
     for sx in (-1, 1):   # огненные чаши у входа
         bw = lathe("bw", [(0.0, 0.0), (0.15, 0.0), (0.12, 0.6), (0.3, 0.75), (0.32, 0.85), (0.0, 0.8)], 12, loc=(sx * 1.9, -0.7, 0))
-        paint(bw, BASALT, ao=0.0, fn=lambda co, n: LAVA if co.z > 0.78 and n.z > 0.5 else None)
+        paint(bw, BASALT, ao=0.0, fn=lambda co, n: LAVA if co.z > 0.78 and n.z > 0.5 else None, mat="basalt")
         parts.append(bw)
     join(parts, "TempleFacade")
 
@@ -571,7 +593,7 @@ def temple_facade():
 def temple_door():
     """Каменная плита-дверь храма (опускается вниз, когда лава наполнит чашу)."""
     d = _slab("dr", (0, -0.05, 1.45), (1.9, 0.3, 2.9), cuts=14)
-    paint(d, hexcol("6a4a3a"), ao=0.0, noise_amt=0.12,
+    paint(d, hexcol("6a4a3a"), ao=0.0, noise_amt=0.12, mat="carved",
           fn=lambda co, n: (EMBER if n.y < -0.5 and math.hypot(co.x, co.z - 1.6) < 0.25 else
                             (hexcol("4a3228") if n.y < -0.5 and abs(math.hypot(co.x, co.z - 1.6) - 0.6) < 0.05 else None)))
     join([d], "TempleDoor")
@@ -595,20 +617,20 @@ def monolith():
             if abs(dz + 0.85) < 0.05 and abs(dx) < 0.25:
                 return hexcol("e8a050")
         return None
-    paint(slab, RED_STONE, ao=0.2, ao_h=0.6, noise_amt=0.1, fn=pic)
+    paint(slab, RED_STONE, ao=0.2, ao_h=0.6, noise_amt=0.1, fn=pic, mat="carved")
     base = box("bs", (0, 0, 0.08), (1.2, 0.5, 0.16), bev=0.03)
-    paint(base, BASALT, ao=0.0)
+    paint(base, BASALT, ao=0.0, mat="basalt")
     join([slab, base], "Monolith")
 
 
 def lava_chute():
     """Каменный жёлоб на поворотном круглом камне; носик смотрит вперёд (−Y Blender → +Z Godot)."""
     base = cyl("bs", (0, 0, 0.0), 0.45, 0.42, 0.3, segs=14)
-    paint(base, BASALT, ao=0.0, fn=lambda co, n: BASALT_L if n.z > 0.7 else None)
+    paint(base, BASALT, ao=0.0, fn=lambda co, n: BASALT_L if n.z > 0.7 else None, mat="basalt")
     trough = box("tr", (0, -0.2, 0.42), (0.36, 0.9, 0.2), bev=0.03)
-    paint(trough, RED_STONE, ao=0.0, fn=lambda co, n: hexcol("2a1a14") if n.z > 0.7 and abs(co.x) < 0.12 else None)
+    paint(trough, RED_STONE, ao=0.0, fn=lambda co, n: hexcol("2a1a14") if n.z > 0.7 and abs(co.x) < 0.12 else None, mat="carved")
     spout = cyl("sp", (0, -0.65, 0.42), 0.12, 0.06, 0.2, (math.pi / 2, 0, 0), 8)
-    paint(spout, RED_STONE, ao=0.0)
+    paint(spout, RED_STONE, ao=0.0, mat="carved")
     arrow = box("ar", (0, -0.4, 0.53), (0.08, 0.3, 0.02))
     paint(arrow, EMBER, ao=0.0, noise_amt=0)
     join([base, trough, spout, arrow], "Chute")
@@ -617,7 +639,7 @@ def lava_chute():
 def lava_bowl():
     """Каменная чаша на тумбе — сюда должна стечь лава."""
     b = lathe("bw", [(0.0, 0.0), (0.4, 0.0), (0.3, 0.5), (0.55, 0.75), (0.6, 0.95), (0.5, 0.92), (0.0, 0.75)], 18)
-    paint(b, RED_STONE, ao=0.2, ao_h=0.4, noise_amt=0.1, fn=lambda co, n: hexcol("2a1a14") if n.z > 0.5 and co.z > 0.8 else None)
+    paint(b, RED_STONE, ao=0.2, ao_h=0.4, noise_amt=0.1, fn=lambda co, n: hexcol("2a1a14") if n.z > 0.5 and co.z > 0.8 else None, mat="carved")
     join([b], "LavaBowl")
 
 
@@ -638,7 +660,7 @@ def cold_stone():
     """Холодный камень: застывшая чёрная лава, остывшая до сизого, с инеем-налётом пемзы."""
     s = ico("cs", (0, 0, 0.3), 0.45, (1.2, 1.0, 0.7), sub=2)
     displace(s, 0.12, 0.4, "VORONOI")
-    paint(s, hexcol("3a3e48"), ao=0.2, ao_h=0.3, noise_amt=0.1, fn=lambda co, n: hexcol("8a909a") if n.z > 0.7 else None)
+    paint(s, hexcol("3a3e48"), ao=0.2, ao_h=0.3, noise_amt=0.1, fn=lambda co, n: hexcol("8a909a") if n.z > 0.7 else None, mat="lava_rock")
     join([s], "ColdStone")
 
 
@@ -649,7 +671,7 @@ def _volcano_tower(restored):
     parts = []
     tower = lathe("tw", [(1.6, 0.0), (1.5, 0.5), (1.3, 3.0), (1.1, 5.5), (1.35, 5.8), (1.35, 6.1), (0.0, 6.1)], 18)
     displace(tower, 0.07, 0.5, "VORONOI")
-    paint(tower, RED_STONE, ao=0.3, ao_h=1.0, noise_amt=0.1,
+    paint(tower, RED_STONE, ao=0.3, ao_h=1.0, noise_amt=0.1, mat="carved",
           fn=lambda co, n: (shade(RED_STONE, 0.7) if (co.z * 1.8) % 1.0 < 0.07 else (EMBER if (abs(math.atan2(co.y, co.x) - 1.57) < 0.08 and co.z > 1.0) else None)))
     parts.append(tower)
     door = box("dr", (0, -1.4, 0.85), (0.7, 0.4, 1.6), bev=0.05)
@@ -661,18 +683,18 @@ def _volcano_tower(restored):
     # жёлоб от озера (сзади, +Y Blender — к центру кратера) к чаше
     if restored:
         ch = box("ch", (0, 2.2, 3.4), (0.5, 3.6, 0.25), (0.6, 0, 0), bev=0.03)
-        paint(ch, IRON, ao=0.0, fn=lambda co, n: LAVA if n.z > 0.6 else None)
+        paint(ch, IRON, ao=0.0, fn=lambda co, n: LAVA if n.z > 0.6 else None, mat="iron")
         gate = box("gt", (0, 1.0, 5.6), (0.6, 0.08, 0.5), bev=0.02)
-        paint(gate, IRON, ao=0.0)
+        paint(gate, IRON, ao=0.0, mat="rustdoor")
         parts += [ch, gate]
     else:
         for k in range(3):
             pc = box("pc", (0.3 * (k - 1), 2.4 + k * 0.4, 0.15), (0.5, 0.9, 0.2), (0.3 * k, 0.2, 0.5 * k), bev=0.03)
-            paint(pc, hexcol("6a5a50"), ao=0.0)
+            paint(pc, hexcol("6a5a50"), ao=0.0, mat="carved")
             parts.append(pc)
     t = join(parts, "VolcanoTower")
     bowl = lathe("bw", [(0.0, 6.1), (0.6, 6.15), (0.9, 6.5), (0.8, 6.55), (0.0, 6.3)], 18)
-    paint(bowl, hexcol("3a2e2a"), ao=0.0, fn=lambda co, n: (LAVA if restored and n.z > 0.5 else None))
+    paint(bowl, hexcol("3a2e2a"), ao=0.0, fn=lambda co, n: (LAVA if restored and n.z > 0.5 else None), mat="basalt")
     set_parent(bowl, t)
     empty("FirePoint", (0, 0, 6.4), t)
 

@@ -126,9 +126,12 @@ func _build_shaft() -> void:
 		var yaw := side * PI / 2.0
 		var n := Vector3(sin(yaw), 0, cos(yaw))
 		_box(Vector3(12.8 if side % 2 == 0 else 0.6, h, 0.6 if side % 2 == 0 else 12.8), n * (HALF + 0.3) + Vector3(0, bottom + h * 0.5, 0))
-		var levels := int(floor(h / STEP + 0.05))   # верхний кусок стены не торчит над потолком
+		# куски стены по 4,5 м чуть растянуты по высоте, чтобы дойти до потолка и зайти в него на 10 см
+		# (иначе под потолком оставалась щель: 7 кусков — 31,5 м на шахту 31,6 м)
+		var levels := int(floor(h / STEP + 0.05))
+		var ws := (h + 0.1) / (levels * STEP)
 		for i in levels:
-			_model("bunker_wall", n * HALF + Vector3(0, bottom + i * STEP, 0), yaw + PI)
+			_model("bunker_wall", n * HALF + Vector3(0, bottom + i * STEP * ws, 0), yaw + PI, Vector3(1, ws, 1))
 	_box(Vector3(12.8, 0.6, 12.8), Vector3(0, top + 0.3, 0))
 	_model("bunker_ceiling", Vector3(0, top, 0))
 	for k in range(1, DECKS + 1):

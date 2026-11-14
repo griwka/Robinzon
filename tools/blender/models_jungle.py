@@ -410,8 +410,10 @@ def old_camp():
     cl = from_bm("cloth", bm)
     solidify(cl, 0.03)
     subsurf(cl, 1)
-    paint(cl, hexcol("c9bfa0"), ao=0.3, ao_h=0.4, noise_amt=0.15, nscale=6,
-          fn=lambda co, n: hexcol("6f8a4a") if math.sin(co.x * 5 + co.y * 7) > 0.6 else None)
+    # рухнувшая палатка: зелёная плесень и мох пятнами по шуму (не полосами)
+    from mathutils import noise as _nz
+    paint(cl, hexcol("c9bfa0"), ao=0.3, ao_h=0.4, noise_amt=0.15, nscale=6, mat="canvas",
+          fn=lambda co, n: hexcol("6f8a4a") if _nz.noise(co * 2.4) + 0.35 * _nz.noise(co * 7.0) > 0.25 else None)
     parts.append(cl)
     for k in range(7):
         a = 2 * math.pi * k / 7
@@ -420,7 +422,7 @@ def old_camp():
         parts.append(plank("cr", (-1.6 + k * 0.25, 1.3, 0.12 + (k % 2) * 0.1), (0.9, 0.2, 0.06), (0.3 * k, 0, 0.4 * k), col=hexcol("9a7046")))
     stand = log("sd", (1.5, -1.6, 0), (1.5, -1.6, 0.9), 0.05, rings=False)
     book = box("bk", (1.5, -1.6, 0.95), (0.4, 0.3, 0.06), (0.4, 0, 0.2), bev=0.02)
-    paint(book, hexcol("8a3a2a"), ao=0.0, fn=lambda co, n: hexcol("f2e2b8") if n.z > 0.6 else None)
+    paint(book, hexcol("8a3a2a"), ao=0.0, fn=lambda co, n: hexcol("f2e2b8") if n.z > 0.6 else None, mat="plain")
     parts += [stand, book]
     join(parts, "OldCamp")
 
@@ -453,7 +455,7 @@ def lighthouse_ruin():
     dark = hexcol("5c5866")
     tower = lathe("tw", [(1.5, 0.0), (1.45, 0.4), (1.25, 2.5), (1.1, 4.6), (1.2, 4.8), (1.2, 5.0), (0.0, 5.0)], 16)
     displace(tower, 0.08, 0.5, "VORONOI")
-    paint(tower, dark, ao=0.3, ao_h=1.2, noise_amt=0.12, nscale=3,
+    paint(tower, dark, ao=0.3, ao_h=1.2, noise_amt=0.12, nscale=3, mat="ashlar",
           fn=lambda co, n: hexcol("5f8a4a") if (n.z > 0.7 and co.z < 0.5) else (0.75 if (co.z * 2.2) % 1.0 < 0.07 else None))
     parts.append(tower)
     door = box("dr", (0, -1.32, 0.8), (0.7, 0.3, 1.5), bev=0.05)
@@ -464,17 +466,17 @@ def lighthouse_ruin():
         if k in (2, 5):
             continue
         z = box("cr", (math.cos(a) * 1.1, math.sin(a) * 1.1, 5.25), (0.45, 0.35, 0.5), (0, 0, a), bev=0.04)
-        paint(z, shade(dark, 1.1), ao=0.0, noise_amt=0.1)
+        paint(z, shade(dark, 1.1), ao=0.0, noise_amt=0.1, mat="ashlar")
         parts.append(z)
     for k in range(6):
         a = 2 * math.pi * k / 6 + 0.3
         parts.append(stone("rb", (math.cos(a) * 2.0, math.sin(a) * 2.0, 0.15), 0.35, k, shade(dark, 1.15)))
     vine = tube("vn", [(1.25, 0.3, 0.0), (1.2, 0.5, 1.5), (1.05, 0.2, 3.2), (1.0, -0.3, 4.4)], 0.05, 6)
-    paint(vine, hexcol("4f7a3a"), ao=0.0)
+    paint(vine, hexcol("4f7a3a"), ao=0.0, mat="bark")
     parts.append(vine)
     t = join(parts, "Lighthouse")
     bowl = lathe("bw", [(0.0, 5.0), (0.5, 5.05), (0.7, 5.4), (0.62, 5.45), (0.0, 5.2)], 18)
-    paint(bowl, hexcol("6b5a3a"), ao=0.0, fn=lambda co, n: hexcol("5a4a42") if n.z > 0.5 else None)
+    paint(bowl, hexcol("6b5a3a"), ao=0.0, fn=lambda co, n: hexcol("5a4a42") if n.z > 0.5 else None, mat="iron")
     bowl.name = "Bowl"
     set_parent(bowl, t)
     empty("FirePoint", (0, 0, 5.5), t)
