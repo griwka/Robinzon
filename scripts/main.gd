@@ -281,8 +281,8 @@ var _lantern: OmniLight3D
 ## Фонарь в руке светит в бункере, ночью и в тумане. Фонарь со светлячками — зелёный и вдвое дальше.
 func _update_lantern() -> void:
 	var fogged: bool = Game.location == "fog" and not Game.flags.get("fog_cleared", false)
-	var big := Game.has_tool("firefly_lantern")
-	var on: bool = (Game.has_tool("lantern") or big) and (world_env.indoor or not Game.is_day() or fogged)
+	var big := Game.light_kind() == "firefly"
+	var on: bool = Game.has_light() and (world_env.indoor or not Game.is_day() or fogged)
 	if on and _lantern == null:
 		_lantern = OmniLight3D.new()
 		_lantern.light_color = Color("ffd59a")
@@ -435,6 +435,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if kc >= KEY_0 and kc <= KEY_9:
 			var idx := 9 if kc == KEY_0 else kc - KEY_1
 			var slots := Game.hold_slots()
+			# 5 — фонарь (включить / выключить), 6 — огнеупорные рукавицы (надеть / снять)
+			for g in Game.GEAR_KEYS:
+				if idx + 1 == int(Game.GEAR_KEYS[g]) and Game.gear_owned(g):
+					Game.toggle_gear(g)
 			if idx < slots.size():
 				Game.hold("" if Game.held == slots[idx] else slots[idx])
 				Audio.play("click", -6.0, 0.05)

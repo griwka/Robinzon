@@ -13,6 +13,7 @@ signal time_changed(time_of_day: float, day: int)
 signal shop_requested(shop_id: String)
 signal choice_requested(title: String, options: Array)
 signal held_changed
+signal gear_changed                      # фонарь включён / выключен, рукавицы надеты / сняты
 signal wear_changed                     # инструмент износился (полоска прочности в ячейке)
 signal ate(value: int)                  # герой поел: сколько сытости (и сил — Player)
 signal wheel_requested(title: String, info: String, options: Array)   # меню действий по кругу (грядка, загон)
@@ -152,9 +153,60 @@ func cold_mult() -> float:
 	return m
 
 
-## Есть ли фонарь (простой или со светлячками).
+## Вещи, которые можно включить / выключить или надеть / снять: ключ -> предметы.
+## Что выключено, лежит в gear_off (по умолчанию всё включено — старые сохранения играют как раньше).
+const GEAR := {"light": ["lantern", "firefly_lantern"], "gloves": ["fire_gloves"]}
+const GEAR_KEYS := {"light": 5, "gloves": 6}      # клавиши 5 и 6
+var gear_off: Dictionary = {}
+
+
+## Есть ли такая вещь в сумке (для фонаря — любой из двух).
+func gear_owned(g: String) -> bool:
+	for id in GEAR[g]:
+		if count(id) > 0:
+			return true
+	return false
+
+
+func gear_is_on(g: String) -> bool:
+	return gear_owned(g) and not gear_off.has(g)
+
+
+## Включить / выключить фонарь, надеть / снять рукавицы. Возвращает, включено ли теперь.
+func toggle_gear(g: String) -> bool:
+	if not gear_owned(g):
+		return false
+	if gear_off.has(g):
+		gear_off.erase(g)
+	else:
+		gear_off[g] = true
+	var on := gear_is_on(g)
+	var what: String = "Фонарь" if g == "light" else "Огнеупорные рукавицы"
+	notified.emit("%s: %s" % [what, ("включён" if on else "выключен") if g == "light" else ("надеты" if on else "сняты")],
+		Color("ffe08a") if on else Color("c9b79a"))
+	Audio.play("click", -6.0, 0.05)
+	gear_changed.emit()
+	inventory_changed.emit()
+	return on
+
+
+## Какой фонарь горит: "firefly" (со светлячками), "lantern" или "" (нет или выключен).
+func light_kind() -> String:
+	if gear_off.has("light"):
+		return ""
+	if count("firefly_lantern") > 0:
+		return "firefly"
+	return "lantern" if count("lantern") > 0 else ""
+
+
+## Фонарь включён (простой или со светлячками).
 func has_light() -> bool:
-	return has_tool("lantern") or has_tool("firefly_lantern")
+	return light_kind() != ""
+
+
+## Огнеупорные рукавицы надеты.
+func gloves_on() -> bool:
+	return gear_is_on("gloves")
 
 
 ## Фонарь горит прямо сейчас ночью (днём без нужды не светит) — на свет идёт рыба.
@@ -172,7 +224,7 @@ const HOT_KINDS := ["ore_vein", "obsidian_rock", "charred_tree", "basalt"]
 
 ## Прибавка к удару по преграде от огнеупорных рукавиц (0 — без них или преграда обычная).
 func glove_power(kind: String) -> int:
-	return 1 if has_tool("fire_gloves") and (kind in THORNY or kind in HOT_KINDS) else 0
+	return 1 if gloves_on() and (kind in THORNY or kind in HOT_KINDS) else 0
 
 
 ## Замёрз: тепло кончилось — идёшь медленно, не лазаешь, инструменты не держатся в руках.
@@ -905,7 +957,7 @@ func save_game(extra: Dictionary) -> void:
 		"collections": collections, "chapter": chapter, "quest_index": quest_index,
 		"quest_baseline": quest_baseline, "quest_started": quest_started, "flags": flags, "cleared": cleared.keys(), "grass": grass,
 		"time_of_day": time_of_day, "day": day, "world_time": world_time,
-		"location": location, "held": held, "bar": bar, "hunger": hunger, "wear": wear,
+		"location": location, "held": held, "bar": bar, "hunger": hunger, "wear": wear, "gear_off": gear_off.keys(),
 		"saved_at": Time.get_datetime_string_from_system(false, true),
 	}
 	# данные текущего острова кладём к остальным островам
@@ -969,6 +1021,10 @@ func load_game() -> Dictionary:
 	for b in data.get("bar", []):
 		bar.append(str(b))
 	_bar_recent = []
+	gear_off = {}   # в старых сохранениях поля нет — фонарь горит, рукавицы надеты, как раньше
+	for g in data.get("gear_off", []):
+		if GEAR.has(str(g)):
+			gear_off[str(g)] = true
 	# глава дописана после того, как игрок её закончил: открываем следующую
 	if quest_index >= Data.CHAPTERS[mini(chapter, Data.CHAPTERS.size() - 1)]["quests"].size() and chapter + 1 < Data.CHAPTERS.size():
 		chapter += 1
@@ -1024,6 +1080,7 @@ func reset_state() -> void:
 	wear = {}
 	bar = []
 	_bar_recent = []
+	gear_off = {}
 	loc_data = {}
 	time_of_day = 0.3
 	day = 1

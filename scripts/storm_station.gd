@@ -234,8 +234,8 @@ func _build_deck(k: int) -> void:
 
 func light_ok(k: int) -> bool:
 	if k == 1:
-		return Game.flags.get("restored_generator", false) or Game.has_tool("lantern")
-	return Game.has_tool("lantern")
+		return Game.flags.get("restored_generator", false) or Game.has_light()
+	return Game.has_light()
 
 
 func _update_gates() -> void:
@@ -275,7 +275,7 @@ func teleport(down: bool) -> void:
 	p.velocity = Vector3.ZERO
 	p.cam_rig.global_position = to + Vector3(0, 1.4, 0)
 	p.camera_yaw = PI if down else 0.0
-	if down and not Game.flags.get("restored_generator", false) and not Game.has_tool("lantern"):
+	if down and not Game.flags.get("restored_generator", false) and not Game.has_light():
 		Game.notified.emit("Темно. Только у люка виден генератор метеорологов", Color("ffe08a"))
 
 
@@ -328,8 +328,8 @@ class DarkGate extends Node3D:
 		if station.light_ok(deck):
 			return "Проём вниз — спрыгни на ярус ниже"
 		if deck == 1:
-			return "Внизу темно, хоть глаз выколи. Почини генератор или сделай фонарь"
-		return "Ниже света нет совсем. Без фонаря не спуститься"
+			return "Внизу темно, хоть глаз выколи. Почини генератор или " + ("включи фонарь (5)" if Game.gear_owned("light") else "сделай фонарь")
+		return "Ниже света нет совсем. " + ("Включи фонарь (5)" if Game.gear_owned("light") else "Без фонаря не спуститься")
 
 	func interact(_player: Node) -> void:
 		Game.notified.emit(get_hint(), Color("ffe08a"))

@@ -58,7 +58,7 @@ func _cool_here(p: Vector3) -> bool:
 
 func mult() -> float:
 	var m := 1.0
-	if Game.has_tool("fire_gloves"):
+	if Game.gloves_on():
 		m *= 0.5
 	if Game.salve_t > 0.0:
 		m *= SALVE_K

@@ -110,8 +110,8 @@ func _process(delta: float) -> void:
 		refresh()
 	if _player_vol:
 		var r := 3.2
-		if Game.has_tool("firefly_lantern"):
+		if Game.light_kind() == "firefly":
 			r = 9.0
-		elif Game.has_tool("lantern"):
+		elif Game.light_kind() == "lantern":
 			r = 5.5
 		_player_vol.size = Vector3(r * 2.0, 7.0, r * 2.0)

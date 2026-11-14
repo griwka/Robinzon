@@ -1365,8 +1365,78 @@ func _test_gear() -> void:
 	_check(main.hud.item_tip("fire_gloves").contains("колючки"), "подсказка предмета показывает пользу рукавиц")
 	for n in [bush, aloe]:
 		n.queue_free()
+	_test_gear_switch()
 	Game.stats = saved_stats
 	Game.inventory = saved_inv
+	Game.time_of_day = saved_t
+	Game.inventory_changed.emit()
+
+
+## Фонарь включается и выключается, рукавицы надеваются и снимаются: клавишами 5 и 6, в сумке и кнопками.
+func _test_gear_switch() -> void:
+	var p: Player = main.player
+	var hud: HUD = main.hud
+	var saved_off: Dictionary = Game.gear_off.duplicate()
+	var saved_t := Game.time_of_day
+	Game.gear_off = {}
+	Game.inventory = {"lantern": 1, "fire_gloves": 1, "down_jacket": 1}
+	Game.time_of_day = 0.95
+	var cold_on := Game.cold_mult()
+	main._update_lantern()
+	_check(Game.gear_is_on("light") and Game.has_light() and main._lantern.visible, "фонарь по умолчанию включён и светит ночью")
+	# клавиша 5
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_5
+	ev.pressed = true
+	main._unhandled_input(ev)
+	_check(not Game.gear_is_on("light") and not Game.has_light() and not Game.night_light(), "клавиша 5 выключает фонарь")
+	main._update_lantern()
+	_check(not main._lantern.visible, "выключенный фонарь не светит")
+	_check(Game.cold_mult() > cold_on, "выключенный фонарь на морозе не греет")
+	Game.inventory["firefly_lantern"] = 1
+	_check(not Game.has_light() and Game.light_kind() == "", "выключатель один на оба фонаря")
+	Game.inventory.erase("firefly_lantern")
+	main._unhandled_input(ev)
+	main._update_lantern()
+	_check(Game.has_light() and main._lantern.visible and is_equal_approx(Game.cold_mult(), cold_on), "клавиша 5 включает фонарь снова")
+	# рукавицы: клавиша 6
+	Game.location = "home"
+	p.update_clothes()
+	_check(Game.gloves_on() and p._clothes.size() > 0 and Game.glove_power("thicket") == 1, "рукавицы по умолчанию надеты и дают пользу")
+	var ev6 := InputEventKey.new()
+	ev6.physical_keycode = KEY_6
+	ev6.pressed = true
+	main._unhandled_input(ev6)
+	_check(not Game.gloves_on() and Game.glove_power("thicket") == 0 and Game.glove_power("ore_vein") == 0, "клавиша 6 снимает рукавицы — пользы нет")
+	_check(p._clothes.is_empty(), "снятых рукавиц на герое не видно")
+	var hm := Heat.new()
+	_check(is_equal_approx(hm.mult(), 1.0), "без рукавиц жар у лавы растёт как обычно")
+	main._unhandled_input(ev6)
+	_check(Game.gloves_on() and p._clothes.size() > 0 and is_equal_approx(hm.mult(), 0.5), "надел — жар вдвое медленнее, рукавицы снова на герое")
+	hm.free()
+	# нет вещи — клавиша ничего не делает
+	Game.inventory = {}
+	main._unhandled_input(ev)
+	_check(Game.gear_off.is_empty() and not Game.gear_is_on("light"), "без фонаря клавиша 5 ничего не включает")
+	# ячейки внизу и кнопки в сумке
+	Game.inventory = {"lantern": 1, "fire_gloves": 1, "machete": 1}
+	Game.gear_off = {"gloves": true}
+	Game.inventory_changed.emit()
+	var keys: Array[String] = []
+	for l in hud.hotbar.find_children("*", "Label", true, false):
+		keys.append((l as Label).text)
+	_check(keys.has("5") and keys.has("6") and keys.has("1"), "внизу экрана рядом с инструментами — ячейки фонаря (5) и рукавиц (6)")
+	hud.open_inventory()
+	var gb: Button = null
+	for bt in hud._body(hud.inv_panel).find_children("*", "Button", true, false):
+		if (bt as Button).text.begins_with("Надеть рукавицы"):
+			gb = bt
+	_check(gb != null, "в сумке у снятых рукавиц кнопка «Надеть рукавицы»")
+	if gb:
+		gb.pressed.emit()
+		_check(Game.gloves_on(), "кнопка в сумке надевает рукавицы")
+	hud.close_all()
+	Game.gear_off = saved_off
 	Game.time_of_day = saved_t
 	Game.inventory_changed.emit()
 
@@ -3355,12 +3425,28 @@ func _autotest() -> void:
 	_check(Game.collections.get("butterflies", {}).size() > 0, "бабочки попадают в коллекцию")
 
 	# сохранение / загрузка
+	Game.gear_off = {"light": true}
 	main._save()
 	var inv_copy: Dictionary = Game.inventory.duplicate()
 	var n_build := get_tree().get_nodes_in_group("building").size()
 	Game.inventory = {}
+	Game.gear_off = {}
 	var data := Game.load_game()
 	_check(Game.inventory == inv_copy, "инвентарь сохраняется и загружается")
+	_check(Game.gear_off.has("light") and not Game.gear_off.has("gloves"), "выключенный фонарь запоминается в сохранении")
+	var old_data: Dictionary = data.duplicate()
+	old_data.erase("gear_off")
+	var f_old := FileAccess.open(Game.save_path, FileAccess.WRITE)
+	f_old.store_string(JSON.stringify(old_data))
+	f_old.close()
+	Game.gear_off = {"gloves": true}
+	Game.load_game()
+	_check(Game.gear_off.is_empty(), "старое сохранение без поля: фонарь горит, рукавицы надеты, как раньше")
+	f_old = FileAccess.open(Game.save_path, FileAccess.WRITE)
+	f_old.store_string(JSON.stringify(data))
+	f_old.close()
+	Game.gear_off = {}
+	data = Game.load_game()
 	var here: Dictionary = data.get("locations", {}).get(Game.location, {})
 	_check(here.get("buildings", []).size() == n_build, "постройки сохраняются (%d)" % n_build)
 	var bed_state := false

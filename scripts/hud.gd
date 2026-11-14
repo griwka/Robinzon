@@ -462,7 +462,31 @@ func _on_inventory_changed() -> void:
 			(cell.get_child(0) as PanelContainer).add_theme_stylebox_override("panel", sb)
 		hotbar.add_child(cell)
 		shown += 1
-	if not slots.is_empty():
+	# фонарь (клавиша 5) и огнеупорные рукавицы (клавиша 6): включаются и снимаются, в руку не берутся
+	for g in Game.GEAR:
+		if not Game.gear_owned(g):
+			continue
+		var gid: String = "firefly_lantern" if (g == "light" and Game.count("firefly_lantern") > 0) else str(Game.GEAR[g][0])
+		var gcell := _item_slot(gid, 1, false, 72)
+		var gkey := _label(str(Game.GEAR_KEYS[g]), 15, Color("fff6dc"))
+		gkey.position = Vector2(6, 2)
+		for bc in gcell.get_child(0).get_child(0).get_children():
+			if bc is PanelContainer:
+				bc.visible = false   # счётчик «1» на фонаре и рукавицах не нужен
+		gcell.get_child(0).get_child(0).add_child(gkey)
+		var gon := Game.gear_is_on(g)
+		if gon:
+			var gsb := _box(Color("fff2b0"), Color("f2a93a"), 12, 5, 0)
+			gsb.shadow_size = 3
+			(gcell.get_child(0) as PanelContainer).add_theme_stylebox_override("panel", gsb)
+		else:
+			gcell.modulate = Color(1, 1, 1, 0.55)
+		var state_txt := ("включён" if gon else "выключен") if g == "light" else ("надеты" if gon else "сняты")
+		gcell.tooltip_text = "%s — %s (клавиша %d)" % [Game.item_name(gid), state_txt, int(Game.GEAR_KEYS[g])]
+		(gcell.get_child(0) as Control).tooltip_text = gcell.tooltip_text
+		hotbar.add_child(gcell)
+		shown += 1
+	if not slots.is_empty() or Game.gear_owned("light") or Game.gear_owned("gloves"):
 		var sep := VSeparator.new()
 		sep.custom_minimum_size = Vector2(8, 0)
 		hotbar.add_child(sep)
@@ -483,6 +507,14 @@ func _on_inventory_changed() -> void:
 	for p in [craft_panel, build_panel, inv_panel, shop_panel]:
 		if p and p.visible:
 			_refill(p)
+
+
+## К какому выключателю относится вещь ("light" — фонарь, "gloves" — рукавицы) или "".
+func _gear_of(id: String) -> String:
+	for g in Game.GEAR:
+		if id in Game.GEAR[g]:
+			return g
+	return ""
 
 
 ## Подсказка предмета: название, а у вещей с пользой — ещё и что они дают.
@@ -1197,6 +1229,17 @@ func _fill_inventory() -> void:
 								Game.notified.emit("Это нужно для задания — не ем", Color("ff9d7a"))
 							else:
 								Game.eat_item(id))
+				var gear_key := _gear_of(id)
+				if gear_key != "":
+					var gslot := cell.get_child(0) as PanelContainer
+					gslot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+					if Game.gear_is_on(gear_key):
+						gslot.add_theme_stylebox_override("panel", _box(Color("fff2b0"), Color("f2a93a"), 12, 5, 3))
+					else:
+						cell.modulate = Color(1, 1, 1, 0.6)
+					gslot.gui_input.connect(func(ev: InputEvent):
+						if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+							Game.toggle_gear(gear_key))
 				if id in Game.HOLD_TOOLS:
 					var slot := cell.get_child(0) as PanelContainer
 					slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -1223,6 +1266,18 @@ func _fill_inventory() -> void:
 					tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 					tl.custom_minimum_size = Vector2(640, 0)
 					body.add_child(tl)
+					var tg := _gear_of(id)
+					if tg != "" and (tg != "light" or id == ("firefly_lantern" if Game.count("firefly_lantern") > 0 else "lantern")):
+						var gon := Game.gear_is_on(tg)
+						var gb := Button.new()
+						gb.text = ("Выключить фонарь" if gon else "Включить фонарь") if tg == "light" else ("Снять рукавицы" if gon else "Надеть рукавицы")
+						gb.text += "   [%d]" % int(Game.GEAR_KEYS[tg])
+						gb.custom_minimum_size = Vector2(240, 38)
+						gb.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+						if gon:
+							gb.add_theme_stylebox_override("normal", _box(WOOD_LIGHT, WOOD_DARK, 10, 3, 8))
+						gb.pressed.connect(func(): Game.toggle_gear(tg))
+						body.add_child(gb)
 		else:
 			grid.queue_free()
 	if not any:
@@ -1425,8 +1480,9 @@ func _build_help() -> void:
 C — крафт,  B — строительство,  Tab — инвентарь
 J — журнал заданий,  K — коллекции (сверху — «Перечитать» уже слышанные разговоры),  Q — поесть,  T — рация (когда появится)
 Продажа: у каждого торговца свои цены. Зелёная звёздочка — он любит этот товар и платит больше; жёлтая строка подсказывает, где дороже.
-Фонарь светит ночью, греет на морозе, а ночью на его свет лучше клюёт рыба. Огнеупорные рукавицы носят на любом острове:
-колючки и горячие камни им не страшны, жар у лавы растёт вдвое медленнее.
+5 — включить / выключить фонарь: светит ночью, греет на морозе, на его свет лучше клюёт рыба.
+6 — надеть / снять огнеупорные рукавицы: колючки и горячие камни им не страшны, жар у лавы растёт вдвое медленнее.
+То же можно сделать кнопкой или кликом по вещи в сумке (Tab).
 В строительстве: ЛКМ — поставить, R — повернуть, ПКМ — отмена
 F5 — сохранить,  F9 — загрузить,  Esc — пауза и настройки
 

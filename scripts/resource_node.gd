@@ -303,7 +303,7 @@ func interact(player: Node) -> void:
 	if hp <= 0:
 		var first := true
 		for id in cfg["drops"]:
-			var extra := 1 if first and kind in Game.THORNY and Game.has_tool("fire_gloves") else 0
+			var extra := 1 if first and kind in Game.THORNY and Game.gloves_on() else 0
 			first = false
 			Game.add_item(id, cfg["drops"][id] + extra)
 		match kind:
