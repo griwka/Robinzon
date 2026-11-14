@@ -208,8 +208,8 @@ func update_clothes() -> void:
 			wear.append("wear_boots")
 		if Game.has_tool("mittens"):
 			wear.append("wear_mittens")
-	elif Game.location == "volcano" and Game.has_tool("fire_gloves"):
-		wear.append("wear_fire_gloves")
+	if Game.has_tool("fire_gloves") and not wear.has("wear_mittens"):
+		wear.append("wear_fire_gloves")   # огнеупорные рукавицы носят на любом острове (на морозе — тёплые)
 	var key := ",".join(wear)
 	if key == _clothes_key:
 		return

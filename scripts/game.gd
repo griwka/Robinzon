@@ -147,7 +147,32 @@ func cold_mult() -> float:
 		m = 2.0
 	if has_tool("felt_boots") and has_tool("mittens"):
 		m *= 0.6
+	if has_light():
+		m *= LANTERN_WARM   # фонарь в сумке немного греет
 	return m
+
+
+## Есть ли фонарь (простой или со светлячками).
+func has_light() -> bool:
+	return has_tool("lantern") or has_tool("firefly_lantern")
+
+
+## Фонарь горит прямо сейчас ночью (днём без нужды не светит) — на свет идёт рыба.
+func night_light() -> bool:
+	return has_light() and not is_day()
+
+
+const LANTERN_WARM := 0.85      # фонарь: остываешь на 15 % медленнее
+const LANTERN_BITE := 0.5       # ночью с фонарём рыба клюёт вдвое быстрее
+const LANTERN_RARE := 1.5       # …и редкая рыба попадается в полтора раза чаще
+## Колючие и горячие преграды: огнеупорные рукавицы помогают с ними (удар сильнее, колючки дают на штуку больше).
+const THORNY := ["thicket", "gorse", "yucca", "hibiscus", "ohia", "aloe"]
+const HOT_KINDS := ["ore_vein", "obsidian_rock", "charred_tree", "basalt"]
+
+
+## Прибавка к удару по преграде от огнеупорных рукавиц (0 — без них или преграда обычная).
+func glove_power(kind: String) -> int:
+	return 1 if has_tool("fire_gloves") and (kind in THORNY or kind in HOT_KINDS) else 0
 
 
 ## Замёрз: тепло кончилось — идёшь медленно, не лазаешь, инструменты не держатся в руках.
@@ -618,12 +643,44 @@ func sellable(id: String) -> int:
 	return maxi(0, count(id) - reserved(id))
 
 
+## Во сколько раз этот торговец меняет цену на товар (его базовая прибавка × любимое / нелюбимое).
+func shop_mult(shop_id: String, id: String) -> float:
+	var b: Dictionary = Data.BUYERS.get(shop_id, {})
+	var like: Dictionary = b.get("like", {})
+	var m: float = b.get("base", 1.0)
+	if like.has(id):
+		m *= float(like[id])
+	elif like.has(item(id).get("cat", "")):
+		m *= float(like[item(id).get("cat", "")])
+	return m
+
+
+## Цена одной штуки у этого торговца: прейскурант × его множитель × торговые корабли (после финала). Не меньше 1 монеты.
+func sell_price(shop_id: String, id: String) -> int:
+	if not Data.SELL_PRICES.has(id):
+		return 0
+	return maxi(1, int(round(Data.SELL_PRICES[id] * shop_mult(shop_id, id) * sell_mult())))
+
+
+## У кого из открытых лавок за эту вещь дают больше, чем у shop_id: [id лавки, цена] или пустой список.
+func better_buyer(shop_id: String, id: String) -> Array:
+	var best: Array = []
+	var here := sell_price(shop_id, id)
+	for sid in Data.SHOPS:
+		if sid == shop_id or not shop_open(sid) or (sid == "lyova" and not ended()):
+			continue
+		var p := sell_price(sid, id)
+		if p > here and (best.is_empty() or p > int(best[1])):
+			best = [sid, p]
+	return best
+
+
 func sell(shop_id: String, id: String, n := 1) -> void:
 	n = mini(n, sellable(id))
 	if n <= 0 or not Data.SELL_PRICES.has(id):
 		return
 	pay({id: n})
-	var got := int(round(Data.SELL_PRICES[id] * n * sell_mult()))
+	var got := sell_price(shop_id, id) * n
 	add_item("coins", got, false, true)
 	notified.emit("Продано: %s ×%d  +%d мон." % [item_name(id), n, got], Color("f3e2b8"))
 	Audio.play("coins", -3.0, 0.1)

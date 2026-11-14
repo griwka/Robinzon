@@ -3,6 +3,7 @@ extends Node3D
 ## Место для рыбалки: бурлящая вода у берега.
 ## E с удочкой — закинуть. Ждёшь 1.5–4 c, поплавок ныряет — жми E за 1.2 c, иначе рыба сорвётся.
 ## Подсечь раньше поклёвки — спугнуть. Иногда вместо обычной рыбы попадается редкая (в коллекцию).
+## Ночью с фонарём в сумке рыба идёт на свет: клюёт вдвое быстрее, редкая — в полтора раза чаще.
 
 enum { IDLE, WAITING, BITE }
 
@@ -102,7 +103,7 @@ func interact(_player: Node) -> void:
 	match state:
 		IDLE:
 			state = WAITING
-			_timer = randf_range(1.5, 4.0)
+			_timer = randf_range(1.5, 4.0) * (Game.LANTERN_BITE if Game.night_light() else 1.0)   # ночью рыба идёт на свет
 			bobber.visible = true
 			bobber.position = Vector3(0, 0.05, 0)
 			Audio.play("water", -8.0, 0.2)
@@ -114,6 +115,11 @@ func interact(_player: Node) -> void:
 			catch()
 
 
+## Шанс редкой рыбы (в коллекцию): ночью с фонарём — в полтора раза выше.
+func rare_chance() -> float:
+	return (0.35 if ice else 0.3) * (Game.LANTERN_RARE if Game.night_light() else 1.0)
+
+
 func catch() -> void:
 	state = IDLE
 	bobber.visible = false
@@ -123,7 +129,7 @@ func catch() -> void:
 		Game.bump("fished", "ice_fish")
 	FX.burst(get_parent(), global_position + Vector3(0, 0.3, 0), Color("bfe8ff"), 14)
 	Audio.play("harvest", -2.0, 0.1)
-	if randf() < (0.35 if ice else 0.3):
+	if randf() < rare_chance():
 		Game.add_collectible("north_fish" if ice else "fish")
 
 

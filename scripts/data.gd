@@ -128,24 +128,29 @@ const ITEMS := {
 	"sweater": {"name": "Шерстяной свитер", "short": "Свитер", "color": Color("c8503a"), "cat": "clothes"},
 	"down_jacket": {"name": "Пуховая куртка", "short": "Куртка", "color": Color("4a7ab8"), "cat": "clothes"},
 	"felt_boots": {"name": "Валенки", "short": "Валенки", "color": Color("8a8f98"), "cat": "clothes"},
-	"mittens": {"name": "Тёплые рукавицы", "short": "Рукавицы", "color": Color("d84a5a"), "cat": "clothes"},
-	"fire_gloves": {"name": "Огнеупорные рукавицы", "short": "Огн. рукав.", "color": Color("c8783a"), "cat": "clothes"},
+	"mittens": {"name": "Тёплые рукавицы", "short": "Рукавицы", "color": Color("d84a5a"), "cat": "clothes",
+		"tip": "Вместе с валенками греют на морозе ещё сильнее. Надеваются сами."},
+	"fire_gloves": {"name": "Огнеупорные рукавицы", "short": "Огн. рукав.", "color": Color("c8783a"), "cat": "clothes",
+		"tip": "Жар у лавы растёт вдвое медленнее. Руки не колют колючки: заросли, дрок, юкка и алоэ рубятся быстрее и дают на штуку больше, горячую руду и уголь добывать проще. Носятся на любом острове."},
 	# инструменты
 	"machete": {"name": "Мачете", "short": "Мачете", "color": Color("c9cfd6"), "cat": "tool"},
 	"fishing_rod": {"name": "Удочка", "short": "Удочка", "color": Color("b8c450"), "cat": "tool"},
 	"shovel": {"name": "Лопата", "short": "Лопата", "color": Color("8f9499"), "cat": "tool"},
-	"climbing_gloves": {"name": "Перчатки лазальщика", "short": "Перчатки", "color": Color("b8834b"), "cat": "tool"},
+	"climbing_gloves": {"name": "Перчатки лазальщика", "short": "Перчатки", "color": Color("b8834b"), "cat": "tool",
+		"tip": "Нужны, чтобы лазить по лианам, лестницам и выступам стен."},
 	"stone_axe": {"name": "Каменный топор", "short": "Топор", "color": Color("7d9bb3"), "cat": "tool"},
 	"watering_can": {"name": "Лейка", "short": "Лейка", "color": Color("5fb0e8"), "cat": "tool"},
 	"net": {"name": "Сачок", "short": "Сачок", "color": Color("f2d16b"), "cat": "tool"},
 	"pickaxe": {"name": "Кирка", "short": "Кирка", "color": Color("9a8fb0"), "cat": "tool"},
-	"lantern": {"name": "Фонарь", "short": "Фонарь", "color": Color("ffd27a"), "cat": "tool"},
+	"lantern": {"name": "Фонарь", "short": "Фонарь", "color": Color("ffd27a"), "cat": "tool",
+		"tip": "Светит ночью, в бункере и в тумане. Ночью на свет идёт рыба: клюёт быстрее, редкая попадается чаще. На морозе чуть греет."},
 	"ice_pick": {"name": "Ледоруб", "short": "Ледоруб", "color": Color("6fa8d8"), "cat": "tool"},
 	"ice_drill": {"name": "Ледовый бур", "short": "Бур", "color": Color("c9a050"), "cat": "tool"},
 	"iron_pickaxe": {"name": "Железная кирка", "short": "Ж. кирка", "color": Color("6a7a8a"), "cat": "tool"},
 	"iron_axe": {"name": "Железный топор", "short": "Ж. топор", "color": Color("6a7a8a"), "cat": "tool"},
 	"iron_machete": {"name": "Железное мачете", "short": "Ж. мачете", "color": Color("8a9aaa"), "cat": "tool"},
-	"firefly_lantern": {"name": "Фонарь со светлячками", "short": "Св. фонарь", "color": Color("d8ff8a"), "cat": "tool"},
+	"firefly_lantern": {"name": "Фонарь со светлячками", "short": "Св. фонарь", "color": Color("d8ff8a"), "cat": "tool",
+		"tip": "Светит вдвое дальше обычного фонаря. Ночью зовёт рыбу и греет на морозе так же, как он."},
 }
 
 # ======================================================================= РЕЦЕПТЫ
@@ -390,6 +395,30 @@ const SHOPS := {
 		{"item": "sheep", "price": 50}, {"item": "piglet", "price": 40}, {"item": "goose", "price": 40},
 		{"item": "hive_frame", "price": 35}, {"item": "lamp_oil", "price": 12},
 	]},
+}
+
+# Что кому и почём. Цена продажи = Data.SELL_PRICES × base × like (по предмету или по виду предмета, cat),
+# округляется до целых. Румба (первая лавка) платит ровно по прейскуранту — ранняя экономика не меняется.
+# Остальные чуть строже, зато щедро берут то, что им нужно по делу: чтобы выручить больше, стоит
+# довезти товар до своего покупателя. Лучшая прибавка — около +40–60 % на один вид товара, не на всё сразу.
+# likes — слова для окна продажи; «0.7» у аккумулятора: по-настоящему он нужен только Тимуру (там — 12).
+const BUYERS := {
+	"rumba": {"base": 1.0, "likes": "кукурузу, бананы, манго, кокосы, лимоны и перья",
+		"like": {"corn": 1.4, "banana": 1.5, "mango": 1.4, "coconut": 2.0, "lemon": 1.3, "feather": 1.5, "battery_charged": 0.7}},
+	"marta": {"base": 1.0, "likes": "готовые блюда, яйца, молоко, мёд и сыр",
+		"like": {"food": 1.25, "egg": 1.4, "milk": 1.4, "honey": 1.3, "cheese": 1.25, "battery_charged": 0.7}},
+	"stepa": {"base": 0.9, "likes": "рыбу и рыбную похлёбку, канаты, доски, смолу, воск и уголь",
+		"like": {"fish": 1.6, "fish_soup": 1.5, "ship_rope": 1.5, "mangrove_plank": 2.0, "resin": 2.0, "wax": 1.3, "charcoal": 1.5, "battery_charged": 0.7}},
+	"timur": {"base": 1.0, "likes": "кофе, чернику и заряженные аккумуляторы (за них — 12, дороже всех)",
+		"like": {"coffee": 1.4, "roasted_coffee": 1.4, "blueberry": 2.0}},
+	"ingrid": {"base": 0.9, "likes": "северные ягоды, варенье, чай с мёдом, свитера и шерсть",
+		"like": {"cloudberry": 1.5, "cloudberry_jam": 1.4, "blueberry": 2.0, "lingonberry": 2.0, "honey_tea": 1.4, "sweater": 1.3,
+			"wool": 1.3, "fish": 1.3, "battery_charged": 0.7}},
+	"vera": {"base": 1.0, "likes": "алоэ, мёд, перец, руду, обсидиан, уголь, кофе и удобрение",
+		"like": {"aloe": 3.0, "honey": 1.4, "pepper": 1.4, "spicy_soup": 1.25, "obsidian": 1.4, "ore": 1.4, "charcoal": 1.5,
+			"coffee": 1.4, "fertilizer": 1.5, "pumpkin": 1.3, "battery_charged": 0.7}},
+	"lyova": {"base": 1.1, "likes": "манго, сыр, мёд, шерсть и железные слитки",
+		"like": {"mango": 1.3, "cheese": 1.2, "honey": 1.2, "wool": 1.2, "iron_ingot": 1.2, "battery_charged": 0.7}},
 }
 
 # ======================================================================= КОЛЛЕКЦИИ

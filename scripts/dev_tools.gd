@@ -357,10 +357,18 @@ func _process(_delta: float) -> void:
 			Game.unlocked[str(args["building"])] = true
 			main.build.start(str(args["building"]))
 		match args.get("open", ""):
-			"inventory": hud.open_inventory()
+			"inventory":
+				if args.has("gear"):
+					_give({"lantern": 1, "fire_gloves": 1, "climbing_gloves": 1, "machete": 1, "stone_axe": 1})
+				hud.open_inventory()
 			"collections":
 				Game.collections = {"shells": {"scallop": 3, "seahorse": 1, "starfish": 1}, "butterflies": {"lemon_wing": 2, "blue_wing": 1, "morpho": 1},
 					"journal": {"page_1": 1, "page_2": 1, "page_3": 1}}
+				if args.has("replay"):   # --replay=N: герой дошёл до N-й главы (для снимка списка разговоров)
+					Game.chapter = int(args["replay"]) - 1
+					Game.quest_index = 2
+					Game.quest_started = true
+					hud._replay_open = true
 				hud.open_collections()
 			"craft":
 				Game.unlocked.merge({"stone_axe": true, "plank": true, "watering_can": true, "net": true}, true)
@@ -375,10 +383,16 @@ func _process(_delta: float) -> void:
 			"pause":
 				main._pause()
 			"shop":
-				Game.unlocked.merge({"shop_marta": true, "buy_hive_frame": true}, true)
+				var shop_id: String = args.get("shop", "marta")
+				Game.unlocked.merge({"shop_marta": true, "buy_hive_frame": true, "shop_" + shop_id: true}, true)
 				Game.inventory["coins"] = 47
+				if args.get("tab", "buy") == "sell":   # --shop=stepa --tab=sell: окно продажи с товарами и подсказками «дороже у…»
+					_give({"fish": 4, "corn": 6, "egg": 5, "aloe": 3, "cloudberry": 2, "honey": 2, "carrot": 5, "battery_charged": 1})
+					Game.unlocked.merge({"shop_timur": true, "shop_vera": true, "shop_ingrid": true}, true)
+				if args.has("gear"):   # --gear=1: фонарь и рукавицы в сумке (подсказки с пользой)
+					_give({"lantern": 1, "fire_gloves": 1, "climbing_gloves": 1})
 				main.hud._shop_tab = args.get("tab", "buy")
-				main.hud.open_shop("marta")
+				main.hud.open_shop(shop_id)
 			"settings":
 				main._pause()
 				main.menu.open_settings(main.menu.show_pause)
@@ -1109,6 +1123,251 @@ func _test_unique() -> void:
 	_check(Game.count("net") == 1 and back > 0, "лишние сачки из старого сохранения разобраны на материалы")
 	Game.inventory = inv
 	Game.unlocked = unl
+	Game.inventory_changed.emit()
+
+
+## Перечитать разговоры: в окне коллекций можно открыть пройденные задания и найденные страницы.
+func _test_replay() -> void:
+	var hud: HUD = main.hud
+	var saved := [Game.chapter, Game.quest_index, Game.quest_started, Game.collections.duplicate(true)]
+	Game.chapter = 2
+	Game.quest_index = 3
+	Game.quest_started = true
+	var q0: Array = hud.replay_quests(0)
+	var all0 := 0
+	for q in Data.CHAPTERS[0]["quests"]:
+		if not (q.get("intro", []).is_empty() and q.get("outro", []).is_empty()):
+			all0 += 1
+	_check(q0.size() == all0, "пройденная глава: все %d разговоров можно перечитать (есть %d)" % [all0, q0.size()])
+	_check(hud.replay_quests(3).is_empty(), "разговоров будущей главы в списке нет — сюжет не раскрывается")
+	var cur: Array = hud.replay_quests(2)
+	var future_ok := true
+	for e in cur:
+		if int(e[0]) > 3:
+			future_ok = false
+	_check(not cur.is_empty() and future_ok and cur.size() <= 4, "в текущей главе — только пройденные задания и идущее сейчас (%d)" % cur.size())
+	var first: Dictionary = Data.CHAPTERS[0]["quests"][0]
+	_check(hud.replay_lines(0, 0).size() == first["intro"].size() + first["outro"].size(), "повтор пройденного задания: вступление и концовка целиком")
+	Game.quest_index = 3
+	# окно: кнопки повтора есть, нажатие открывает разговор, после него окно коллекций возвращается
+	Game.collections["journal"] = {"page_1": 1}
+	hud._replay_open = false
+	hud.open_collections()
+	var folded := 0
+	for b in hud._body(hud.col_panel).find_children("*", "Button", true, false):
+		if (b as Button).text.begins_with("▶"):
+			folded += 1
+	_check(folded == 0 and hud._body(hud.col_panel).find_children("*", "Button", true, false).size() > 1, "список разговоров свёрнут, пока не нажмёшь «Перечитать»")
+	hud._replay_open = true
+	hud.open_collections()
+	var btns: Array = []
+	var read_btns: Array = []
+	for b in hud._body(hud.col_panel).find_children("*", "Button", true, false):
+		if (b as Button).text.begins_with("▶"):
+			btns.append(b)
+		if (b as Button).text == "Читать":
+			read_btns.append(b)
+	_check(btns.size() > 0, "в окне коллекций есть кнопки повтора разговоров (%d)" % btns.size())
+	_check(read_btns.size() == 1, "найденная страница дневника читается заново кнопкой «Читать»")
+	if btns.size() > 0:
+		(btns[0] as Button).pressed.emit()
+		_check(hud.dialogue_open(), "кнопка повтора открывает разговор")
+		_flush()
+		_check(not hud.dialogue_open() and hud.col_panel.visible, "после повтора окно коллекций возвращается")
+	var q_before := Game.quest_index
+	_check(Game.chapter == 2 and Game.quest_index == q_before, "повтор разговора не двигает задания")
+	hud._replay_open = false
+	hud.close_all()
+	Game.chapter = saved[0]
+	Game.quest_index = saved[1]
+	Game.quest_started = saved[2]
+	Game.collections = saved[3]
+
+
+## У торговцев разные цены: любимый товар дороже, лишнее дешевле, у Румбы — прейскурант; экономика не ломается.
+func _test_buyers() -> void:
+	var hud: HUD = main.hud
+	var saved_unl: Dictionary = Game.unlocked.duplicate()
+	var saved_flags: Dictionary = Game.flags.duplicate()
+	var saved_inv: Dictionary = Game.inventory.duplicate()
+	for sid in Data.SHOPS:
+		Game.unlocked["shop_" + sid] = true
+	_check(Game.sell_price("rumba", "carrot") == Data.SELL_PRICES["carrot"], "Румба платит по прейскуранту (морковь %d)" % Game.sell_price("rumba", "carrot"))
+	var fish_s := Game.sell_price("stepa", "fish")
+	var fish_r := Game.sell_price("rumba", "fish")
+	_check(fish_s > fish_r, "рыбу боцман Стёпа берёт дороже Румбы (%d и %d)" % [fish_s, fish_r])
+	_check(Game.sell_price("rumba", "corn") > Game.sell_price("marta", "corn"), "кукурузу Румба берёт дороже Марты")
+	_check(Game.sell_price("marta", "egg") > Game.sell_price("rumba", "egg"), "яйца Марта берёт дороже Румбы")
+	_check(Game.sell_price("ingrid", "cloudberry") > Game.sell_price("rumba", "cloudberry"), "морошку Ингрид берёт дороже Румбы")
+	_check(Game.sell_price("vera", "aloe") > Game.sell_price("rumba", "aloe") and Game.sell_price("vera", "ore") > Game.sell_price("rumba", "ore"), "Вера платит больше за алоэ и руду")
+	_check(Game.sell_price("timur", "battery_charged") == 12, "Тимур берёт заряженный аккумулятор за 12, как раньше")
+	var bat_best := ""
+	for sid in Data.SHOPS:
+		if Game.sell_price(sid, "battery_charged") >= Game.sell_price("timur", "battery_charged") and sid != "timur":
+			bat_best = sid
+	_check(bat_best == "", "аккумулятор нигде не дороже, чем у Тимура (%s)" % bat_best)
+	# торговля: деньги идут по цене этого торговца
+	Game.inventory = {"fish": 8}
+	Game.sell("stepa", "fish", 4)
+	_check(Game.count("coins") == fish_s * 4 and Game.count("fish") == 4, "продажа у Стёпы: %d × 4 = %d монет" % [fish_s, fish_s * 4])
+	Game.sell("rumba", "fish", 4)
+	_check(Game.count("coins") == fish_s * 4 + fish_r * 4, "продажа у Румбы: те же 4 рыбы дали %d" % (fish_r * 4))
+	# подсказка «дороже у другого»
+	var bb := Game.better_buyer("rumba", "fish")
+	_check(not bb.is_empty() and bb[0] != "rumba" and int(bb[1]) > fish_r, "у Румбы подсказывают, где за рыбу дают больше (%s — %d)" % [str(bb[0]) if not bb.is_empty() else "?", int(bb[1]) if not bb.is_empty() else 0])
+	_check(Game.better_buyer("timur", "battery_charged").is_empty(), "у Тимура за аккумулятор лучшей цены нет")
+	# торговые корабли после финала: ×1.5 к цене любого торговца
+	Game.flags["ending_open_sea"] = true
+	_check(Game.sell_price("stepa", "fish") == int(round(Data.SELL_PRICES["fish"] * Game.shop_mult("stepa", "fish") * 1.5)), "после финала «Открытое море» цена любого торговца ×1,5")
+	Game.flags.erase("ending_open_sea")
+	# окно продажи: цена этого торговца, «любят» и подсказка о другом торговце
+	Game.inventory = {"corn": 3, "fish": 2}
+	hud._shop_tab = "sell"
+	hud.open_shop("rumba")
+	var texts: Array[String] = []
+	for l in hud._body(hud.shop_panel).find_children("*", "Label", true, false):
+		texts.append((l as Label).text)
+	var joined := "\n".join(texts)
+	_check(joined.contains("★ любят: %d мон." % Game.sell_price("rumba", "corn")), "окно продажи у Румбы: «★ любят» и цена за кукурузу")
+	_check(joined.contains("дороже у:"), "окно продажи подсказывает, у кого дороже")
+	_check(joined.contains("Особенно берут:"), "окно продажи говорит, что любит торговец")
+	hud._shop_tab = "buy"
+	hud.close_all()
+	# экономика: корзина с фермы у Румбы — ровно по прейскуранту; лучший торговец даёт не больше +50 %, и только за свои товары
+	var basket := ["carrot", "potato", "corn", "tomato", "cabbage", "watermelon", "pumpkin", "egg", "milk", "honey", "wool", "fish", "cheese"]
+	var base_sum := 0
+	var rumba_sum := 0
+	var best_sum := 0
+	var worst_sum := 0
+	for id in basket:
+		base_sum += int(Data.SELL_PRICES[id])
+		rumba_sum += Game.sell_price("rumba", id)
+		var best := 0
+		var worst := 999
+		for sid in Data.SHOPS:
+			if sid == "lyova":
+				continue
+			best = maxi(best, Game.sell_price(sid, id))
+			worst = mini(worst, Game.sell_price(sid, id))
+		best_sum += best
+		worst_sum += worst
+	print("      корзина с фермы (%d товаров): прейскурант %d, у Румбы %d, у лучшего торговца на каждый товар %d, у худшего %d" % [basket.size(), base_sum, rumba_sum, best_sum, worst_sum])
+	_check(float(rumba_sum) / base_sum >= 0.98 and float(rumba_sum) / base_sum <= 1.15, "у Румбы корзина с фермы стоит как по прейскуранту")
+	_check(float(best_sum) / base_sum <= 1.4, "даже самый удачный обход торговцев даёт не больше +40 %% (+%d %%)" % int(round((float(best_sum) / base_sum - 1.0) * 100.0)))
+	# ровный обход (не охота за лучшими ценами): на каждого торговца по товару — выручка не выше прейскуранта
+	var avg_sum := 0.0
+	for id in basket:
+		var s := 0.0
+		var n := 0
+		for sid in Data.SHOPS:
+			if sid == "lyova":
+				continue
+			s += Game.sell_price(sid, id)
+			n += 1
+		avg_sum += s / n
+	_check(avg_sum / base_sum <= 1.1, "в среднем по торговцам цены не выше прейскуранта (%.2f)" % (avg_sum / base_sum))
+	Game.unlocked = saved_unl
+	Game.flags = saved_flags
+	Game.inventory = saved_inv
+	Game.inventory_changed.emit()
+
+
+## Фонарь и рукавицы дают пользу не только в бункере и у лавы.
+func _test_gear() -> void:
+	var p: Player = main.player
+	var saved_inv: Dictionary = Game.inventory.duplicate()
+	var saved_t := Game.time_of_day
+	var saved_stats: Dictionary = Game.stats.duplicate(true)
+	Game.inventory = {}
+	# --- фонарь
+	Game.inventory["down_jacket"] = 1
+	var cold0 := Game.cold_mult()
+	Game.inventory["lantern"] = 1
+	_check(is_equal_approx(Game.cold_mult(), cold0 * Game.LANTERN_WARM), "фонарь греет на морозе: остываешь в %.2f раза медленнее" % (cold0 / Game.cold_mult()))
+	Game.inventory.erase("lantern")
+	Game.inventory["firefly_lantern"] = 1
+	_check(is_equal_approx(Game.cold_mult(), cold0 * Game.LANTERN_WARM), "фонарь со светлячками греет так же")
+	Game.inventory.erase("firefly_lantern")
+	Game.inventory.erase("down_jacket")
+	Game.inventory["lantern"] = 1
+	Game.time_of_day = 0.95
+	_check(Game.night_light(), "ночью с фонарём «ночной свет» есть")
+	Game.time_of_day = 0.5
+	_check(not Game.night_light(), "днём ночного света нет")
+	Game.time_of_day = 0.95
+	main._update_lantern()
+	_check(main._lantern != null and main._lantern.visible, "ночью фонарь светит вокруг героя на любом острове")
+	var spot := FishingSpot.new()
+	main.island.add_child(spot)
+	spot.global_position = main.island.camp_center + Vector3(0, 0, 30)
+	Game.inventory["fishing_rod"] = 1
+	var rare_night := spot.rare_chance()
+	Game.time_of_day = 0.5
+	var rare_day := spot.rare_chance()
+	_check(is_equal_approx(rare_night, rare_day * Game.LANTERN_RARE) and rare_day > 0.0, "ночью с фонарём редкая рыба чаще: %.0f %% вместо %.0f %%" % [rare_night * 100.0, rare_day * 100.0])
+	var fast := true
+	var slow_ok := true
+	for i in 12:
+		Game.time_of_day = 0.95
+		spot.state = FishingSpot.IDLE
+		spot.interact(p)
+		if spot._timer > 4.0 * Game.LANTERN_BITE + 0.001:
+			fast = false
+		Game.inventory.erase("lantern")
+		spot.state = FishingSpot.IDLE
+		spot.interact(p)
+		Game.inventory["lantern"] = 1
+		if spot._timer > 4.0:
+			slow_ok = false
+		Game.time_of_day = 0.5
+		spot.state = FishingSpot.IDLE
+		spot.interact(p)
+		if spot._timer < 1.5:
+			slow_ok = false
+	_check(fast, "ночью с фонарём клюёт не позже чем через %.0f секунд" % (4.0 * Game.LANTERN_BITE))
+	_check(slow_ok, "днём клюёт как обычно (1,5–4 секунды)")
+	spot.queue_free()
+	Game.inventory.erase("lantern")
+	Game.inventory.erase("fishing_rod")
+	# --- огнеупорные рукавицы
+	_check(Game.glove_power("thicket") == 0 and Game.glove_power("ore_vein") == 0, "без рукавиц колючки и руда — как обычно")
+	Game.inventory["fire_gloves"] = 1
+	_check(Game.glove_power("thicket") == 1 and Game.glove_power("aloe") == 1 and Game.glove_power("ore_vein") == 1, "в рукавицах колючки и горячая руда поддаются легче")
+	_check(Game.glove_power("palm") == 0 and Game.glove_power("rock") == 0, "обычные деревья и камни рукавицы не трогают")
+	var bush := ResourceNode.new()
+	bush.kind = "thicket"
+	bush.rng_seed = 7
+	main.island.add_child(bush)
+	bush.global_position = main.island.camp_center + Vector3(0, 0, -30)
+	Game.inventory = {"machete": 1}
+	bush.interact(p)
+	_check(bush.hp == 1 and bush.active, "без рукавиц колючие заросли — два удара мачете")
+	bush.hp = ResourceNode.KINDS["thicket"]["hp"]
+	Game.inventory = {"machete": 1, "fire_gloves": 1}
+	bush.interact(p)
+	_check(not bush.active, "в рукавицах колючие заросли рубятся одним ударом")
+	_check(Game.count("fiber") == int(ResourceNode.KINDS["thicket"]["drops"]["fiber"]) + 1, "…и дают на волокно больше (%d вместо %d)" % [Game.count("fiber"), int(ResourceNode.KINDS["thicket"]["drops"]["fiber"])])
+	var aloe := ResourceNode.new()
+	aloe.kind = "aloe"
+	main.island.add_child(aloe)
+	aloe.global_position = main.island.camp_center + Vector3(4, 0, -30)
+	Game.inventory = {"fire_gloves": 1}
+	aloe.interact(p)
+	_check(Game.count("aloe") == int(ResourceNode.KINDS["aloe"]["drops"]["aloe"]) + 1, "алоэ в рукавицах — на лист больше")
+	# рукавицы видно на герое на любом острове; на морозе поверх — тёплые рукавицы
+	Game.location = "home"
+	p.update_clothes()
+	_check(p._clothes.size() > 0, "огнеупорные рукавицы надеты на герое и на домашнем острове")
+	Game.inventory = {}
+	p.update_clothes()
+	_check(p._clothes.is_empty(), "без рукавиц на герое ничего нет")
+	_check(Data.ITEMS["lantern"].has("tip") and Data.ITEMS["firefly_lantern"].has("tip") and Data.ITEMS["fire_gloves"].has("tip") and Data.ITEMS["mittens"].has("tip"), "у фонарей и рукавиц есть подсказка с пользой")
+	_check(main.hud.item_tip("fire_gloves").contains("колючки"), "подсказка предмета показывает пользу рукавиц")
+	for n in [bush, aloe]:
+		n.queue_free()
+	Game.stats = saved_stats
+	Game.inventory = saved_inv
+	Game.time_of_day = saved_t
 	Game.inventory_changed.emit()
 
 
@@ -2835,10 +3094,12 @@ func _do_task(t: Dictionary) -> void:
 			# честная экономика: монеты зарабатываем продажей урожая, а не выдаём даром
 			var want_coins := price * need - Game.count("coins")
 			if want_coins > 0:
-				var n_sell: int = int(ceil(want_coins / float(Data.SELL_PRICES["watermelon"])))
+				# арбуз продаём там же, где покупаем: у каждого торговца своя цена
+				var melon: int = Game.sell_price(shop_id, "watermelon")
+				var n_sell: int = int(ceil(want_coins / float(melon)))
 				_give({"watermelon": n_sell})
 				Game.sell(shop_id, "watermelon", n_sell)
-				earned_by_selling += Data.SELL_PRICES["watermelon"] * n_sell
+				earned_by_selling += melon * n_sell
 			for i in need:
 				Game.buy(shop_id, item_id, price)
 		"restored":
@@ -2990,6 +3251,9 @@ func _autotest() -> void:
 		_test_slots()
 		_test_tool_clip()
 		_test_grass()
+		_test_replay()
+		_test_buyers()
+		_test_gear()
 		_test_mistakes()
 		Game.start_current_quest()
 		_flush()

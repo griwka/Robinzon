@@ -75,7 +75,67 @@ func run(chapters: Array = Data.CHAPTERS) -> Array[String]:
 	_check_pages(chapters)
 	_check_crops()
 	_check_tools()
+	_check_buyers()
 	return errors
+
+
+## Цена штуки у торговца без торговых кораблей после финала (чтобы отчёт не зависел от состояния игры).
+func _price(sid: String, id: String) -> int:
+	return maxi(1, int(round(Data.SELL_PRICES[id] * Game.shop_mult(sid, id))))
+
+
+## Цены у торговцев: у каждой лавки есть покупатель, любимые товары существуют, любая вещь продаётся везде,
+## первая лавка (Румба) платит по прейскуранту, лучшая прибавка не выше +60 %, а аккумулятор дороже всего у Тимура.
+## В отчёт — кто что любит и на сколько лучшая цена выше прейскуранта.
+func _check_buyers() -> void:
+	_where = "Цены у торговцев"
+	for sid in Data.SHOPS:
+		if not Data.BUYERS.has(sid):
+			_err("у лавки «%s» нет покупателя в Data.BUYERS" % sid)
+	var cats := {}
+	for id in Data.ITEMS:
+		cats[Data.ITEMS[id].get("cat", "")] = true
+	for sid in Data.BUYERS:
+		var b: Dictionary = Data.BUYERS[sid]
+		if not Data.SHOPS.has(sid):
+			_err("покупатель «%s» без лавки" % sid)
+			continue
+		if float(b.get("base", 1.0)) < 0.7 or float(b.get("base", 1.0)) > 1.2:
+			_err("«%s»: общий множитель %.2f вне 0.7–1.2" % [sid, float(b.get("base", 1.0))])
+		var best := 0.0
+		for k in b["like"]:
+			if not (Data.ITEMS.has(k) or cats.has(k)):
+				_err("«%s» любит несуществующее «%s»" % [sid, k])
+			elif Data.ITEMS.has(k) and not Data.SELL_PRICES.has(k):
+				_err("«%s» любит «%s», а оно не продаётся" % [sid, k])
+			var f := float(b["like"][k])
+			if f < 0.5 or f > 3.0:
+				_err("«%s»: множитель %.2f у «%s» вне 0.5–3" % [sid, f, k])
+			best = maxf(best, f)
+		for id in Data.SELL_PRICES:
+			if _price(sid, id) < 1:
+				_err("«%s» не покупает «%s» (цена 0)" % [sid, id])
+			# цена одной штуки не выше +60 % и не больше чем на 2 монеты сверх прейскуранта (дешёвое — на монету-две)
+			var base: int = Data.SELL_PRICES[id]
+			var got: int = _price(sid, id)
+			if float(got) > base * 1.6 + 0.5 and got - base > 2:
+				_err("«%s»: «%s» за %d при прейскуранте %d — слишком щедро" % [sid, id, got, base])
+		report.append("%s: платит ×%.1f, особенно любит %s" % [Data.SHOPS[sid]["name"], float(b.get("base", 1.0)), b.get("likes", "—")])
+	for id in Data.SELL_PRICES:
+		if _price("rumba", id) > Data.SELL_PRICES[id]:
+			if not (Data.BUYERS["rumba"]["like"].has(id)):
+				_err("Румба платит по прейскуранту: «%s» не должна быть дороже" % id)
+	var top := ""
+	var best_p := 0
+	for sid in Data.BUYERS:
+		var p: int = _price(sid, "battery_charged")
+		if p > best_p:
+			best_p = p
+			top = sid
+	if top != "timur":
+		_err("заряженный аккумулятор дороже всего должен быть у Тимура, а не у «%s»" % top)
+	elif best_p != 12:
+		_err("Тимур берёт заряженный аккумулятор за %d, а должен за 12" % best_p)
 
 
 ## Грядки: каждая культура окупает свой пакетик, а семян с грядки в среднем меньше одного (лавка нужна).

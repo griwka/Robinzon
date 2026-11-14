@@ -46,6 +46,15 @@
   с `heat_at(p)` и `push_dir(p)` (`scripts/lava.gd`: `Lava.Arc`, `Lava.Pool`), остужают узлы в группе `cool_spot`.
   Постройка только на отмеченных местах — `"spot": [группы]` в `Data.BUILDINGS` (`bridge_spot`, `lantern_spot`,
   `shadow_spot`), метки — `LanternSpot` / `VolcanoTemple.BridgeSpot` с `set_bridged()`.
+- **Цены у торговцев** — `Data.BUYERS` (общий множитель `base` и любимые `like`: по id предмета или по виду `cat`),
+  `Game.shop_mult(лавка, товар)`, `Game.sell_price(лавка, товар)` (целое ≥ 1, ×`sell_mult()`), `Game.better_buyer()` — подсказка
+  в окне продажи. Новую лавку в `Data.SHOPS` — и сразу в `Data.BUYERS` (валидатор `_check_buyers` проверит: прибавка ≤ +60 %,
+  Румба по прейскуранту, заряженный аккумулятор дороже всего у Тимура). Продажа везде идёт через `Game.sell(лавка, id, n)`.
+- **Перечитать разговоры** — окно коллекций (`hud.gd`: `_fill_replays`, `replay_quests`, `replay_lines`): только пройденные задания
+  и идущее сейчас; `show_dialogue(lines, open_collections)` возвращает окно после разговора.
+- **Польза вещей** — у предметов в `Data.ITEMS` поле `"tip"` (показывается в подсказке, инвентаре и лавке, `HUD.item_tip`).
+  Фонарь: `Game.has_light()`, `night_light()`, `LANTERN_WARM/BITE/RARE` (холод, рыбалка). Огнеупорные рукавицы: `Game.glove_power(kind)`,
+  `THORNY`, `HOT_KINDS` (`ResourceNode.interact`), на герое — `Player.update_clothes()` на любом острове.
 - **Туман** — `scripts/fog_system.gd` (Туманный остров до флага `fog_cleared`): объёмный туман + `FogVolume`
   с отрицательной плотностью у огня (группы `station_*` из `FogSystem.RADIUS` и узлы `fog_light` с `fog_radius`).
   Плыть туда — только `Game.fog_hours()`; пассажир — флаг `stepa_aboard` → `Game.arrive()`.

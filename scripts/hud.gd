@@ -71,7 +71,7 @@ func _ready() -> void:
 	craft_panel = _make_window("Крафт", 640)
 	build_panel = _make_window("Строительство", 660)
 	inv_panel = _make_window("Инвентарь", 700)
-	col_panel = _make_window("Коллекции", 640)
+	col_panel = _make_window("Коллекции и разговоры", 640)
 	journal_panel = _make_window("Журнал", 620)
 	help_panel = _make_window("Как играть", 600)
 	choice_panel = _make_window("Выбор", 460)
@@ -485,6 +485,12 @@ func _on_inventory_changed() -> void:
 			_refill(p)
 
 
+## Подсказка предмета: название, а у вещей с пользой — ещё и что они дают.
+func item_tip(id: String) -> String:
+	var tip: String = Game.item(id).get("tip", "")
+	return Game.item_name(id) if tip == "" else "%s\n%s" % [Game.item_name(id), tip]
+
+
 ## Ячейка предмета: светлая карточка, крупная иконка, количество — бейджем в углу.
 ## big = true — для окна инвентаря (с подписью под иконкой).
 func _item_slot(id: String, n: int, big := false, px := 0) -> Control:
@@ -493,14 +499,14 @@ func _item_slot(id: String, n: int, big := false, px := 0) -> Control:
 		size = px
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
-	box.tooltip_text = Game.item_name(id)
+	box.tooltip_text = item_tip(id)
 	var slot := PanelContainer.new()
 	slot.custom_minimum_size = Vector2(size, size)
 	var sb := _box(CARD, CARD_EDGE, 12, 3, 3)
 	sb.shadow_size = 3
 	slot.add_theme_stylebox_override("panel", sb)
 	slot.mouse_filter = Control.MOUSE_FILTER_PASS
-	slot.tooltip_text = Game.item_name(id)
+	slot.tooltip_text = item_tip(id)
 	box.add_child(slot)
 	var holder := Control.new()
 	holder.custom_minimum_size = Vector2(size - 6, size - 6)
@@ -540,7 +546,7 @@ func _item_slot(id: String, n: int, big := false, px := 0) -> Control:
 		bar.offset_right = -7
 		bar.offset_top = -14
 		bar.offset_bottom = -4
-		box.tooltip_text = "%s — прочность %d%%" % [Game.item_name(id), int(hp * 100.0)]
+		box.tooltip_text = "%s — прочность %d%%" % [Game.item_name(id), int(hp * 100.0)] + ("\n" + Game.item(id)["tip"] if Game.item(id).has("tip") else "")
 	if big:
 		var nm := _label(Game.item_short(id), 14, INK, false)
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1068,7 +1074,10 @@ func _fill_shop() -> void:
 			info.add_child(_label(Game.item_name(e["item"]), 20))
 			var what := _buy_note(e["item"])
 			if what != "":
-				info.add_child(_label(what, 15, Color("f3e2bd")))
+				var wl := _label(what, 15, Color("f3e2bd"))
+				wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				wl.custom_minimum_size = Vector2(300, 0)
+				info.add_child(wl)
 			h.add_child(info)
 			h.add_child(_label("%d" % e["price"], 20, Color("f3e2b8")))
 			h.add_child(_item_icon("coins", 26))
@@ -1083,9 +1092,19 @@ func _fill_shop() -> void:
 			body.add_child(rh[0])
 	else:
 		var any := false
-		for id in Data.SELL_PRICES:
-			if Game.count(id) <= 0:
-				continue
+		var buyer: Dictionary = Data.BUYERS.get(_shop_id, {})
+		if buyer.has("likes"):
+			var lk := _label("Особенно берут: %s." % buyer["likes"], 15, INK, false)
+			lk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			lk.custom_minimum_size = Vector2(580, 0)
+			body.add_child(lk)
+		# сначала то, за что здесь платят лучше всего
+		var ids: Array = []
+		for sid in Data.SELL_PRICES:
+			if Game.count(sid) > 0:
+				ids.append(sid)
+		ids.sort_custom(func(a: String, b: String) -> bool: return Game.shop_mult(_shop_id, a) > Game.shop_mult(_shop_id, b))
+		for id in ids:
 			any = true
 			var rh := _row()
 			var h: HBoxContainer = rh[1]
@@ -1094,8 +1113,26 @@ func _fill_shop() -> void:
 			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			info.add_child(_label("%s ×%d" % [Game.item_name(id), Game.count(id)], 20))
 			var res := Game.reserved(id)
-			info.add_child(_label("цена: %d мон." % int(round(Data.SELL_PRICES[id] * Game.sell_mult())) + ("  ·  %d отложено для задания" % res if res > 0 else ""), 15,
-				Color("ffd08a") if res > 0 else Color("f3e2bd")))
+			var here := Game.sell_price(_shop_id, id)
+			var base_k: float = float(buyer.get("base", 1.0))
+			var mood := Game.shop_mult(_shop_id, id) / maxf(0.01, base_k)
+			var note := "цена: %d мон." % here
+			var note_col := Color("f3e2bd")
+			if mood > 1.1:
+				note = "★ любят: %d мон. за штуку" % here
+				note_col = Color("b6f29a")
+			elif mood < 0.9:
+				note = "здесь не нужно: %d мон. за штуку" % here
+				note_col = Color("c9b79a")
+			if res > 0:
+				note += "  ·  %d отложено для задания" % res
+				note_col = Color("ffd08a")
+			info.add_child(_label(note, 15, note_col))
+			var better := Game.better_buyer(_shop_id, id)
+			if not better.is_empty():
+				var bshop: Dictionary = Data.SHOPS[better[0]]
+				var who: String = str(Data.SPEAKERS.get(bshop["who"], {}).get("name", bshop["name"])).split(",")[0]
+				info.add_child(_label("дороже у: %s — %d мон." % [who, int(better[1])], 14, Color("ffe08a")))
 			h.add_child(info)
 			var can := Game.sellable(id)
 			for spec in [[1, "Продать 1"], [can, "Всё (%d)" % can]]:
@@ -1121,12 +1158,14 @@ func _buy_note(id: String) -> String:
 	if it.get("cat", "") == "seed" and Data.CROPS.has(it.get("crop", "")):
 		var crop: String = it["crop"]
 		var y: Array = Data.CROPS[crop]["yield"]
-		var price: float = Data.SELL_PRICES.get(crop, 0) * Game.sell_mult()
+		var price: float = float(Game.sell_price(_shop_id, crop))
 		var money := ("  ≈ %d–%d мон." % [int(round(price * int(y[0]))), int(round(price * int(y[1])))]) if price > 0.0 else ""
 		return "1 пакетик = 1 грядка · урожай %d–%d шт.%s · иногда семечко назад%s" % [int(y[0]), int(y[1]), money, tail]
 	if it.get("cat", "") == "sapling" and Data.TREES.has(it.get("tree", "")):
 		var t: Dictionary = Data.TREES[it["tree"]]
 		return "дерево плодоносит снова и снова: по %d–%d шт.%s" % [int(t["yield"][0]), int(t["yield"][1]), tail]
+	if it.has("tip"):
+		return str(it["tip"])
 	return tail.trim_prefix("  ·  ")
 
 
@@ -1177,6 +1216,13 @@ func _fill_inventory() -> void:
 				tip.custom_minimum_size = Vector2(640, 0)
 				body.add_child(tip)
 			body.add_child(grid)
+			# что дают вещи с особой пользой (фонарь, перчатки, рукавицы)
+			for id in Data.ITEMS:
+				if Data.ITEMS[id]["cat"] == cat and Data.ITEMS[id].has("tip") and Game.count(id) > 0:
+					var tl := _label("• %s: %s" % [Game.item_name(id), Data.ITEMS[id]["tip"]], 14, WOOD, false)
+					tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+					tl.custom_minimum_size = Vector2(640, 0)
+					body.add_child(tl)
 		else:
 			grid.queue_free()
 	if not any:
@@ -1190,6 +1236,7 @@ func open_collections() -> void:
 
 func _fill_collections() -> void:
 	var body := _clear(col_panel)
+	_fill_replays(body)
 	for cid in Data.COLLECTIONS:
 		var col: Dictionary = Data.COLLECTIONS[cid]
 		var have: Dictionary = Game.collections.get(cid, {})
@@ -1217,7 +1264,7 @@ func _fill_collections() -> void:
 				rd.text = "Читать"
 				rd.add_theme_font_size_override("font_size", 14)
 				var txt: String = it["text"]
-				rd.pressed.connect(func(): show_dialogue([["journal", txt]], Callable()))
+				rd.pressed.connect(func(): show_dialogue([["journal", txt]], open_collections))
 				v.add_child(rd)
 			elif found:
 				var c := _label("×%d" % have[it["id"]], 13, Color("f3e2bd"))
@@ -1225,6 +1272,101 @@ func _fill_collections() -> void:
 				v.add_child(c)
 			slots.add_child(v)
 		body.add_child(rh[0])
+
+
+# ================================================================== Перечитать разговоры
+var _replay_open := false   # список разговоров раскрыт
+var _replay_ch := -1   # глава, раскрытая в списке разговоров (-1 — последняя из доступных)
+
+
+## Какие задания главы уже можно перечитать: пройденные целиком (вступление и концовка)
+## и текущее, если его вступление уже показали. Возвращает [[номер задания, пройдено ли], ...].
+func replay_quests(ci: int) -> Array:
+	var out: Array = []
+	if ci > Game.chapter or ci < 0 or ci >= Data.CHAPTERS.size():
+		return out
+	var qs: Array = Data.CHAPTERS[ci]["quests"]
+	for i in qs.size():
+		var done: bool = ci < Game.chapter or i < Game.quest_index
+		var current: bool = ci == Game.chapter and i == Game.quest_index and Game.quest_started
+		if not (done or current):
+			continue
+		var q: Dictionary = qs[i]
+		if q.get("intro", []).is_empty() and q.get("outro", []).is_empty():
+			continue
+		out.append([i, done])
+	return out
+
+
+## Реплики задания для повтора: вступление, потом (если задание пройдено) концовка.
+func replay_lines(ci: int, qi: int) -> Array:
+	var q: Dictionary = Data.CHAPTERS[ci]["quests"][qi]
+	var lines: Array = []
+	lines.append_array(q.get("intro", []))
+	var done: bool = ci < Game.chapter or qi < Game.quest_index
+	if done:
+		lines.append_array(q.get("outro", []))
+	return lines
+
+
+func _fill_replays(body: VBoxContainer) -> void:
+	var chapters: Array = []
+	for ci in Data.CHAPTERS.size():
+		if not replay_quests(ci).is_empty():
+			chapters.append(ci)
+	if chapters.is_empty():
+		return
+	var sel: int = _replay_ch if _replay_ch in chapters else int(chapters[chapters.size() - 1])
+	var rh := _row()
+	var h: HBoxContainer = rh[1]
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(info)
+	info.add_child(_label("Разговоры", 20))
+	var note := _label("Уже слышанные разговоры можно послушать ещё раз.", 14, Color("f3e2bd"))
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size = Vector2(380, 0)
+	info.add_child(note)
+	var toggle := Button.new()
+	toggle.text = "Скрыть" if _replay_open else "Перечитать ▾"
+	toggle.custom_minimum_size = Vector2(150, 40)
+	toggle.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	toggle.pressed.connect(func():
+		_replay_open = not _replay_open
+		_fill_collections()
+		_fit(col_panel))
+	h.add_child(toggle)
+	if not _replay_open:
+		body.add_child(rh[0])
+		return
+	var tabs := HFlowContainer.new()
+	tabs.add_theme_constant_override("h_separation", 6)
+	tabs.add_theme_constant_override("v_separation", 6)
+	info.add_child(tabs)
+	for ci in chapters:
+		var tb := Button.new()
+		tb.text = "Глава %d" % (int(ci) + 1)
+		tb.custom_minimum_size = Vector2(96, 36)
+		if ci != sel:
+			tb.add_theme_stylebox_override("normal", _box(WOOD_LIGHT, WOOD_DARK, 10, 3, 8))
+		var c: int = ci
+		tb.pressed.connect(func():
+			_replay_ch = c
+			_fill_collections()
+			_fit(col_panel))
+		tabs.add_child(tb)
+	info.add_child(_label(str(Data.CHAPTERS[sel]["title"]), 16, Color("ffe08a")))
+	for e in replay_quests(sel):
+		var qi: int = e[0]
+		var q: Dictionary = Data.CHAPTERS[sel]["quests"][qi]
+		var b := Button.new()
+		b.text = "▶  %s%s" % [q["title"], "" if e[1] else "  (идёт сейчас)"]
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.custom_minimum_size = Vector2(0, 36)
+		var chap: int = sel
+		b.pressed.connect(func(): show_dialogue(replay_lines(chap, qi), open_collections))
+		info.add_child(b)
+	body.add_child(rh[0])
 
 
 func open_journal() -> void:
@@ -1281,7 +1423,10 @@ func _build_help() -> void:
 У грядки и загона E открывает круг действий: выбери мышью, цифрой или нажми E ещё раз.
 Пальма: пустыми руками — потрясти (кокосы), с топором в руке — срубить
 C — крафт,  B — строительство,  Tab — инвентарь
-J — журнал заданий,  K — коллекции,  Q — поесть,  T — рация (когда появится)
+J — журнал заданий,  K — коллекции (сверху — «Перечитать» уже слышанные разговоры),  Q — поесть,  T — рация (когда появится)
+Продажа: у каждого торговца свои цены. Зелёная звёздочка — он любит этот товар и платит больше; жёлтая строка подсказывает, где дороже.
+Фонарь светит ночью, греет на морозе, а ночью на его свет лучше клюёт рыба. Огнеупорные рукавицы носят на любом острове:
+колючки и горячие камни им не страшны, жар у лавы растёт вдвое медленнее.
 В строительстве: ЛКМ — поставить, R — повернуть, ПКМ — отмена
 F5 — сохранить,  F9 — загрузить,  Esc — пауза и настройки
 

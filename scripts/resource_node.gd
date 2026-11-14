@@ -271,6 +271,8 @@ func get_hint() -> String:
 		return "Потрясти пальму (листья и кокосы)" if coconut_ready else "Кокосы ещё не выросли. Нужен топор, чтобы рубить"
 	if cfg["tool"] != "" and not Game.has_tool(cfg["tool"]):
 		return "%s — нужен инструмент: %s" % [cfg["verb"], Game.item_name(cfg["tool"])]
+	if Game.glove_power(kind) > 0 and kind in Game.THORNY:
+		return cfg["verb"] + " (в рукавицах — легче)"
 	return cfg["verb"]
 
 
@@ -293,13 +295,17 @@ func interact(player: Node) -> void:
 		return
 	# удар: железом — вдвое сильнее; инструмент от каждого удара чуть изнашивается
 	var used := Game.tool_for(cfg["tool"]) if cfg["tool"] != "" else ""
-	hp -= Game.tool_power(used)
+	# рукавицы: колючки не колют, горячее не жжёт — инструментом бьёшь увереннее
+	hp -= Game.tool_power(used) + (Game.glove_power(kind) if used != "" else 0)
 	if used != "":
 		Game.use_tool(used)
 	_hit_fx(player)
 	if hp <= 0:
+		var first := true
 		for id in cfg["drops"]:
-			Game.add_item(id, cfg["drops"][id])
+			var extra := 1 if first and kind in Game.THORNY and Game.has_tool("fire_gloves") else 0
+			first = false
+			Game.add_item(id, cfg["drops"][id] + extra)
 		match kind:
 			"palm":
 				if coconut_ready and randf() < 0.6:
