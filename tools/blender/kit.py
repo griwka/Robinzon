@@ -434,6 +434,12 @@ def export(path, textured=False):
         kw["export_animations"] = bool(rigged and bpy.data.actions)
     if rigged and "export_skins" in props:
         kw["export_skins"] = True
+    if rigged and bpy.data.actions:
+        # клипы движений (anim.py): каждая дорожка NLA — отдельная анимация, поза берётся в каждом кадре
+        for k, v in (("export_animation_mode", "NLA_TRACKS"), ("export_frame_range", False), ("export_force_sampling", True),
+                     ("export_anim_slide_to_zero", False), ("export_optimize_animation_size", False)):
+            if k in props:
+                kw[k] = v
     bpy.ops.export_scene.gltf(**kw)
 
 

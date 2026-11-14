@@ -30,6 +30,21 @@ var camera: Camera3D
 
 var model: Node3D
 var rig: HeroRig          # скелет героя (кости, IK); null — у запасной модели из примитивов
+var anim: HeroAnim        # клипы движений и дерево, которое их смешивает
+var chest_pivot: Node3D   # суставы-узлы идут за костями: на груди висит инструмент за спиной,
+var shin_l: Node3D        # по туловищу, голове и ногам автотест меряет, не входит ли в них инструмент
+var shin_r: Node3D
+var sleeping := false     # спит (лежит) — пока экран темнеет перед утром
+const LAND_TIME := 0.32
+var _land_t := 0.0        # сколько ещё длится приземление
+var _land_k := 0.0        # насколько сильно присел при приземлении
+var _w_air := 0.0         # плавные веса слоёв: в воздухе, в воде, спит, несёт инструмент
+var _w_swim := 0.0
+var _w_sleep := 0.0
+var _w_carry := 0.0
+var _idle_t := 0.0
+var _swim_phase := 0.0
+var _wet_now := false     # герой плывёт (посчитано в этом кадре)
 var body_pivot: Node3D
 var head: Node3D
 var arm_l: Node3D
@@ -111,25 +126,28 @@ func _ready() -> void:
 func _build_model() -> void:
 	var g := Models.glb("player")
 	var r := HeroRig.new()
-	if g and r.setup(g):
+	var a := HeroAnim.new()
+	if g and r.setup(g) and a.setup(g):
 		rig = r
+		anim = a
 		model = Node3D.new()
 		model.name = "Model"
 		add_child(model)
 		model.add_child(g)
-		# «суставы» прежних движений: обычные узлы на местах костей — кости идут за ними (HeroRig.follow)
+		# узлы-суставы идут за костями (_sync_joints)
 		body_pivot = rig.joint("BodyJoint", "Hips", g)
-		head = rig.joint("HeadJoint", "Skull", body_pivot, "Hips")
-		arm_l = rig.joint("ArmLJoint", "UpperArmL", body_pivot, "Hips")
-		arm_r = rig.joint("ArmRJoint", "UpperArmR", body_pivot, "Hips")
+		chest_pivot = rig.joint("ChestJoint", "Hips", g)
+		head = rig.joint("HeadJoint", "Skull", g)
+		arm_l = rig.joint("ArmLJoint", "UpperArmL", g)
+		arm_r = rig.joint("ArmRJoint", "UpperArmR", g)
 		leg_l = rig.joint("LegLJoint", "ThighL", g)
 		leg_r = rig.joint("LegRJoint", "ThighR", g)
+		shin_l = rig.joint("ShinLJoint", "ShinL", g)
+		shin_r = rig.joint("ShinRJoint", "ShinR", g)
 		_body_y = body_pivot.position.y
-		hand_tool = Node3D.new()
-		hand_tool.rotation = Vector3(PI / 2, 0, 0)
-		# кисть — на конце руки, в 0.41 м под плечом (узел HandR в модели стоит не там — у ступней)
-		hand_tool.position = Vector3(0.05, -0.41, -0.04)
-		arm_r.add_child(hand_tool)
+		hand_tool = Node3D.new()   # инструмент в руке: стоит на кости ToolR (её ведут клипы движений)
+		hand_tool.name = "HandTool"
+		g.add_child(hand_tool)
 		_make_back_tool()
 		for mi in g.find_children("*", "MeshInstance3D", true, false):
 			(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
@@ -253,7 +271,7 @@ func _make_back_tool() -> void:
 	back_tool.name = "BackTool"
 	back_tool.position = Vector3(-0.16, 0.36, 0.3)
 	back_tool.rotation = Vector3(0.0, 0.0, PI - 0.95)
-	body_pivot.add_child(back_tool)
+	(chest_pivot if chest_pivot else body_pivot).add_child(back_tool)
 
 
 ## В руке — выбранный инструмент (клавиши 1–0 или взят сам, когда понадобился). Топор, мачете или кирка,
@@ -387,7 +405,8 @@ func _physics_process(delta: float) -> void:
 					velocity.z -= out.z * away
 	# в воде — медленнее и всплываем. Вода — только над морским дном: под землёй (бункер на Грозовом острове
 	# уходит ниже уровня моря) никакой воды нет, иначе героя тянет к потолку
-	if in_water():
+	_wet_now = in_water()
+	if _wet_now:
 		velocity.x *= 0.92
 		velocity.z *= 0.92
 		velocity.y = maxf(velocity.y, 1.5)
@@ -397,6 +416,8 @@ func _physics_process(delta: float) -> void:
 		_fall_speed = maxf(_fall_speed, -velocity.y)
 	if is_on_floor() and not _was_on_floor:
 		_squash = 0.75 if _fall_speed < 8.0 else 0.62  # приземление — сплющиваемся
+		_land_t = LAND_TIME                              # и приседаем: чем выше упал, тем глубже
+		_land_k = clampf(0.3 + (_fall_speed - 3.0) / 7.0, 0.3, 1.0)
 		Audio.play("step_sand", -5.0, 0.05)
 		var hard := clampf((_fall_speed - 4.0) / 8.0, 0.0, 1.0)
 		if _fall_speed > 3.0 and global_position.y > -0.3:
@@ -504,6 +525,10 @@ func _animate(delta: float, speed: float) -> void:
 		Audio.play(step, -12.0 + moving * 2.0, 0.06)
 		if on_sand and moving > 1.2 and global_position.y > -0.3:
 			FX.dust(self, Vector3(0, 0.05, 0.1), Color("f1dfb0"), 2, 0.22)
+	if rig:
+		_animate_rig(delta, speed, moving)
+		return
+	# дальше — запасная модель из примитивов: суставы крутятся напрямую
 	var swing := sin(_walk_phase) * 0.75 * moving
 	if not is_on_floor():
 		leg_l.rotation.x = lerpf(leg_l.rotation.x, -0.6, 10 * delta)
@@ -554,8 +579,90 @@ func _animate(delta: float, speed: float) -> void:
 	if Game.cold_active() and Game.warmth < 25.0:
 		shiver = 0.012 if Game.warmth <= 0.0 else 0.005
 	model.position.x = sin(_walk_phase * 9.0 + Time.get_ticks_msec() * 0.06) * shiver
-	if rig:
-		rig.follow(body_pivot, head, arm_l, arm_r, leg_l, leg_r)   # кости идут за суставами
+
+
+## Движения героя со скелетом: позу ставит дерево анимаций (HeroAnim) — по фазе шага, скорости и времени удара;
+## поверх — наклон в сторону разгона и запаздывание головы, как раньше.
+func _animate_rig(delta: float, speed: float, moving: float) -> void:
+	var working := _swing_t > 0.0 or pose_hold >= 0.0
+	var t := 0.0
+	var w_work := 0.0
+	var planted := false   # работа, при которой ноги стоят, даже если героя ещё несёт вперёд: бур, лопата, трава
+	if working:
+		t = pose_hold if pose_hold >= 0.0 else 1.0 - _swing_t / SWING_TIME
+		var kind := swing_kind
+		if kind == "hands" and target is GrassField.Spot:
+			kind = "weed"   # траву рвут у самой земли
+		anim.work(kind, HeroAnim.WORK.has(kind) and kind != "weed")
+		planted = kind in ["ice_drill", "shovel", "weed"]
+		w_work = minf(smoothstep(0.0, 0.08, t), 1.0 - smoothstep(0.9, 1.0, t))
+		_work_fx(swing_kind, t)
+	else:
+		_whoosh_done = false
+	# слои, которые включаются плавно
+	var floating := _wet_now
+	_w_swim = lerpf(_w_swim, 1.0 if floating else 0.0, 1.0 - exp(-6.0 * delta))
+	_w_air = lerpf(_w_air, 0.0 if is_on_floor() or floating else 1.0, 1.0 - exp(-14.0 * delta))
+	_w_sleep = move_toward(_w_sleep, 1.0 if sleeping else 0.0, delta / 0.45)
+	_land_t = maxf(0.0, _land_t - delta)
+	_idle_t += delta
+	_swim_phase += delta * (0.7 + speed * 0.22)
+	var carrying := _hand_id != ""
+	_w_carry = (1.0 if carrying else 0.0) if delta <= 0.0 else move_toward(_w_carry, 1.0 if carrying else 0.0, delta / 0.15)
+	if carrying:
+		anim.use("carry", "carry_can" if _hand_id == "watering_can" else "carry")
+	var u := fposmod(_walk_phase / TAU, 1.0)   # шаг: 0 — встала левая нога, 0.5 — правая (там же звук шага)
+	anim.pose({"idle": fposmod(_idle_t / 4.0, 1.0), "walk": u, "run": u, "float": fposmod(_swim_phase * 0.6, 1.0),
+			"swim": fposmod(_swim_phase, 1.0), "air": clampf(0.5 - velocity.y / 9.0, 0.0, 1.0), "land": 1.0 - _land_t / LAND_TIME,
+			"carry": 0.0, "work_low": t, "work_up": t, "sleep": fposmod(_idle_t / 5.0, 1.0)},
+		{"walk": speed / WALK_SPEED, "run": (speed - WALK_SPEED) / (SPRINT_SPEED - WALK_SPEED), "swimmove": speed / 1.3,
+			"water": _w_swim, "air": _w_air, "land": smoothstep(0.0, 1.0, _land_t / LAND_TIME) * _land_k, "carry": _w_carry,
+			"work_low": w_work * (1.0 if planted else 1.0 - clampf(moving * 2.0, 0.0, 1.0)), "work_up": w_work, "sleep": _w_sleep})
+	# поверх клипов: наклон в сторону разгона и «резиновая» голова с запаздыванием
+	rig.read_pose()
+	var local_vel := model.global_transform.basis.inverse() * velocity
+	_lean = _lean.lerp(Vector2(local_vel.z, local_vel.x) * 0.04, 6.0 * delta)
+	_head_lag = _head_lag.lerp(Vector3(-local_vel.z * 0.03, 0, local_vel.x * 0.03), 4.0 * delta)
+	var upright := 1.0 - maxf(_w_swim, _w_sleep)
+	rig.turn_all("Spine", Vector3(_lean.x * 0.5, 0.0, -_lean.y) * upright)
+	rig.turn_all("Skull", Vector3(_head_lag.x, 0.0, -_head_lag.z) * upright)
+	rig.fade = maxf(0.0, rig.fade - delta / 0.25)
+	rig.apply(1.0 - rig.fade)
+	_sync_joints()
+	_squash = lerpf(_squash, 1.0, 10.0 * delta)
+	model.scale = Vector3(1.0 / sqrt(_squash), _squash, 1.0 / sqrt(_squash))
+	var shiver := 0.0
+	if Game.cold_active() and Game.warmth < 25.0:
+		shiver = 0.012 if Game.warmth <= 0.0 else 0.005
+	model.position.x = sin(_walk_phase * 9.0 + Time.get_ticks_msec() * 0.06) * shiver
+
+
+## Узлы-суставы и инструмент в руке встают туда, где сейчас кости.
+func _sync_joints() -> void:
+	body_pivot.transform = rig.joint_at("Hips", "Hips")
+	chest_pivot.transform = rig.joint_at("Chest", "Hips")
+	head.transform = rig.joint_at("Skull", "Skull")
+	arm_l.transform = rig.joint_at("UpperArmL", "UpperArmL")
+	arm_r.transform = rig.joint_at("UpperArmR", "UpperArmR")
+	leg_l.transform = rig.joint_at("ThighL", "ThighL")
+	leg_r.transform = rig.joint_at("ThighR", "ThighR")
+	shin_l.transform = rig.joint_at("ShinL", "ShinL")
+	shin_r.transform = rig.joint_at("ShinR", "ShinR")
+	# инструмент: как лежит в руке — задают клипы (кость ToolR); вокруг своей оси он повёрнут по-своему (_carry_spin)
+	hand_tool.transform = rig.g("ToolR") * Transform3D(Basis(Vector3.UP, _carry_spin(_hand_id)), Vector3.ZERO)
+
+
+## Звук и брызги работы: свист замаха у рубящих — перед самым ударом, вода из лейки — когда её наклонили.
+func _work_fx(kind: String, t: float) -> void:
+	if _whoosh_done:
+		return
+	if kind == "watering_can":
+		if t > 0.42:
+			_whoosh_done = true
+			FX.burst(self, -model.global_basis.z * 0.9 + Vector3(0, 0.45, 0), Color("7fc8f0"), 12)   # брызги из носика
+	elif kind in ["stone_axe", "iron_axe", "pickaxe", "iron_pickaxe", "ice_pick", "machete", "iron_machete", "net", "fishing_rod"] and t > 0.34:
+		_whoosh_done = true
+		Audio.play("whoosh", -9.0, 0.12)
 
 
 ## Значение по ключевым кадрам [[t, v], ...] с мягкими переходами.
@@ -767,7 +874,8 @@ func _stop_climb(push := Vector3.ZERO) -> void:
 	velocity = push
 	update_clothes()   # снять перчатки лазальщика
 	if rig:
-		body_pivot.transform = Transform3D(Basis.IDENTITY, Vector3(0, _body_y, 0))   # сустав туловища — на место
+		rig.snapshot()   # из позы лазания в обычные движения — плавно
+		rig.fade = 1.0
 
 
 func _climb(delta: float) -> void:
@@ -797,7 +905,7 @@ func _climb(delta: float) -> void:
 		# руки и ноги стоят на опоре (IK) и перехватывают её по очереди, тело идёт мимо них — HeroRig.climb
 		var beat := rig.beat
 		rig.climb(delta, y - b.y, up, kind, dist, climbing.seg_height(), gusty)
-		body_pivot.transform = rig.joint_xf("Chest", Vector3(0, _body_y, 0))   # инструмент за спиной — за грудью
+		_sync_joints()
 		if abs(up) > 0.1 and rig.beat != beat:
 			Audio.play("rustle", -14.0, 0.2)   # рука взялась за опору
 	else:

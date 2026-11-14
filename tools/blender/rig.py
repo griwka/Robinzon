@@ -44,6 +44,9 @@ def human_bones():
             ("Shin" + s, "Thigh" + s, (sx * 0.12, 0, KNEE_Z), (sx * 0.12, 0, ANKLE_Z)),
             ("Foot" + s, "Shin" + s, (sx * 0.12, 0, ANKLE_Z), (sx * 0.12, 0.14, 0.03)),
         ]
+    # ToolR — как лежит инструмент в правой руке (вершин на ней нет): её ставят клипы движений (anim.py),
+    # а игра сажает на неё модель инструмента
+    out.append(("ToolR", "HandR", PALM, (PALM[0], PALM[1] + 0.1, PALM[2])))
     return out
 
 

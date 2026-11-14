@@ -545,8 +545,10 @@ func _near_station(station: String) -> bool:
 
 func _sleep() -> void:
 	player.controls_enabled = false
+	player.sleeping = true    # ложится, пока темнеет
 	Audio.play("sleep", -2.0, 0.0)
 	hud.fade_through(func():
+		player.sleeping = false   # и встаёт с рассветом
 		Game.sleep_until_morning()
 		hud.toast("Доброе утро! Пока ты спал, грядки подросли.", Color("ffe08a"))
 		player.controls_enabled = true

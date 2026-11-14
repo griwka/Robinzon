@@ -126,6 +126,38 @@ func _process(_delta: float) -> void:
 		p.pose_hold = float(pp[1]) if pp.size() > 1 else 0.5
 		if args.has("face"):
 			p.model.rotation.y = float(args["face"])
+	if args.has("move") and _frames >= 12:   # для раскадровки: герой сам идёт или бежит (--move=walk|run|jump[:right|left|back])
+		var mv: PackedStringArray = str(args["move"]).split(":")
+		Input.action_press("move_" + (mv[1] if mv.size() > 1 else "forward"))
+		if mv[0] == "run":
+			Input.action_press("sprint")
+		if mv[0] == "jump" and _frames == int(args.get("frames", "90")) - 4:
+			Input.action_press("jump")
+		elif mv[0] == "jump":
+			Input.action_release("jump")
+		if args.has("strip"):   # в раскадровке герой всегда в середине кадра
+			p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+	if _frames == 3 and args.get("near", "") == "sea":   # для скриншотов: герой в море (плывёт)
+		var out: Vector3 = main.island.wreck_point - main.island.spawn_point
+		out.y = 0.0
+		out = out.normalized()
+		var sp: Vector3 = main.island.spawn_point
+		for i in 80:
+			sp += out * 0.5
+			if main.island.height_at(sp.x, sp.z) < -1.4:
+				break
+		p.global_position = Vector3(sp.x, -0.7, sp.z)
+		p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+		_flush()
+	if args.has("swingstrip") and _frames >= 2:   # для раскадровки: весь удар по кадрам (--swingstrip=stone_axe --strip=8)
+		p.swing_kind = str(args["swingstrip"])
+		var n_ := maxi(2, int(args.get("strip", "8")))
+		var k_ := float(_frames - int(args.get("frames", "90"))) / float(maxi(1, int(args.get("stripstep", "6"))) * (n_ - 1))
+		p.pose_hold = clampf(k_, 0.0, 1.0)
+		if args.has("face"):
+			p.model.rotation.y = float(args["face"])
+	if args.has("sleeping") and _frames >= 2:   # для скриншотов: герой спит
+		p.sleeping = true
 	if _frames == 2 and args.get("near", "") == "crate":   # для скриншотов: герой у ящика, лицом к нему
 		for c in get_tree().get_nodes_in_group("interactable"):
 			if c is SupplyCrate:
@@ -719,11 +751,17 @@ func _clip_depth(p: Player, pts: PackedVector3Array) -> Array:
 	var worst := 0.0
 	var where := ""
 	var tb := p.body_pivot.global_transform.affine_inverse()
+	# у героя со скелетом спина гнётся: низ туловища меряем от бёдер, верх — от груди; ноги — бедро и голень
+	var tc := p.chest_pivot.global_transform.affine_inverse() if p.chest_pivot else tb
 	var th := p.head.global_transform.affine_inverse()
-	var tl := p.leg_l.global_transform.affine_inverse()
-	var tr := p.leg_r.global_transform.affine_inverse()
+	var legs: Array = [[p.leg_l.global_transform.affine_inverse(), -0.38], [p.leg_r.global_transform.affine_inverse(), -0.38]]
+	if p.shin_l:
+		legs = [[legs[0][0], -0.2], [legs[1][0], -0.2], [p.shin_l.global_transform.affine_inverse(), -0.2],
+			[p.shin_r.global_transform.affine_inverse(), -0.2]]
 	for w in pts:
 		var b := tb * w
+		if b.y > 0.2:
+			b = tc * w
 		var r := _torso_r(b.y)
 		if r > 0.0:
 			var d := r - Vector2(b.x, b.z).length()
@@ -736,9 +774,9 @@ func _clip_depth(p: Player, pts: PackedVector3Array) -> Array:
 			if d2 > worst:
 				worst = d2
 				where = "голова"
-		for t in [tl, tr]:
-			var l: Vector3 = t * w
-			var y := clampf(l.y, -0.38, 0.0)
+		for lg in legs:
+			var l: Vector3 = (lg[0] as Transform3D) * w
+			var y := clampf(l.y, float(lg[1]), 0.0)
 			var d3 := 0.1 - l.distance_to(Vector3(0, y, 0))
 			if d3 > worst:
 				worst = d3
@@ -780,7 +818,7 @@ func _test_tool_clip() -> void:
 		var at := ""
 		# несёт: стоя, на ходу и бегом (рука качается вперёд и назад, корпус наклонён вперёд — как в игре)
 		var poses: Array = [["несёт", -1.0, 0.0, 0.0]]
-		for ph in [PI / 2, -PI / 2]:
+		for ph in [0.0, PI / 2, PI, -PI / 2]:
 			poses.append(["идёт", -1.0, ph, Player.WALK_SPEED])
 			poses.append(["бежит", -1.0, ph, Player.SPRINT_SPEED])
 		for k in 51:

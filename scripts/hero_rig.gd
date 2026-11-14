@@ -3,9 +3,8 @@ extends RefCounted
 ## Скелет героя (кости — tools/blender/rig.py): позы считаются в пространстве модели и раскладываются по костям.
 ##
 ## Два режима:
-##  - follow() — прежние движения (ходьба, удары инструментом): игра, как и раньше, крутит «суставы»
-##    Body / Head / ArmL / ArmR / LegL / LegR (обычные узлы), а кости бёдер, головы, плеч и ног идут за ними.
-##    На суставах по-прежнему висят инструмент в руке и инструмент за спиной;
+##  - обычные движения (стоит, идёт, бьёт инструментом) ставит дерево анимаций (HeroAnim); здесь поверх него —
+##    мелкие поправки от движения (read_pose → turn → apply) и плавные переходы (snapshot / fade);
 ##  - climb() — лазание: руки и ноги ставятся на опору обратной кинематикой (двухсуставный IK: плечо — локоть —
 ##    кисть, бедро — колено — стопа). Опора не скользит: пока рука держится, она стоит на месте, а тело идёт мимо;
 ##    потом рука отпускает и перехватывает выше (вниз — то же в обратную сторону).
@@ -13,7 +12,7 @@ extends RefCounted
 ## Оси модели: +Y вверх, герой смотрит в −Z, левая сторона — x < 0.
 
 const ORDER := ["Hips", "Spine", "Chest", "Neck", "Skull",
-	"ShoulderL", "UpperArmL", "ForearmL", "HandL", "ShoulderR", "UpperArmR", "ForearmR", "HandR",
+	"ShoulderL", "UpperArmL", "ForearmL", "HandL", "ShoulderR", "UpperArmR", "ForearmR", "HandR", "ToolR",
 	"ThighL", "ShinL", "FootL", "ThighR", "ShinR", "FootR"]
 const PALM := 0.06          # от запястья до середины ладони
 const ELBOW_BACK := Vector3(0, 0, 1)     # куда смотрит локоть в позе покоя (назад)
@@ -26,6 +25,8 @@ var kids := {}           # имя кости → все потомки
 var rest := {}           # поза покоя в пространстве модели
 var rest_local := {}     # поза покоя относительно родителя
 var _g := {}             # поза этого кадра в пространстве модели (что не задано — идёт за родителем)
+var _from := {}          # снимок позы костей [место, поворот] — от него идёт плавный переход (snapshot)
+var fade := 0.0          # 1 → 0: сколько ещё осталось от снимка (переход из лазания в обычные движения)
 
 
 func setup(root: Node3D) -> bool:
@@ -52,16 +53,33 @@ func setup(root: Node3D) -> bool:
 	return true
 
 
-## Узел-«сустав» на месте кости: прежние движения крутят его, а кость идёт следом (follow).
-func joint(node_name: String, bone: String, under: Node3D, under_bone := "") -> Node3D:
+## Узел-«сустав» на месте кости: он идёт за костью (joint_at) — на таких узлах висит инструмент за спиной,
+## по ним автотест меряет, не входит ли инструмент в тело.
+func joint(node_name: String, bone: String, under: Node3D) -> Node3D:
 	var n := Node3D.new()
 	n.name = node_name
-	var o: Vector3 = (rest[bone] as Transform3D).origin
-	if under_bone != "":
-		o -= (rest[under_bone] as Transform3D).origin
-	n.position = o
+	n.position = (rest[bone] as Transform3D).origin
 	under.add_child(n)
 	return n
+
+
+## Где сейчас сустав, который в покое стоит в начале кости at_bone без поворота и жёстко держится за кость bone.
+func joint_at(bone: String, at_bone: String) -> Transform3D:
+	return g(bone) * (rest[bone] as Transform3D).affine_inverse() * Transform3D(Basis.IDENTITY, (rest[at_bone] as Transform3D).origin)
+
+
+## Запомнить позу костей: от неё пойдёт плавный переход в новую (apply(w) или fade).
+func snapshot() -> void:
+	for nm: String in ORDER:
+		var i: int = id[nm]
+		_from[nm] = [skel.get_bone_pose_position(i), skel.get_bone_pose_rotation(i)]
+
+
+## Взять позу, которую поставило дерево анимаций, — чтобы поправить её (turn, ik) и разложить обратно (apply).
+func read_pose() -> void:
+	_g.clear()
+	for nm: String in ORDER:
+		_g[nm] = skel.get_bone_global_pose(id[nm])
 
 
 # ------------------------------------------------------------------ поза кадра
@@ -94,9 +112,17 @@ func turn(bone: String, euler: Vector3) -> void:
 	put(bone, Transform3D(c * Basis.from_euler(euler) * rb, t.origin))
 
 
-## Кость идёт за «суставом»: d — где сейчас сустав (в пространстве модели), в покое он стоит в начале кости без поворота.
-func drive(bone: String, d: Transform3D) -> void:
-	put(bone, d * Transform3D((rest[bone] as Transform3D).basis, Vector3.ZERO))
+## То же, что turn, но для позы, взятой у дерева анимаций (read_pose): всё, что растёт из кости, поворачивается
+## вместе с ней и остаётся в своей позе (turn и put, наоборот, возвращают потомков в позу покоя).
+func turn_all(bone: String, euler: Vector3) -> void:
+	var old := g(bone)
+	var rb: Basis = (rest[bone] as Transform3D).basis
+	var c := old.basis * rb.inverse()
+	var now := Transform3D(c * Basis.from_euler(euler) * rb, old.origin)
+	var d := now * old.affine_inverse()
+	for k: String in kids[bone]:
+		_g[k] = d * g(k)
+	_g[bone] = now
 
 
 static func _frame(along: Vector3, hint: Vector3) -> Basis:
@@ -139,39 +165,20 @@ func ik(upper: String, lower: String, end: String, target: Vector3, pole: Vector
 	aim(lower, re, mid, a + dir * dist, pp, hint_rest)
 
 
-## Разложить позу по костям. w < 1 — смешать с позой покоя (плавный вход в лазание).
+## Разложить позу по костям. w < 1 — смешать со снимком прежней позы (snapshot): плавный переход.
 func apply(w := 1.0) -> void:
 	for nm: String in ORDER:
 		var p: String = parent[nm]
 		var loc: Transform3D = g(nm) if p == "" else g(p).affine_inverse() * g(nm)
 		var q := loc.basis.orthonormalized().get_rotation_quaternion()
 		var o := loc.origin
-		if w < 1.0:
-			var rl: Transform3D = rest_local[nm]
-			q = rl.basis.get_rotation_quaternion().slerp(q, w)
-			o = rl.origin.lerp(o, w)
+		if w < 1.0 and _from.has(nm):
+			var was: Array = _from[nm]
+			q = (was[1] as Quaternion).slerp(q, w)
+			o = (was[0] as Vector3).lerp(o, w)
 		var i: int = id[nm]
 		skel.set_bone_pose_position(i, o)
 		skel.set_bone_pose_rotation(i, q)
-
-
-## Где оказался бы «сустав» кости bone (в покое стоящий в точке at без поворота) — чтобы то, что на нём висит
-## (инструмент за спиной), шло за костью.
-func joint_xf(bone: String, at: Vector3) -> Transform3D:
-	return g(bone) * (rest[bone] as Transform3D).affine_inverse() * Transform3D(Basis.IDENTITY, at)
-
-
-# ------------------------------------------------------------------ прежние движения: кости идут за суставами
-func follow(body: Node3D, head: Node3D, arm_l: Node3D, arm_r: Node3D, leg_l: Node3D, leg_r: Node3D) -> void:
-	begin()
-	var bt := body.transform
-	drive("Hips", bt)
-	drive("Skull", bt * head.transform)
-	drive("UpperArmL", bt * arm_l.transform)
-	drive("UpperArmR", bt * arm_r.transform)
-	drive("ThighL", leg_l.transform)
-	drive("ThighR", leg_r.transform)
-	apply()
 
 
 # ------------------------------------------------------------------ лазание
@@ -204,6 +211,8 @@ var _breath := 0.0
 
 
 func climb_start() -> void:
+	snapshot()   # в позу лазания входим плавно — из той, в какой герой подошёл
+	fade = 0.0
 	climb_w = 0.0
 	_act = 0.0
 	_look = Vector2.ZERO

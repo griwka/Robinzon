@@ -16,7 +16,7 @@ import kit  # noqa: E402
 import texbake  # noqa: E402
 import texbake_props  # noqa: E402
 
-MODULES = ["models_characters", "models_nature", "models_buildings", "models_farm", "models_jungle", "models_banyan", "models_fort", "models_storm", "models_ice", "models_volcano", "models_fog", "models_eye", "models_tools", "models_flora"]
+MODULES = ["models_characters", "models_nature", "models_buildings", "models_farm", "models_jungle", "models_banyan", "models_fort", "models_storm", "models_ice", "models_volcano", "models_fog", "models_eye", "models_tools", "models_flora", "anim"]
 
 
 PEOPLE = ["player", "marta", "stepa", "timur", "ingrid", "vera", "misha", "renata", "gosha", "petya", "pasha", "lyova"]

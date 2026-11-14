@@ -118,9 +118,19 @@
 - **Скелет героя** — `tools/blender/rig.py` (кости `Hips`, `Spine`, `Chest`, `Neck`, `Skull`, `Shoulder*`, `UpperArm*`, `Forearm*`,
   `Hand*`, `Thigh*`, `Shin*`, `Foot*`; веса по высоте вершины — `rig.PARTS`, привязка — `rig.dress()` в конце модели).
   Сетки `Body`, `Head`, `ArmL/R`, `LegL/R` в `player.glb` привязаны к `Skeleton3D`. Одежда `wear_*` привязана к такому же
-  скелету и в игре пересаживается на скелет героя (`Player.update_clothes`). В игре — `scripts/hero_rig.gd` (`HeroRig`, `Player.rig`):
-  `follow()` — прежние движения (игра крутит узлы-суставы `Player.body_pivot`, `head`, `arm_l/r`, `leg_l/r`, кости идут за ними;
-  на суставах висят инструмент в руке и за спиной), `climb()` — лазание: руки и ноги ставятся на опору двухсуставным IK
+  скелету и в игре пересаживается на скелет героя (`Player.update_clothes`). Кость `ToolR` — как лежит инструмент в правой руке.
+- **Движения героя** — клипы из Blender: `tools/blender/anim.py` → `assets/models/hero_anims.glb` (`python tools/blender/build.py hero_anims`,
+  секунда; потом `--import`). Позы не рисуются, а считаются для каждого кадра: где бёдра, как повёрнуты спина и голова, куда
+  ставятся кисти и стопы (тот же IK, что в игре), как смотрит инструмент (`hold()`: pitch / yaw / dspin — в осях модели).
+  Клипы: `idle`, `walk`, `run`, `air`, `land`, `swim`, `float`, `sleep`, `hands`, `weed`, `carry`, `carry_can`, `hit_axe|pick|machete|
+  shovel|can|net|rod|drill` (ключи ударов — `anim.STRIKES`). В игре — `scripts/hero_anim.gd` (`HeroAnim`, `Player.anim`): AnimationTree
+  смешивает слои (`HeroAnim.LAYERS`), а момент каждого клипа ставит игра (`anim.pose(at, mix)` из `Player._animate_rig`): шаг — по
+  `_walk_phase` (звук шага совпадает с постановкой ноги), удар — по `_swing_t` / `pose_hold`, прыжок — по скорости падения.
+  Клип меняй только через `anim.use()` / `anim.work()` (после смены клипа дерево сбрасывает настройки — `pose()` это учитывает).
+  Поверх клипов — `scripts/hero_rig.gd` (`HeroRig`, `Player.rig`): `read_pose()` → `turn_all()` (наклон от разгона, запаздывание головы) →
+  `apply()`; `snapshot()` / `fade` — плавные переходы. Узлы-суставы `Player.body_pivot`, `chest_pivot`, `head`, `leg_l/r`, `shin_l/r`
+  идут за костями (`_sync_joints`): на груди висит инструмент за спиной, по ним автотест меряет, не входит ли инструмент в тело.
+  Инструмент в руке (`hand_tool`) стоит на кости `ToolR`. `HeroRig.climb()` — лазание: руки и ноги ставятся на опору двухсуставным IK
   (`ik()`, `aim()`, `turn()`), мерки по виду опоры — `HeroRig.CLIMB` (`Climbable.kind()`: `rope` / `wall` / `ladder`).
   Опора под рукой не скользит, поэтому скорость лазания привязана к перехватам: `Player.CLIMB_SPEED`; силы и жар на стене
   идут во столько же раз медленнее (`Player.climb_pace()`). Пока герой лезет по лиане или стене, на руках — перчатки
@@ -138,7 +148,8 @@
   на свободное место; такие кучки (`ResourceNode.washed`) не вырастают снова на том же месте. Любой ресурс не вырастает
   на постройке (`ResourceNode._spot_taken()`). Грядку убирает `GardenBed.remove_bed()` (круг действий).
 - **Модели инструментов** — `tools/blender/models_tools.py` (хват в нуле, рукоять вниз по −Z, рабочая сторона — +Y).
-  Как их держат — `Player.CARRY_*` (перед собой, вперёд-вверх) и замахи в `Player._work_pose()`. Автотест `_test_tool_clip()`
+  Как их держат и как ими бьют — `tools/blender/anim.py` (`CARRY_*`, `STRIKES`; `Player.CARRY_*` и `_work_pose()` остались только
+  для запасной модели из примитивов). Автотест `_test_tool_clip()`
   меряет, не входит ли инструмент в голову, туловище и ноги (несёт, идёт, весь замах); быстро — `--autotest --cliponly`.
 - **Звуки событий** (подобрал, урожай, крафт, стройка, монеты, кнопки, задание…) — `tools/gen_audio.py`, раздел `COZY`:
   калимба и дерево в до мажоре, всё выше ~4.5 кГц срезано, громкость через `level()`. Пересобрать только их:
@@ -261,7 +272,8 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 - `--pose=stone_axe:0.32` — застывшая поза работы (фаза 0..1), `--face=0` — куда смотрит герой (с `--yaw=1.57` — вид сбоку);
 - `--fxtest` — все эффекты перед кадром;
 - `--climb=N:h` — герой на лиане N на высоте h (0..1), `--climb=N:h:up|down` — лезет сам, `--climbcam=градусы` — камера (0 — со спины);
-  `--strip=N --stripstep=K` — раскадровка: N кадров через K; `--slots=load|new|save|pauseload` — список ячеек сохранения;
+  `--strip=N --stripstep=K` — раскадровка: N кадров через K; `--move=walk|run|jump[:right|left|back]` — герой сам идёт, бежит, прыгает;
+  `--swingstrip=stone_axe` — весь удар по кадрам; `--near=sea` — герой в море; `--sleeping=1` — спит; `--slots=load|new|save|pauseload` — список ячеек сохранения;
 - `--toolrow --nohud` — все инструменты в ряд; `--sat=35` — сытость; `--worn=machete:0.7` — износ инструмента;
 - `--demo --wheel=pen|bed|seeds` — круг действий; `--panel=build|craft|inv` — окно (всё открыто); `--farline=marta` — реплика издалека;
 - `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO;
