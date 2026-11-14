@@ -10,10 +10,11 @@ import os
 import random
 
 import numpy as np
+from scipy import ndimage as ndi
 
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter
 
-OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "icons")
+OUT = os.environ.get("ICON_OUT") or os.path.join(os.path.dirname(__file__), "..", "assets", "icons")
 S = 512            # размер холста для рисования
 FINAL = 160        # итоговый размер иконки
 O = (66, 36, 16, 255)   # цвет обводки (тёплый тёмно-коричневый)
@@ -49,55 +50,104 @@ def _shifted(mask, dx, dy):
     return out
 
 
-def _cel_fill(pts, fill, w=W):
-    """Мягкая объёмная заливка в стиле оригинала:
-    скруглённый силуэт, градиент (свет сверху-слева), мягкий блик, тень у края и контур."""
+def _cel_fill(pts, fill, w=W, **kw):
+    """Объёмная заливка: силуэт → «высота» по расстоянию до края → нормали → свет сверху-слева,
+    цветная тень, мягкий блик, отсвет снизу-справа и контур, подкрашенный под цвет детали."""
     raw = Image.new("L", (S, S), 0)
-    ImageDraw.Draw(raw).polygon(pts, fill=255)
-    _cel_mask(raw, fill, w)
+    rd = ImageDraw.Draw(raw)
+    if pts and isinstance(pts[0][0], (list, tuple)):      # несколько многоугольников — одна деталь (облако, гроздь)
+        for sub in pts:
+            rd.polygon(sub, fill=255)
+    else:
+        rd.polygon(pts, fill=255)
+    _cel_mask(raw, fill, w, **kw)
 
 
-def _cel_mask(raw, fill, w=W):
+GLOSS_K = 1.0     # общий множитель блика: для предметов 1, для страниц и портретов меньше (set_gloss)
+LIGHT = np.array([-0.50, -0.62, 0.60])
+LIGHT = LIGHT / np.linalg.norm(LIGHT)
+HALF = LIGHT + np.array([0.0, 0.0, 1.0])
+HALF = HALF / np.linalg.norm(HALF)
+
+
+def _smooth(e0, e1, x):
+    t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def outline_color(fill):
+    """Контур — тёмный оттенок самой детали, чуть смешанный с тёплым коричневым."""
+    dk = darken(fill, 0.62)
+    return tuple(int(dk[i] * 0.55 + O[i] * 0.45) for i in range(3)) + (255,)
+
+
+def _cel_mask(raw, fill, w=W, detail=None, gloss=1.0, puff=1.0, flat=0.0, ink=None):
+    """raw — силуэт (L, S×S). detail(draw) дорисовывает узор прямо в цвет детали (до освещения).
+    gloss — сила блика, puff — выпуклость (0 — почти плоская), flat — доля ровного освещения."""
     bbox = raw.getbbox()
     if bbox is None:
         return
     bw, bh = bbox[2] - bbox[0], bbox[3] - bbox[1]
     size = min(bw, bh)
-    # скругляем углы: размытие + порог
     r = max(2, min(9, size // 12))
     mask = raw.filter(ImageFilter.GaussianBlur(r)).point(lambda v: 255 if v > 118 else 0)
-    # градиент вдоль диагонали
-    light, dark = lighten(fill, 0.30), darken(fill, 0.20)
-    yy, xx = np.mgrid[0:bh + 2, 0:bw + 2]
-    g = np.clip((xx / max(bw, 1) * 0.45 + yy / max(bh, 1) * 0.75) / 1.2, 0, 1)
-    grad = Image.fromarray((g * 255).astype(np.uint8), "L")
-    g_rgb = Image.composite(Image.new("RGBA", grad.size, dark), Image.new("RGBA", grad.size, light), grad)
-    layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    layer.paste(g_rgb, (bbox[0] - 1, bbox[1] - 1))
-    layer.putalpha(mask)
-    if size > 36:
-        # мягкая тень у нижне-правого края
-        off = max(6, int(size * 0.10))
-        inner = ImageChops.subtract(mask, _shifted(mask, -off, -off)).filter(ImageFilter.GaussianBlur(off * 0.6))
-        inner = ImageChops.multiply(inner, mask)
-        sh = Image.new("RGBA", (S, S), darken(fill, 0.38))
-        sh.putalpha(inner.point(lambda v: int(v * 0.75)))
-        layer.alpha_composite(sh)
-        # мягкий блик сверху-слева
-        hl = Image.new("L", (S, S), 0)
-        cx, cy = bbox[0] + bw * 0.34, bbox[1] + bh * 0.28
-        ImageDraw.Draw(hl).ellipse((cx - bw * 0.2, cy - bh * 0.13, cx + bw * 0.2, cy + bh * 0.13), fill=255)
-        hl = ImageChops.multiply(hl.filter(ImageFilter.GaussianBlur(max(4, size * 0.06))), mask)
-        hi = Image.new("RGBA", (S, S), (255, 255, 255, 255))
-        hi.putalpha(hl.point(lambda v: int(v * 0.55)))
-        layer.alpha_composite(hi)
+    pad = w + 6
+    x0, y0 = max(0, bbox[0] - pad), max(0, bbox[1] - pad)
+    x1, y1 = min(S, bbox[2] + pad), min(S, bbox[3] + pad)
+    m = np.asarray(mask.crop((x0, y0, x1, y1))) > 127
+    if not m.any():
+        return
+    # цвет детали (с узором)
+    base_img = Image.new("RGBA", (S, S), fill)
+    if detail is not None:
+        dd = ImageDraw.Draw(base_img)
+        dd.base = base_img                       # для мягких пятен: paint_soft(dd, ...)
+        detail(dd)
+    base = np.asarray(base_img.crop((x0, y0, x1, y1)).convert("RGB"), dtype=np.float32) / 255.0
+    # высота
+    dist = ndi.distance_transform_edt(m).astype(np.float32)
+    R = max(float(dist.max()), 3.0)
+    t = np.clip(dist / R, 0.0, 1.0)
+    dome = np.sqrt(np.clip(1.0 - (1.0 - t) ** 2, 0.0, 1.0))
+    h = R * puff * (0.5 * dome + 0.5 * t) * 0.95
+    h = 0.35 * ndi.gaussian_filter(h, max(1.5, R * 0.035)) + 0.65 * ndi.gaussian_filter(h, max(3.0, R * 0.30))   # без острого гребня посередине
+    gy, gx = np.gradient(h)
+    nz = 1.0 / np.sqrt(gx * gx + gy * gy + 1.0)
+    nx, ny = -gx * nz, -gy * nz
+    nd = np.clip(nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2], 0.0, 1.0)
+    shade = (nd - LIGHT[2]) * (1.0 - flat)               # 0 — плоский участок
+    out = base.copy()
+    lit = np.clip(shade, 0, 1)[..., None]
+    out = out + (1.0 - out) * lit * 0.62 + np.array([0.05, 0.03, -0.02], np.float32) * lit
+    wsh = np.clip(-shade * 1.5, 0, 1)[..., None]
+    sh_mul = np.array([0.78, 0.70, 0.76], np.float32)    # тень — глубже и чуть холоднее
+    out = out * (1.0 - wsh) + out * sh_mul * wsh
+    # затемнение у самого края (объём «подушки»)
+    edge = np.clip(1.0 - dist / (4.0 + 0.10 * R), 0.0, 1.0)[..., None]
+    out = out * (1.0 - 0.14 * edge)
+    # тёплый отсвет снизу-справа у края
+    bounce = np.clip(nx * 0.55 + ny * 0.83, 0, 1) * np.clip(1.0 - dist / (0.35 * R + 6), 0, 1) * (1 - flat)
+    out = out + (np.clip(base * 1.25 + 0.08, 0, 1) - out) * (bounce[..., None] * 0.35)
+    # блики
+    spec = np.clip(nx * HALF[0] + ny * HALF[1] + nz * HALF[2], 0.0, 1.0)
+    gloss = gloss * GLOSS_K
+    soft = (spec * spec) ** 4 * 0.30 * gloss
+    crisp = _smooth(0.975, 0.992, spec) * 0.70 * gloss * (1 - flat)
+    hl = np.clip(soft + crisp, 0, 1)[..., None]
+    out = out + (1.0 - out) * hl * np.array([1.0, 0.98, 0.9], np.float32)
+    out = np.clip(out, 0.0, 1.0)
+    alpha = m.astype(np.float32)
+    layer = np.dstack([out, alpha])
+    layer = Image.fromarray((layer * 255).astype(np.uint8), "RGBA")
     if w:
-        ow = max(3, w // 2) * 2 + 1
-        edge = mask.filter(ImageFilter.MaxFilter(ow))
-        out = Image.new("RGBA", (S, S), O)
-        out.putalpha(edge)
-        CUR.alpha_composite(out)
-    CUR.alpha_composite(layer)
+        d_out = ndi.distance_transform_edt(~m).astype(np.float32)
+        oa = np.clip(w / 2.0 + 0.5 - d_out, 0.0, 1.0)
+        oc = ink or outline_color(fill)
+        ol = np.zeros(oa.shape + (4,), np.uint8)
+        ol[..., :3] = oc[:3]
+        ol[..., 3] = (oa * 255).astype(np.uint8)
+        CUR.alpha_composite(Image.fromarray(ol, "RGBA"), (x0, y0))
+    CUR.alpha_composite(layer, (x0, y0))
 
 
 def tint(pts, cx, cy, r, color, alpha=0.8):
@@ -112,10 +162,13 @@ def tint(pts, cx, cy, r, color, alpha=0.8):
     CUR.alpha_composite(layer)
 
 
-def poly(d, pts, fill, w=W):
-    pts = [(float(x), float(y)) for x, y in pts]
+def poly(d, pts, fill, w=W, **kw):
+    if pts and isinstance(pts[0][0], (list, tuple)):
+        pts = [[(float(x), float(y)) for x, y in sub] for sub in pts]
+    else:
+        pts = [(float(x), float(y)) for x, y in pts]
     if w >= 10 and CUR is not None and fill[3] == 255:
-        _cel_fill(pts, fill, w)
+        _cel_fill(pts, fill, w, **kw)
         return
     else:
         d.polygon(pts, fill=fill)
@@ -135,8 +188,8 @@ def ell_pts(cx, cy, rx, ry, ang=0.0, n=64, a0=0.0, a1=2 * math.pi):
     return out
 
 
-def ell(d, cx, cy, rx, ry, fill, ang=0.0, w=W):
-    poly(d, ell_pts(cx, cy, rx, ry, ang)[:-1], fill, w)
+def ell(d, cx, cy, rx, ry, fill, ang=0.0, w=W, **kw):
+    poly(d, ell_pts(cx, cy, rx, ry, ang)[:-1], fill, w, **kw)
 
 
 def blob(cx, cy, r, seed, amp=0.12, n=40, sx=1.0, sy=1.0):
@@ -198,6 +251,97 @@ def leaf_shape(p0, p2, bend, width):
     a = (mx + nx * (bend + width), my + ny * (bend + width))
     b = (mx + nx * (bend - width), my + ny * (bend - width))
     return quad_curve(p0, a, p2) + quad_curve(p2, b, p0)[1:]
+
+
+# ----------------------------------------------------------------- общие помощники рисования
+def spline(pts, closed=True, n=14):
+    """Плавная кривая (Катмулл — Ром) через опорные точки: ровные, «нарисованные» контуры без углов."""
+    P = [(float(x), float(y)) for x, y in pts]
+    m = len(P)
+    out = []
+    rng = range(m) if closed else range(m - 1)
+    for i in rng:
+        if closed:
+            p0, p1, p2, p3 = P[(i - 1) % m], P[i], P[(i + 1) % m], P[(i + 2) % m]
+        else:
+            p0, p1, p2, p3 = P[max(i - 1, 0)], P[i], P[i + 1], P[min(i + 2, m - 1)]
+        for k in range(n):
+            t = k / n
+            t2, t3 = t * t, t * t * t
+            out.append(tuple(0.5 * ((2 * p1[j]) + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2
+                                    + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3) for j in (0, 1)))
+    if not closed:
+        out.append(P[-1])
+    return out
+
+
+def bez(p0, p1, p2, p3, n=40):
+    out = []
+    for i in range(n + 1):
+        t = i / n
+        a, b, c, e = (1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t * t, t ** 3
+        out.append((a * p0[0] + b * p1[0] + c * p2[0] + e * p3[0], a * p0[1] + b * p1[1] + c * p2[1] + e * p3[1]))
+    return out
+
+
+def tube(path, widths, cap=True):
+    """Многоугольник вдоль кривой с переменной толщиной. widths — число, пара (начало, конец) или список по точкам."""
+    n = len(path)
+    if isinstance(widths, (int, float)):
+        ws = [float(widths)] * n
+    elif len(widths) == 2:
+        ws = [widths[0] + (widths[1] - widths[0]) * i / (n - 1) for i in range(n)]
+    else:
+        ws = list(widths)
+    left, right = [], []
+    for i in range(n):
+        a, b = path[max(i - 1, 0)], path[min(i + 1, n - 1)]
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(dx, dy) or 1.0
+        nx, ny = -dy / ln, dx / ln
+        left.append((path[i][0] + nx * ws[i] / 2, path[i][1] + ny * ws[i] / 2))
+        right.append((path[i][0] - nx * ws[i] / 2, path[i][1] - ny * ws[i] / 2))
+    if not cap:
+        return left + right[::-1]
+    a1 = math.atan2(path[-1][1] - path[-2][1], path[-1][0] - path[-2][0])
+    a0 = math.atan2(path[1][1] - path[0][1], path[1][0] - path[0][0])
+    end = [(path[-1][0] + math.cos(a1 + math.pi / 2 - math.pi * k / 10) * ws[-1] / 2,
+            path[-1][1] + math.sin(a1 + math.pi / 2 - math.pi * k / 10) * ws[-1] / 2) for k in range(1, 10)]
+    start = [(path[0][0] + math.cos(a0 - math.pi / 2 - math.pi * k / 10) * ws[0] / 2,
+              path[0][1] + math.sin(a0 - math.pi / 2 - math.pi * k / 10) * ws[0] / 2) for k in range(1, 10)]
+    return left + end + right[::-1] + start
+
+
+class Frame:
+    """Своя система координат вдоль предмета: u — от p0 к p1 (в пикселях), v — поперёк. Удобно для инструментов."""
+
+    def __init__(self, p0, p1):
+        self.o = p0
+        dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+        self.L = math.hypot(dx, dy)
+        self.ux, self.uy = dx / self.L, dy / self.L
+        self.vx, self.vy = -self.uy, self.ux
+
+    def __call__(self, u, v=0.0):
+        return (self.o[0] + self.ux * u + self.vx * v, self.o[1] + self.uy * u + self.vy * v)
+
+    def pts(self, lst):
+        return [self(u, v) for u, v in lst]
+
+
+def paint_soft(dd, cx, cy, rx, ry, color, alpha=0.8, ang=0.0):
+    """Мягкое цветное пятно на цвете детали (румянец, переход цвета) — до освещения."""
+    m = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(m).polygon(ell_pts(cx, cy, rx, ry, ang), fill=int(255 * alpha))
+    m = m.filter(ImageFilter.GaussianBlur(max(rx, ry) * 0.38))
+    dd.base.paste(Image.new("RGBA", (S, S), color), (0, 0), m)
+
+
+def ink_line(dd, pts, color, w):
+    """Линия-узор внутри детали (волокна, жилки, швы)."""
+    dd.line([(float(x), float(y)) for x, y in pts], fill=color, width=int(w), joint="curve")
+    for x, y in (pts[0], pts[-1]):
+        dd.ellipse((x - w / 2, y - w / 2, x + w / 2, y + w / 2), fill=color)
 
 
 # ----------------------------------------------------------------- материалы
@@ -1288,6 +1432,14 @@ def save(name, img, do_fit=True):
     out.save(os.path.join(OUT, name + ".png"))
 
 
+def set_gloss(k):
+    """Блик у страниц и портретов слабее, чем у предметов (модуль могут загрузить дважды — как __main__ и как gen_icons)."""
+    global GLOSS_K
+    GLOSS_K = k
+    import gen_icons as G
+    G.GLOSS_K = k
+
+
 def main():
     import sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -1296,6 +1448,7 @@ def main():
     import icons_volcano as volcano   # глава 6
     import icons_fog as fog           # глава 7
     import icons_eye as eye           # глава 8
+    import icons_core as core         # основные: фрукты, материалы, инструменты
     os.makedirs(OUT, exist_ok=True)
     crops = {"carrot": i_carrot, "potato": i_potato, "corn": i_corn, "tomato": i_tomato,
              "cabbage": i_cabbage, "watermelon": i_watermelon}
@@ -1329,18 +1482,28 @@ def main():
     icons.update(volcano.ICONS)
     icons.update(fog.ICONS)
     icons.update(eye.ICONS)
+    icons.update(core.ICONS)
+    fruits.update({k: v for k, v in core.ICONS.items() if k in fruits})
+    crops.update({k: v for k, v in core.ICONS.items() if k in crops})
     icons.update(crops)
     icons.update(fruits)
+    only = set(sys.argv[1:])        # python tools/gen_icons.py banana shovel — только эти (быстрая проверка)
     for name, fn in icons.items():
-        save(name, fn())
+        if not only or name in only:
+            save(name, fn())
     for c, fn in crops.items():
-        save("seed_" + c, packet(fn()))
+        if not only or "seed_" + c in only:
+            save("seed_" + c, packet(fn()))
     for t in ("banana", "mango", "lemon"):
-        save("sapling_" + t, pot(fruits[t]()))
+        if not only or "sapling_" + t in only:
+            save("sapling_" + t, pot(fruits[t]()))
+    if only:
+        return
     bf = {"lemon_wing": ("ffe85c", "ffe85c"), "blue_wing": ("8fd0ff", "2f5fb0"), "swallowtail": ("ffd36a", "ffd36a"),
           "peacock_eye": ("d0456b", "d0456b"), "morpho": ("3b8cff", "14264a")}
     for k, (b, e) in bf.items():
         save(k, butterfly(rgb(b), rgb(e), k))
+    set_gloss(0.3)
     for i, dd in enumerate((dd_ship, dd_sprout, dd_storm, dd_lighthouse, dd_tree, dd_letter)):
         save("page_%d" % (i + 1), page(dd))
     for i, dd in enumerate((dd_tree, dd_storm, dd_letter)):

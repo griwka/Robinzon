@@ -53,15 +53,29 @@
 - **Перечитать разговоры** — окно коллекций (`hud.gd`: `_fill_replays`, `replay_quests`, `replay_lines`): только пройденные задания
   и идущее сейчас; `show_dialogue(lines, open_collections)` возвращает окно после разговора.
 - **Польза вещей** — у предметов в `Data.ITEMS` поле `"tip"` (показывается в подсказке, инвентаре и лавке, `HUD.item_tip`).
-  Фонарь: `Game.has_light()`, `night_light()`, `LANTERN_WARM/BITE/RARE` (холод, рыбалка). Огнеупорные рукавицы: `Game.glove_power(kind)`,
-  `THORNY`, `HOT_KINDS` (`ResourceNode.interact`), на герое — `Player.update_clothes()` на любом острове.
+  Фонарь: `Game.has_light()` (включён ли), `light_kind()`, `night_light()`, `LANTERN_WARM/BITE/RARE` (холод, рыбалка). Огнеупорные рукавицы:
+  `Game.gloves_on()`, `glove_power(kind)`, `THORNY`, `HOT_KINDS` (`ResourceNode.interact`), на герое — `Player.update_clothes()` на любом острове.
+  Выключатели: `Game.GEAR` / `gear_off` / `toggle_gear("light"|"gloves")`, клавиши 5 и 6 (`main.gd`), ячейки внизу и кнопки в сумке (`hud.gd`);
+  для эффектов не проверять `Game.has_tool("lantern")` / `("fire_gloves")` — только `has_light()` и `gloves_on()`.
 - **Туман** — `scripts/fog_system.gd` (Туманный остров до флага `fog_cleared`): объёмный туман + `FogVolume`
   с отрицательной плотностью у огня (группы `station_*` из `FogSystem.RADIUS` и узлы `fog_light` с `fog_radius`).
   Плыть туда — только `Game.fog_hours()`; пассажир — флаг `stepa_aboard` → `Game.arrive()`.
 - **Ассеты собираются скриптами, руками не правятся:**
   - модели: `tools/blender/*.py` → `assets/models/*.glb`;
-  - иконки: `tools/gen_icons.py` → `assets/icons/`;
+  - иконки: `tools/gen_icons.py` → `assets/icons/` (подробности — раздел «Иконки» ниже);
   - звук: `tools/gen_audio.py` → `assets/audio/`.
+
+## Иконки предметов
+- Рисуем в 512×512, итог 160 px (сжатие LANCZOS). Каждая деталь — `poly(d, pts, цвет, detail=…, gloss=…, puff=…)`: объём считает
+  `_cel_mask` (высота по расстоянию до края → нормали → свет сверху-слева, цветная тень, блики, контур под цвет детали).
+  `detail(dd)` рисует узор в цвете детали до освещения (`ink_line`, `paint_soft`), поэтому свет ложится и на узор.
+- Помощники: `spline` (плавный контур), `bez`, `tube` (трубка с переменной толщиной), `Frame` (оси вдоль предмета),
+  `poly([...несколько многоугольников...])` — одна деталь (облако, гроздь). Блик у страниц и портретов слабее (`set_gloss`).
+- Основные предметы (фрукты, материалы, инструменты) — `tools/icons_core.py`, главы — `icons_storm|ice|volcano|fog|eye.py`.
+  Единые цвета дерева и железа (`WOOD`, `STEEL`…) — в начале `icons_core.py`; инструменты лежат диагональю, головка вверху справа.
+- Проверка: `python tools/gen_icons.py banana shovel` — пересобрать только эти (`ICON_OUT=папка` — писать не в `assets/icons`);
+  `python tools/icon_sheet.py лист.png` — лист всех иконок с подписями; `python tools/icon_compare.py out.png папка_было имена…` —
+  лист «было / стало». После пересборки — `godot --headless --path . --import`.
 
 ## Графика (подробно — `docs/ГРАФИКА.md`)
 - **Где что лежит:**
