@@ -429,8 +429,11 @@ def export(path, textured=False):
         kw["export_image_format"] = "AUTO"
     if textured and "export_texcoords" in props:
         kw["export_texcoords"] = True
+    rigged = any(ob.type == "ARMATURE" for ob in bpy.context.scene.objects)   # скелет (rig.py): сетки с весами
     if "export_animations" in props:
-        kw["export_animations"] = False
+        kw["export_animations"] = bool(rigged and bpy.data.actions)
+    if rigged and "export_skins" in props:
+        kw["export_skins"] = True
     bpy.ops.export_scene.gltf(**kw)
 
 

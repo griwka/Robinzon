@@ -12,6 +12,7 @@ from mathutils import Vector, noise
 
 from kit import (box, cyl, displace, empty, from_bm, hexcol, ico, join, lathe, leaf, mix, paint, remesh, rnd,
                  set_origin, set_parent, shade, sphere, subsurf, tube)
+import rig
 from models_buildings import log, plank, stone
 
 ICE = hexcol("9fd6ee")
@@ -1034,13 +1035,10 @@ def crop_cloudberry():
 
 
 # ================================================================== одежда на герое
-# Куски вешаются на суставы героя (player.glb): Torso — на Body (бёдра, z=0.45), SleeveL/R и MittenL/R — на плечи
-# ArmL/ArmR (±0.29, 0, 0.98), BootL/R — на бёдра LegL/LegR (±0.12, 0, 0.45). Точка вращения куска = сустав.
-def _piece(objs, name, pivot):
-    p = join(objs, name)
-    set_origin(p, pivot)
-    p.location = (0, 0, 0)
-    return p
+# Куски (Torso, SleeveL/R, MittenL/R, BootL/R) привязаны к такому же скелету, что у героя (rig.dress в конце каждой
+# вещи): в игре их сетки пересаживаются на скелет героя и гнутся вместе с ним — в локтях, коленях и спине.
+def _piece(objs, name, pivot=None):
+    return join(objs, name)
 
 
 def _torso(col, r_add, fn, collar_col=None):
@@ -1060,8 +1058,8 @@ def _sleeves(col, r0, r1, cuff_col, fn=None):
     out = []
     for sx, nm in ((-1, "SleeveL"), (1, "SleeveR")):
         sh = (sx * 0.29, 0, 0.98)
-        s = tube("sv", [(sx * 0.27, 0, 1.03), (sx * 0.3, 0.0, 0.9), (sx * 0.33, 0.01, 0.8), (sx * 0.34, 0.03, 0.67)],
-                 [r0, r0 * 0.95, r1 * 1.05, r1], 12)
+        s = tube("sv", *rig.resample([(sx * 0.27, 0, 1.03), (sx * 0.3, 0.0, 0.9), (sx * 0.33, 0.01, 0.8), (sx * 0.34, 0.03, 0.67)],
+                                     [r0, r0 * 0.95, r1 * 1.05, r1]), 12)
         paint(s, col, ao=0.0, fn=fn)
         c = tube("cf", [(sx * 0.342, 0.032, 0.69), (sx * 0.345, 0.035, 0.64)], r1 + 0.012, 12)
         paint(c, cuff_col, ao=0.0, noise_amt=0.15, nscale=25)
@@ -1081,6 +1079,7 @@ def wear_sweater():
         return 0.93 if int(co.z * 40) % 2 else None
     _piece(_torso(red, 0.03, fn, collar_col=shade(red, 0.9)), "Torso", (0, 0, 0.45))
     _sleeves(red, 0.13, 0.085, shade(red, 0.85), fn=lambda co, n: 0.93 if int(co.z * 40) % 2 else None)
+    rig.dress()
 
 
 def wear_jacket():
@@ -1100,6 +1099,7 @@ def wear_jacket():
         parts.append(pk)
     _piece(parts, "Torso", (0, 0, 0.45))
     _sleeves(blue, 0.15, 0.105, hexcol("f2e8d2"), fn=lambda co, n: shade(blue, 0.78) if (co.z * 10) % 1.0 < 0.12 else None)
+    rig.dress()
 
 
 def wear_boots():
@@ -1107,11 +1107,12 @@ def wear_boots():
     grey = hexcol("8a8f98")
     for sx, nm in ((-1, "BootL"), (1, "BootR")):
         hip = (sx * 0.12, 0, 0.45)
-        shin = tube("sh", [(sx * 0.12, 0.0, 0.3), (sx * 0.12, 0.0, 0.06)], [0.105, 0.095], 12)
+        shin = tube("sh", *rig.resample([(sx * 0.12, 0.0, 0.3), (sx * 0.12, 0.0, 0.06)], [0.105, 0.095]), 12)
         paint(shin, grey, ao=0.0, noise_amt=0.2, nscale=30, fn=lambda co, n: hexcol("c8403a") if 0.25 < co.z < 0.29 else None)
         foot = sphere("ft", (sx * 0.12, 0.06, 0.06), 0.1, (0.95, 1.6, 0.6))
         paint(foot, grey, ao=0.0, noise_amt=0.2, nscale=30)
         _piece([shin, foot], nm, hip)
+    rig.dress()
 
 
 def wear_mittens():
@@ -1126,6 +1127,7 @@ def wear_mittens():
         cf = tube("cf", [(sx * 0.342, 0.035, 0.67), (sx * 0.344, 0.038, 0.63)], 0.085, 12)
         paint(cf, hexcol("f2ead8"), ao=0.0, fn=lambda co, n: 0.88 if int(math.atan2(co.y, co.x) * 10) % 2 else None)
         _piece([m, th, cf], nm, sh)
+    rig.dress()
 
 
 # ================================================================== инструменты

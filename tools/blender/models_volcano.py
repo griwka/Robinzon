@@ -13,6 +13,7 @@ from mathutils import noise as _nz
 from kit import (box, cyl, displace, empty, from_bm, hexcol, ico, join, lathe, leaf, paint, remesh, rnd, set_origin,
                  set_parent, shade, sphere, subsurf, tube)
 from models_buildings import log, masonry, plank, stone
+import rig
 from models_ice import _block, _piece
 
 BASALT = hexcol("4a4648")
@@ -720,6 +721,7 @@ def wear_fire_gloves():
         cuff = tube("cf", [(sx * 0.342, 0.035, 0.66), (sx * 0.338, 0.03, 0.78)], [0.1, 0.11], 12)
         paint(cuff, shade(leather, 0.85), ao=0.0, fn=lambda co, n: hexcol("3a2a1a") if abs(co.z - 0.7) < 0.012 else None)
         _piece([m, th, cuff], nm, sh)
+    rig.dress()
 
 
 def tool_iron_pickaxe():

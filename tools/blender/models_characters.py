@@ -1,9 +1,11 @@
 """Персонажи и животные: герой, попугай Румба, курица, коза, краб.
-Подвижные части — отдельные объекты с точкой вращения в суставе (их анимирует игра)."""
+У героя — скелет (rig.py): сетки Body, Head, ArmL/R, LegL/R привязаны к костям весами.
+У животных подвижные части — отдельные объекты с точкой вращения в суставе (их анимирует игра)."""
 import math
 
 from mathutils import noise
 
+import rig
 from kit import (box, cyl, empty, hexcol, ico, join, lathe, leaf, mix, paint, set_origin, set_parent, shade,
                  sphere, subsurf, tube)
 
@@ -21,7 +23,7 @@ DARK = hexcol("22160e")
 # ------------------------------------------------------------------ герой
 def player():
     """Чиби-картограф: большая голова с растрёпанными рыжими волосами, рваная рубаха, шорты на верёвке."""
-    # туловище (от бёдер), точка вращения — бёдра (z = 0.45)
+    # туловище (от бёдер); гнётся в пояснице и груди — веса по высоте, rig.w_body
     torso = lathe("t", [(0.0, 0.42), (0.25, 0.44), (0.27, 0.55), (0.25, 0.75), (0.24, 0.9), (0.2, 1.0), (0.09, 1.05), (0.0, 1.06)], 20)
     subsurf(torso, 1)
     paint(torso, SHIRT, ao=0.0, noise_amt=0.05,
@@ -35,8 +37,7 @@ def player():
     # заплатка
     patch = box("p", (-0.12, 0.235, 0.78), (0.1, 0.02, 0.09), (0.2, 0, 0.15), 0.01)
     paint(patch, hexcol("c9a050"), ao=0.0)
-    body = join([torso, shorts, belt, knot, patch], "Body")
-    set_origin(body, (0, 0, 0.45))
+    join([torso, shorts, belt, knot, patch], "Body")
 
     # голова
     head_parts = []
@@ -92,14 +93,12 @@ def player():
     paint(hm, HAIR, ao=0.0, noise_amt=0.06, nscale=14,
           fn=lambda co, n: 0.82 if co.z < 1.45 else (1.1 if n.z > 0.6 else None), mat="hair")
     head_parts.append(hm)
-    head = join(head_parts, "Head")
-    set_origin(head, (0, 0, 1.12))
-    set_parent(head, body)
+    join(head_parts, "Head")
 
-    # руки (точка вращения — плечо)
+    # руки: плечо — локоть — запястье (кругов вдоль руки много, чтобы она гнулась в локте)
     for sx, nm in ((-1, "ArmL"), (1, "ArmR")):
         sh = (sx * 0.29, 0, 0.98)
-        arm = tube("a", [sh, (sx * 0.33, 0.01, 0.8), (sx * 0.34, 0.03, 0.62)], [0.08, 0.07, 0.065], 12)
+        arm = tube("a", *rig.resample([sh, (sx * 0.33, 0.01, 0.8), (sx * 0.34, 0.03, 0.62)], [0.08, 0.07, 0.065]), 12)
         paint(arm, SKIN, ao=0.0)
         sleeve = tube("sl", [(sx * 0.27, 0, 1.0), (sx * 0.31, 0.0, 0.88)], [0.11, 0.1], 12)
         paint(sleeve, SHIRT, ao=0.0, fn=lambda co, n: 0.85 if co.z < 0.9 else None)
@@ -114,16 +113,12 @@ def player():
             fg = tube("fg", [(fx, fy, 0.54), (fx * 1.005, fy + 0.012, 0.495), (fx, fy + 0.03, 0.47)], [0.019, 0.016, 0.013], 6)
             paint(fg, SKIN, ao=0.0, fn=lambda co, n: SKIN_D if co.z < 0.49 else None)
             fingers.append(fg)
-        a = join([arm, sleeve, hand, thumb] + fingers, nm)
-        set_origin(a, sh)
-        set_parent(a, body)
-        if nm == "ArmR":
-            empty("HandR", (sx * 0.345, 0.04, 0.56), a)
+        join([arm, sleeve, hand, thumb] + fingers, nm)
 
-    # ноги (точка вращения — бедро), босые ступни
+    # ноги: бедро — колено — щиколотка, босые ступни
     for sx, nm in ((-1, "LegL"), (1, "LegR")):
         hip = (sx * 0.12, 0, 0.45)
-        leg = tube("l", [hip, (sx * 0.12, 0.0, 0.25), (sx * 0.12, 0.0, 0.07)], [0.1, 0.085, 0.075], 12)
+        leg = tube("l", *rig.resample([hip, (sx * 0.12, 0.0, 0.25), (sx * 0.12, 0.0, 0.07)], [0.1, 0.085, 0.075]), 12)
         paint(leg, SKIN, ao=0.0)
         cuff = tube("cf", [(sx * 0.12, 0, 0.4), (sx * 0.12, 0, 0.28)], [0.115, 0.11], 12)
         paint(cuff, SHORTS, ao=0.0, fn=lambda co, n: 0.8 if co.z < 0.3 else None)
@@ -132,8 +127,8 @@ def player():
         toes = [sphere("to", (sx * 0.12 + k * 0.03 - 0.045, 0.17, 0.035), 0.022) for k in range(4)]
         for t in toes:
             paint(t, SKIN_D, ao=0.0)
-        lg = join([leg, cuff, foot] + toes, nm)
-        set_origin(lg, hip)
+        join([leg, cuff, foot] + toes, nm)
+    rig.dress()   # скелет и веса
 
 
 # ------------------------------------------------------------------ попугай Румба

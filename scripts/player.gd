@@ -9,7 +9,11 @@ const GRAVITY := 18.0
 const INTERACT_RANGE := 2.6
 const SWING_TIME := 0.38
 const STAMINA_MAX := 100.0
-const CLIMB_SPEED := 2.3
+## Скорость лазания, м/с. Руки и ноги перехватывают опору без скольжения, а они у героя короткие —
+## поэтому лезет он не быстрее, чем успевает перехватывать (раньше было 2.3 м/с при любой опоре).
+## Чтобы подъёмы не стали труднее, всё, что тратится на стене (силы, жар), идёт во столько же раз медленнее — climb_pace().
+const CLIMB_SPEED := {"rope": 1.15, "wall": 1.3, "ladder": 1.7}
+const CLIMB_SPEED_OLD := 2.3
 
 var camera_yaw := 0.0
 var camera_pitch := -0.62
@@ -25,6 +29,7 @@ var spring: SpringArm3D
 var camera: Camera3D
 
 var model: Node3D
+var rig: HeroRig          # скелет героя (кости, IK); null — у запасной модели из примитивов
 var body_pivot: Node3D
 var head: Node3D
 var arm_l: Node3D
@@ -105,17 +110,20 @@ func _ready() -> void:
 # ------------------------------------------------------------------ Модель
 func _build_model() -> void:
 	var g := Models.glb("player")
-	if g:
+	var r := HeroRig.new()
+	if g and r.setup(g):
+		rig = r
 		model = Node3D.new()
 		model.name = "Model"
 		add_child(model)
 		model.add_child(g)
-		body_pivot = g.get_node("Body")
-		head = body_pivot.get_node("Head")
-		arm_l = body_pivot.get_node("ArmL")
-		arm_r = body_pivot.get_node("ArmR")
-		leg_l = g.get_node("LegL")
-		leg_r = g.get_node("LegR")
+		# «суставы» прежних движений: обычные узлы на местах костей — кости идут за ними (HeroRig.follow)
+		body_pivot = rig.joint("BodyJoint", "Hips", g)
+		head = rig.joint("HeadJoint", "Skull", body_pivot, "Hips")
+		arm_l = rig.joint("ArmLJoint", "UpperArmL", body_pivot, "Hips")
+		arm_r = rig.joint("ArmRJoint", "UpperArmR", body_pivot, "Hips")
+		leg_l = rig.joint("LegLJoint", "ThighL", g)
+		leg_r = rig.joint("LegRJoint", "ThighR", g)
 		_body_y = body_pivot.position.y
 		hand_tool = Node3D.new()
 		hand_tool.rotation = Vector3(PI / 2, 0, 0)
@@ -196,9 +204,12 @@ var _clothes_key := ""
 
 ## Тёплую одежду видно на герое там, где холодно: свитер или куртка, валенки, рукавицы.
 ## Каждая вещь — модель из Blender с кусками Torso / SleeveL / SleeveR / BootL / BootR / MittenL / MittenR,
-## у каждого куска точка вращения — в суставе, так что он просто вешается на нужный сустав.
+## привязанными к такому же скелету, что у героя (tools/blender/rig.py): сетки пересаживаются на его скелет
+## и гнутся вместе с ним.
 func update_clothes() -> void:
 	var wear: Array[String] = []
+	# пока герой лезет по лиане или стене, на руках — перчатки лазальщика (по лестнице лезут без них)
+	var climb_gloves := climbing != null and not climbing.ladder and Game.has_tool("climbing_gloves")
 	if Game.cold_active():
 		if Game.has_tool("down_jacket"):
 			wear.append("wear_jacket")
@@ -206,9 +217,11 @@ func update_clothes() -> void:
 			wear.append("wear_sweater")
 		if Game.has_tool("felt_boots"):
 			wear.append("wear_boots")
-		if Game.has_tool("mittens"):
+		if Game.has_tool("mittens") and not climb_gloves:
 			wear.append("wear_mittens")
-	if Game.gloves_on() and not wear.has("wear_mittens"):
+	if climb_gloves:
+		wear.append("wear_climb_gloves")
+	elif Game.gloves_on() and not wear.has("wear_mittens"):
 		wear.append("wear_fire_gloves")   # огнеупорные рукавицы носят на любом острове (на морозе — тёплые)
 	var key := ",".join(wear)
 	if key == _clothes_key:
@@ -218,25 +231,19 @@ func update_clothes() -> void:
 		if is_instance_valid(c):
 			c.queue_free()
 	_clothes.clear()
-	if body_pivot == null:
-		return
-	var joints := {"Torso": body_pivot, "SleeveL": arm_l, "SleeveR": arm_r, "BootL": leg_l, "BootR": leg_r,
-		"MittenL": arm_l, "MittenR": arm_r}
+	if rig == null:
+		return   # запасная модель из примитивов — без одежды
 	for w in wear:
 		var g := Models.glb(w)
 		if g == null:
 			continue
-		for piece_name in joints:
-			var piece := g.get_node_or_null(piece_name) as Node3D
-			if piece == null:
-				continue
-			g.remove_child(piece)
-			piece.owner = null
-			piece.transform = Transform3D.IDENTITY
-			(joints[piece_name] as Node3D).add_child(piece)
-			_clothes.append(piece)
-			for mi in piece.find_children("*", "MeshInstance3D", true, false):
-				(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		for piece in g.find_children("*", "MeshInstance3D", true, false):
+			var mi := piece as MeshInstance3D
+			mi.get_parent().remove_child(mi)
+			mi.owner = null
+			rig.skel.add_child(mi)   # кости у вещи зовутся так же — сетка сама находит их в скелете героя
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			_clothes.append(mi)
 		g.queue_free()
 
 
@@ -547,6 +554,8 @@ func _animate(delta: float, speed: float) -> void:
 	if Game.cold_active() and Game.warmth < 25.0:
 		shiver = 0.012 if Game.warmth <= 0.0 else 0.005
 	model.position.x = sin(_walk_phase * 9.0 + Time.get_ticks_msec() * 0.06) * shiver
+	if rig:
+		rig.follow(body_pivot, head, arm_l, arm_r, leg_l, leg_r)   # кости идут за суставами
 
 
 ## Значение по ключевым кадрам [[t, v], ...] с мягкими переходами.
@@ -713,9 +722,21 @@ func _find_climb() -> void:
 			return
 
 
+## Во сколько раз медленнее прежнего лезет герой по такой опоре — во столько же раз медленнее на ней тратятся силы
+## и копится жар: подъём стоит столько же, сколько раньше.
+static func climb_pace(kind: String) -> float:
+	return float(CLIMB_SPEED[kind]) / CLIMB_SPEED_OLD
+
+
 func _start_climb(c: Climbable) -> void:
 	climbing = c
 	hand_tool.visible = false   # руки заняты
+	update_clothes()   # надеть перчатки лазальщика
+	if rig:
+		rig.climb_start()
+		model.scale = Vector3.ONE
+		model.position.x = 0.0
+		_squash = 1.0
 	var b := c.world_bottom()
 	var side := Vector3(global_position.x - b.x, 0, global_position.z - b.z)
 	_climb_side = side.normalized() if side.length() > 0.05 else -Basis(Vector3.UP, model.rotation.y).z * -1.0
@@ -744,6 +765,9 @@ func _stop_climb(push := Vector3.ZERO) -> void:
 	climbing = null
 	hand_tool.visible = true
 	velocity = push
+	update_clothes()   # снять перчатки лазальщика
+	if rig:
+		body_pivot.transform = Transform3D(Basis.IDENTITY, Vector3(0, _body_y, 0))   # сустав туловища — на место
 
 
 func _climb(delta: float) -> void:
@@ -753,32 +777,42 @@ func _climb(delta: float) -> void:
 	if controls_enabled:
 		up = Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
 	var cold_k := 1.3 if Game.cold_active() else 1.0
-	stamina -= (9.0 if abs(up) > 0.1 else 2.5) * delta * (0.35 if climbing.ladder else cold_k)
+	var kind := climbing.kind()
+	var pace := climb_pace(kind)   # лезем медленнее прежнего — и силы уходят во столько же раз медленнее
+	stamina -= (9.0 if abs(up) > 0.1 else 2.5) * delta * (0.35 if climbing.ladder else cold_k) * pace
 	# порыв ветра на открытой стене: лезть тяжело, лучше прижаться и переждать
 	var gusty: bool = climbing.wind and GreatLighthouse.gust > 0.5
 	if gusty and abs(up) > 0.1:
-		stamina -= 18.0 * delta
+		stamina -= 18.0 * delta * pace
 	# на зарубке или уступе можно повисеть — силы возвращаются
 	if climbing.rest_step > 0.0 and abs(up) < 0.1 and climbing.at_rest(global_position.y - b.y) and not gusty:
 		stamina = minf(STAMINA_MAX, stamina + (2.5 * delta * cold_k + 14.0 * delta) * maxf(0.5, Game.hunger_regen()))
-	var y := global_position.y + up * CLIMB_SPEED * delta
+	var y := global_position.y + up * float(CLIMB_SPEED[kind]) * delta
 	# по лиане — вплотную, обхватив её; по стене и лестнице — чуть дальше
-	var rope := not (climbing.ice or climbing.rock or climbing.ladder or climbing.holds != "")
-	global_position = Vector3(b.x, 0, b.z) + _climb_side * (0.3 if rope else 0.45) + Vector3(0, y, 0)
+	var rope := kind == "rope"
+	var dist := 0.3 if rope else 0.45
+	global_position = Vector3(b.x, 0, b.z) + _climb_side * dist + Vector3(0, y, 0)
 	model.rotation.y = lerp_angle(model.rotation.y, atan2(_climb_side.x, _climb_side.z), 10.0 * delta)
-	# поза лазания: руки над головой сходятся к лиане и перехватывают её по очереди,
-	# ноги согнуты и по очереди упираются; корпус ровный, чуть покачивается в такт
-	_climb_phase += delta * abs(up) * 7.0
-	var sw := sin(_climb_phase)
-	var inward := 0.26 if rope else 0.08
-	arm_l.rotation = Vector3(-2.75 - sw * 0.45, 0.0, inward)
-	arm_r.rotation = Vector3(-2.75 + sw * 0.45, 0.0, -inward)
-	leg_l.rotation.x = -0.6 + sw * 0.35
-	leg_r.rotation.x = -0.6 - sw * 0.35
-	body_pivot.rotation = Vector3(0.0, 0.0, sw * 0.05)
-	body_pivot.position.y = _body_y + absf(sw) * 0.03
-	if abs(up) > 0.1 and int(_climb_phase / PI) != int((_climb_phase - delta * 7.0) / PI):
-		Audio.play("rustle", -14.0, 0.2)
+	if rig:
+		# руки и ноги стоят на опоре (IK) и перехватывают её по очереди, тело идёт мимо них — HeroRig.climb
+		var beat := rig.beat
+		rig.climb(delta, y - b.y, up, kind, dist, climbing.seg_height(), gusty)
+		body_pivot.transform = rig.joint_xf("Chest", Vector3(0, _body_y, 0))   # инструмент за спиной — за грудью
+		if abs(up) > 0.1 and rig.beat != beat:
+			Audio.play("rustle", -14.0, 0.2)   # рука взялась за опору
+	else:
+		# запасная модель без скелета: руки над головой, ноги согнуты, всё качается в такт
+		_climb_phase += delta * abs(up) * 7.0
+		var sw := sin(_climb_phase)
+		var inward := 0.26 if rope else 0.08
+		arm_l.rotation = Vector3(-2.75 - sw * 0.45, 0.0, inward)
+		arm_r.rotation = Vector3(-2.75 + sw * 0.45, 0.0, -inward)
+		leg_l.rotation.x = -0.6 + sw * 0.35
+		leg_r.rotation.x = -0.6 - sw * 0.35
+		body_pivot.rotation = Vector3(0.0, 0.0, sw * 0.05)
+		body_pivot.position.y = _body_y + absf(sw) * 0.03
+		if abs(up) > 0.1 and int(_climb_phase / PI) != int((_climb_phase - delta * 7.0) / PI):
+			Audio.play("rustle", -14.0, 0.2)
 	_update_camera(delta)
 	if y >= t.y - 1.0:
 		global_position = climbing.world_exit()

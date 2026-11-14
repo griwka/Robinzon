@@ -51,6 +51,19 @@ func _ready() -> void:
 		add_child(m)
 
 
+## Вид опоры для позы лазания (HeroRig.CLIMB): лиана — обхватить, стена — выступы, лестница — стойки и ступеньки.
+func kind() -> String:
+	if ladder:
+		return "ladder"
+	return "wall" if ice or rock or holds != "" else "rope"
+
+
+## Высота одного куска модели опоры (модель в 1 м растянута на длину подъёма); у лестницы на куске три ступеньки.
+func seg_height() -> float:
+	var h := top.y - bottom.y
+	return h / maxf(1.0, ceil(h))
+
+
 ## Висит ли герой у зарубки (высота над низом y_rel): там силы не тратятся, а копятся.
 func at_rest(y_rel: float) -> bool:
 	if rest_step <= 0.0 or y_rel < rest_step * 0.5:

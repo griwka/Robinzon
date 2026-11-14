@@ -101,9 +101,20 @@
 - **Предупреждения GDScript считаются ошибками.** Если тип выводится как Variant, пиши тип явно:
   `var t: Vector3 = ...`, `var n: int = dict["x"]`.
 - **Узлы в моделях с особыми именами:**
-  - суставы персонажа: `Body`, `Head`, `ArmL`/`ArmR`, `LegL`/`LegR`, `HandR`;
+  - суставы персонажа (жители, животные): `Body`, `Head`, `ArmL`/`ArmR`, `LegL`/`LegR`, `HandR`;
   - листва: `Crown` и `*_leaf` (ветер и прозрачность у камеры);
   - остальное: `Fruit`, `Lid`, `DoorL`/`DoorR`, `Handle`, `FirePoint`, `Perch`, `Soil`.
+- **Скелет героя** — `tools/blender/rig.py` (кости `Hips`, `Spine`, `Chest`, `Neck`, `Skull`, `Shoulder*`, `UpperArm*`, `Forearm*`,
+  `Hand*`, `Thigh*`, `Shin*`, `Foot*`; веса по высоте вершины — `rig.PARTS`, привязка — `rig.dress()` в конце модели).
+  Сетки `Body`, `Head`, `ArmL/R`, `LegL/R` в `player.glb` привязаны к `Skeleton3D`. Одежда `wear_*` привязана к такому же
+  скелету и в игре пересаживается на скелет героя (`Player.update_clothes`). В игре — `scripts/hero_rig.gd` (`HeroRig`, `Player.rig`):
+  `follow()` — прежние движения (игра крутит узлы-суставы `Player.body_pivot`, `head`, `arm_l/r`, `leg_l/r`, кости идут за ними;
+  на суставах висят инструмент в руке и за спиной), `climb()` — лазание: руки и ноги ставятся на опору двухсуставным IK
+  (`ik()`, `aim()`, `turn()`), мерки по виду опоры — `HeroRig.CLIMB` (`Climbable.kind()`: `rope` / `wall` / `ladder`).
+  Опора под рукой не скользит, поэтому скорость лазания привязана к перехватам: `Player.CLIMB_SPEED`; силы и жар на стене
+  идут во столько же раз медленнее (`Player.climb_pace()`). Пока герой лезет по лиане или стене, на руках — перчатки
+  лазальщика (`wear_climb_gloves`). Раскадровка движения: `--shot=кадр.png --strip=8 --stripstep=6 --climb=N:h:up|down
+  --climbcam=75` (файлы `кадр_00.png…`).
 - **Действия у грядок и загонов** — круг действий: `wheel_request(player)` / `wheel_options()` у `GardenBed`, `AnimalPen`, `Animal`,
   сигнал `Game.wheel_requested`, рисует `HUD.show_wheel()`. `interact()` по-прежнему делает главное дело сразу (его зовут автотесты).
 - **Ячейки инструментов:** `Game.BAR_SIZE` (4), `Game.bar`, `hold_slots()`, `hold(id)` вытесняет давно не нужный инструмент.
@@ -238,7 +249,8 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 - `--quest=old_camp` — текущее задание по id; `--give=stone_axe,machete` — выдать предметы; `--hold=stone_axe` — инструмент в руке;
 - `--pose=stone_axe:0.32` — застывшая поза работы (фаза 0..1), `--face=0` — куда смотрит герой (с `--yaw=1.57` — вид сбоку);
 - `--fxtest` — все эффекты перед кадром;
-- `--climb=N:h` — герой на лиане N на высоте h (0..1); `--slots=load|new|save|pauseload` — список ячеек сохранения;
+- `--climb=N:h` — герой на лиане N на высоте h (0..1), `--climb=N:h:up|down` — лезет сам, `--climbcam=градусы` — камера (0 — со спины);
+  `--strip=N --stripstep=K` — раскадровка: N кадров через K; `--slots=load|new|save|pauseload` — список ячеек сохранения;
 - `--toolrow --nohud` — все инструменты в ряд; `--sat=35` — сытость; `--worn=machete:0.7` — износ инструмента;
 - `--demo --wheel=pen|bed|seeds` — круг действий; `--panel=build|craft|inv` — окно (всё открыто); `--farline=marta` — реплика издалека;
 - `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO;

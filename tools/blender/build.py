@@ -29,8 +29,8 @@ ANIMALS = ["parrot", "chicken", "goat", "sheep", "pig", "goose", "penguin", "wal
 SKIN_KIND = {"parrot": "feather", "chicken": "feather", "goose": "feather", "penguin": "feather",
              "pig": "hide", "walrus": "hide", "tortoise": "hide", "crab": "smooth"}
 
-# одежда героя: куски надеваются на суставы игрока (Player.update_clothes)
-WEAR = ["wear_sweater", "wear_jacket", "wear_boots", "wear_mittens", "wear_fire_gloves"]
+# одежда героя: сетки привязаны к такому же скелету, что у героя (rig.py), и пересаживаются на него (Player.update_clothes)
+WEAR = ["wear_sweater", "wear_jacket", "wear_boots", "wear_mittens", "wear_fire_gloves", "wear_climb_gloves"]
 
 # постройки из Data.BUILDINGS (v1.0.7): дерево, солома, камень, металл, верёвка, парусина, глина
 BUILDINGS = ["tent", "campfire", "torch", "workbench", "hut", "coop", "goat_pen", "fence", "flowerbed", "bench",

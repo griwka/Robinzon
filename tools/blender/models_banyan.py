@@ -179,8 +179,28 @@ def marta():
     set_parent(h, b)
 
 
+def wear_climb_gloves():
+    """Перчатки лазальщика на руках героя: сплетены из волокна и лианы — рыжеватые, с тёмным плетением на ладони
+    и зелёным жгутом лианы на запястье (как на иконке). Герой надевает их, когда лезет. Скелет — как у героя."""
+    import rig
+    tan = hexcol("b8834b")
+    for sx, nm in ((-1, "MittenL"), (1, "MittenR")):
+        m = sphere("mt", (sx * 0.345, 0.04, 0.575), 0.086, (0.93, 1.03, 1.16))
+        paint(m, tan, ao=0.0, noise_amt=0.1, nscale=30, mat="cloth",
+              fn=lambda co, n: shade(tan, 0.72) if (math.sin(co.z * 150) > 0.55 or math.sin(co.y * 150 + co.x * 60) > 0.8) else None)
+        th = sphere("th", (sx * 0.305, 0.105, 0.6), 0.038, (1.0, 1.35, 1.0))
+        paint(th, shade(tan, 0.9), ao=0.0, mat="cloth")
+        cf = tube("cf", [(sx * 0.342, 0.034, 0.675), (sx * 0.344, 0.037, 0.635)], 0.08, 12)
+        paint(cf, shade(tan, 0.85), ao=0.0, mat="cloth")
+        band = tube("bd", [(sx * 0.342 + math.cos(a) * 0.083, 0.035 + math.sin(a) * 0.083, 0.655)
+                           for a in [i * math.pi / 8 for i in range(17)]], 0.014, 6, caps=False)
+        paint(band, hexcol("6f7a35"), ao=0.0, mat="vine")
+        join([m, th, cf, band], nm)
+    rig.dress()
+
+
 BUILDERS = {"banyan_giant": banyan_giant, "deck": deck, "liana": liana, "liana_curtain": liana_curtain,
-            "fire_bowl": fire_bowl, "marta": marta}
+            "fire_bowl": fire_bowl, "marta": marta, "wear_climb_gloves": wear_climb_gloves}
 
 
 # ------------------------------------------------------------------ вторая половина главы 2

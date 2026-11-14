@@ -72,7 +72,7 @@ func tick(delta: float) -> void:
 	near_lava = heat_here(p)
 	var pl := player as Player
 	if pl and pl.climbing and pl.climbing.hot:
-		near_lava = maxf(near_lava, WALL_HEAT)
+		near_lava = maxf(near_lava, WALL_HEAT * Player.climb_pace(pl.climbing.kind()))   # лезут медленнее — и греет слабее: жар за подъём тот же
 	if near_lava > 0.0:
 		Game.heat = minf(100.0, Game.heat + RATE * near_lava * mult() * delta)
 	elif _cool_here(p):

@@ -244,15 +244,31 @@ func _process(_delta: float) -> void:
 		var lianas := get_tree().get_nodes_in_group("climb")
 		var ci := clampi(int(cp[0]), 0, lianas.size() - 1)
 		var cl: Climbable = lianas[ci]
-		if _frames == 3:
-			Game.inventory["climbing_gloves"] = 1
-			p.global_position = cl.world_bottom() + Vector3(0.6, 0.2, 0)
-			p._start_climb(cl)
 		var b := cl.world_bottom()
 		var tp := cl.world_top()
 		var hy := lerpf(b.y, tp.y - 1.2, float(cp[1]) if cp.size() > 1 else 0.5)
-		p.global_position.y = hy
-		p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+		# --climb=N:h:up|down — герой лезет сам (для раскадровки движения); --climbside=градусы — с какой стороны висит
+		var auto := cp.size() > 2
+		if _frames == 3:
+			Game.inventory["climbing_gloves"] = 1
+			Game.inventory["ice_pick"] = 1
+			var sa := deg_to_rad(float(args.get("climbside", "0")))
+			var side := Vector3(cos(sa), 0, sin(sa))
+			if (cl.ladder or cl.ice or cl.holds != "") and not args.has("climbside"):
+				side = Vector3(sin(cl.ladder_yaw), 0, cos(cl.ladder_yaw))
+			p.global_position = b + side * 0.6 + Vector3(0, 0.2, 0)
+			p._start_climb(cl)
+			p.global_position.y = hy
+			p.model.rotation.y = atan2(p._climb_side.x, p._climb_side.z)
+			if args.has("climbcam"):   # камера относительно героя: 0 — со спины, 90 — сбоку
+				p.camera_yaw = atan2(p._climb_side.x, p._climb_side.z) + deg_to_rad(float(args["climbcam"]))
+			p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
+		if auto:
+			p.stamina = Player.STAMINA_MAX
+			Input.action_press("move_forward" if cp[2] == "up" else "move_back")
+		else:
+			p.global_position.y = hy
+			p.cam_rig.global_position = p.global_position + Vector3(0, 1.4, 0)
 	if _frames == 2 and args.has("eyedeck"):
 		var gl := _tower()
 		if gl:
@@ -419,6 +435,16 @@ func _process(_delta: float) -> void:
 		FX.popup(w, p.global_position + Vector3(0, 1.85, 0), "wood", 3)
 		FX.popup(w, p.global_position + Vector3(0, 2.15, 0), "stone", 2)
 		FX.flash(p.model, 1.0, 0.6)
+	# раскадровка движения: --strip=N кадров через --stripstep=K (файлы <имя>_00.png, _01.png …), потом выход
+	if args.has("shot") and args.has("strip"):
+		var f0 := int(args.get("frames", "90"))
+		var st := maxi(1, int(args.get("stripstep", "6")))
+		var k := (_frames - f0) / st
+		if _frames >= f0 and (_frames - f0) % st == 0 and k < int(args["strip"]):
+			get_viewport().get_texture().get_image().save_png(str(args["shot"]).trim_suffix(".png") + "_%02d.png" % k)
+			if k == int(args["strip"]) - 1:
+				get_tree().quit()
+		return
 	if args.has("shot") and _frames == int(args.get("frames", "90")):
 		get_viewport().get_texture().get_image().save_png(args["shot"])
 		print("screenshot saved: ", args["shot"])
