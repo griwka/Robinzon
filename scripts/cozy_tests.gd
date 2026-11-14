@@ -172,3 +172,29 @@ static func _cooking(dev: Node) -> void:
 	_ok(dev, not loaded.is_empty() and Cooking.known("veg_stew") and Cooking.has_buff("regen") and Game.unlocked.has("cook_pot"),
 		"книга, польза и котелок сохраняются и загружаются")
 	pot.queue_free()
+
+
+# ------------------------------------------------------------------ Скриншоты
+## --open=cook — окно котелка (в сумке продукты, пара рецептов уже найдена); --open=cookbook — кулинарная книга.
+static func shot(dev: Node, what: String) -> void:
+	if not what in ["cook", "cookbook"]:
+		return
+	var main: Node = dev.get("main")
+	var hud: HUD = main.get("hud")
+	Game.flags["ending_open_sea"] = true
+	CozyLife.migrate()
+	var b := {}
+	for id in ["veg_stew", "tomato_omelette", "coconut_fish", "banana_pancakes", "pumpkin_soup", "lemonade", "cheese_salad", "corn_cakes",
+			"cloudberry_pie", "milk_coffee", "fish_pie"]:
+		b[id] = 1
+	Game.flags["cookbook"] = b
+	dev.call("_give", {"potato": 4, "carrot": 5, "tomato": 3, "corn": 6, "cabbage": 2, "pumpkin": 2, "egg": 4, "milk": 3, "honey": 2,
+		"fish": 5, "coconut": 3, "lemon": 2, "banana": 4, "mango": 2, "truffle": 1, "cheese": 1, "pepper": 2})
+	if what == "cookbook":
+		hud.open_collections()
+		return
+	var cl := dev.get_tree().get_first_node_in_group("cozy_life") as CozyLife
+	cl.open_cooking()
+	cl.cook_ui.put("fish")
+	cl.cook_ui.put("fish")
+	cl.cook_ui.put("coconut")

@@ -1449,6 +1449,7 @@ def main():
     import icons_fog as fog           # глава 7
     import icons_eye as eye           # глава 8
     import icons_core as core         # основные: фрукты, материалы, инструменты
+    import icons_decor as decor       # кулинария и уют: блюда из котелка, украшения лагеря
     os.makedirs(OUT, exist_ok=True)
     crops = {"carrot": i_carrot, "potato": i_potato, "corn": i_corn, "tomato": i_tomato,
              "cabbage": i_cabbage, "watermelon": i_watermelon}
@@ -1483,6 +1484,7 @@ def main():
     icons.update(fog.ICONS)
     icons.update(eye.ICONS)
     icons.update(core.ICONS)
+    icons.update(decor.ICONS)
     fruits.update({k: v for k, v in core.ICONS.items() if k in fruits})
     crops.update({k: v for k, v in core.ICONS.items() if k in crops})
     icons.update(crops)

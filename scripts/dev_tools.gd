@@ -404,6 +404,7 @@ func _process(_delta: float) -> void:
 		if args.has("building"):   # для скриншотов: режим строительства (--building=campfire)
 			Game.unlocked[str(args["building"])] = true
 			main.build.start(str(args["building"]))
+		CozyTests.shot(self, str(args.get("open", "")))   # --open=cook|cookbook|cozy: окна кулинарии и уюта
 		match args.get("open", ""):
 			"inventory":
 				if args.has("gear"):
