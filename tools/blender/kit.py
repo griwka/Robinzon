@@ -183,13 +183,21 @@ def leaf(name, base, direction, length, width, droop=0.35, segs=8, fold=0.25, up
     side.normalize()
     upv = side.cross(d).normalized()
     bm = bmesh.new()
+    # координаты листа для запекания в текстуру (texbake.detail_plant): lf0 = (поперёк от жилки в метрах, 0..1 от
+    # основания к кончику, длина листа), lf1 = (полуширина в этом ряду, ширина листа) — по ним идут жилки и край
+    lf0 = bm.verts.layers.float_vector.new("lf0")
+    lf1 = bm.verts.layers.float_vector.new("lf1")
     rows = []
     for i in range(segs + 1):
         t = i / segs
         w = width * (shape(t) if shape else math.sin(math.pi * min(1.0, t * 0.92 + 0.08)))
         c = base + d * (t * length) - upv * (t * t * length * droop)
         mid = c + upv * (w * fold)
-        rows.append((bm.verts.new(c - side * w), bm.verts.new(mid), bm.verts.new(c + side * w)))
+        row = (bm.verts.new(c - side * w), bm.verts.new(mid), bm.verts.new(c + side * w))
+        for v, s in zip(row, (-w, 0.0, w)):
+            v[lf0] = (s, t, length)
+            v[lf1] = (max(w, 1e-4), width, 0.0)
+        rows.append(row)
     for i in range(segs):
         a, b = rows[i], rows[i + 1]
         bm.faces.new((a[0], b[0], b[1], a[1]))
@@ -272,7 +280,10 @@ def paint(ob, color, ao=0.35, ao_h=0.35, noise_amt=0.06, nscale=3.0, top=0.08, g
     mat — вид поверхности для мелкой детали при запекании: "skin", "cloth", "hair", "fur", "wool",
     "feather", "smooth" (рог, клюв, копыто), "clean" (глаза, блики — без детали); у построек и лодок —
     "wood", "painted", "planked", "bark", "endgrain", "bamboo", "straw", "hay", "stone", "brick", "clay",
-    "metal", "iron", "rust", "plate", "rope", "canvas", "soil", "leaf", "plain" (texbake.detail_build). None — угадать."""
+    "metal", "iron", "rust", "plate", "rope", "canvas", "soil", "leaf", "plain" (texbake.detail_build); у растений —
+    "leaf" (глянцевый лист), "leaf_matte", "banana", "aloe", "grass", "petal", "foliage" (крона-«шар» из листочков),
+    "stem", "sheath", "vine", "palm", "birch", "pinebark", "needle", "charred", "moss", "bloom", "fruit", "husk", "root",
+    "velvet", "cabbage" и виды построек "bark", "wood", "soil"… (texbake.detail_plant). None — угадать."""
     bake(ob)
     me = ob.data
     if "Col" not in me.color_attributes:

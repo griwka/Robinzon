@@ -55,10 +55,8 @@ def palm(seed=1):
     trunk = tube("trunk", pts, radii, 14)
     subsurf(trunk, 1)
 
-    def rings(co, n):
-        k = (co.z * 3.2) % 1.0
-        return 0.78 if k < 0.18 else (1.08 if k > 0.75 else None)
-    paint(trunk, BARK, ao=0.25, ao_h=0.6, noise_amt=0.1, nscale=6, fn=rings)
+    # кольца-рубцы от старых листьев рисует texbake (mat="palm") — неровные, без полос «через одну»
+    paint(trunk, BARK, ao=0.25, ao_h=0.6, noise_amt=0.1, nscale=6, mat="palm")
     trunk.name = "Trunk"
     top = pts[-1]
     crown = empty("Crown", tuple(top))
@@ -74,7 +72,7 @@ def palm(seed=1):
     for i in range(rr.randint(3, 5)):
         a = 2 * math.pi * i / 4 + rr.random()
         c = sphere("co", tuple(top + Vector((math.cos(a) * 0.22, math.sin(a) * 0.22, -0.25 - rr.random() * 0.08))), 0.16, (1, 1, 1.1), segs=14, rings=10)
-        paint(c, hexcol("6b4423"), ao=0.0, noise_amt=0.12, nscale=12)
+        paint(c, hexcol("6b4423"), ao=0.0, noise_amt=0.12, nscale=12, mat="husk")
         cocos.append(c)
     co = join(cocos, "Coconuts")
     set_origin(co, tuple(top))
@@ -99,8 +97,7 @@ def banana_tree():
     h = 2.6
     stem = tube("st", [(0, 0, 0), (0.03, 0, h * 0.5), (0.05, 0.02, h)], [0.24, 0.19, 0.15], 14)
     subsurf(stem, 1)
-    paint(stem, hexcol("8f9a4a"), ao=0.3, ao_h=0.5, noise_amt=0.12, nscale=5,
-          fn=lambda co, n: 0.8 if (math.atan2(co.y, co.x) * 3 + co.z * 2) % 1.0 < 0.15 else None)
+    paint(stem, hexcol("8f9a4a"), ao=0.3, ao_h=0.5, noise_amt=0.12, nscale=5, mat="sheath")
     stem.name = "Trunk"
     crown = empty("Crown", (0.05, 0.02, h))
     leaves = []
@@ -111,8 +108,8 @@ def banana_tree():
                   shape=lambda t: math.sin(math.pi * min(1.0, t * 0.85 + 0.15)) ** 0.6)
         subsurf(lf, 1)
         c = LEAF2 if i % 2 else hexcol("49b844")
-        # надрывы по краю листа
-        paint(lf, c, ao=0.0, noise_amt=0.08, fn=lambda co, n, c=c: shade(c, 0.85) if math.sin(co.x * 40 + co.y * 40) > 0.85 else (1.12 if n.z > 0.4 else None))
+        # надрывы по краю листа вдоль боковых жилок и подсохший край — texbake (mat="banana")
+        paint(lf, c, ao=0.0, noise_amt=0.08, fn=lambda co, n: 1.12 if n.z > 0.4 else None, mat="banana")
         leaves.append(lf)
     lv = join(leaves, "Crown_leaf")
     set_origin(lv, (0.05, 0.02, h))
@@ -147,8 +144,7 @@ def round_tree(seed, leaf_col, fruit_col, fruit_r, fruit_shape=(1, 1, 1.1)):
              for a in (0.3, 2.4, 4.3)]
     for o in [trunk, br1, br2] + roots:
         subsurf(o, 1)
-        paint(o, hexcol("8a5a32"), ao=0.25, ao_h=0.4, noise_amt=0.12, nscale=8,
-              fn=lambda co, n: 0.85 if math.sin(co.z * 30 + math.atan2(co.y, co.x) * 2) > 0.7 else None)
+        paint(o, hexcol("8a5a32"), ao=0.25, ao_h=0.4, noise_amt=0.12, nscale=8, mat="bark")
     t = join([trunk, br1, br2] + roots, "Trunk")
     cz = h + 0.75
     crown = empty("Crown", (0, 0, cz))
@@ -196,7 +192,7 @@ def sapling():
     pot = lathe("pt", [(0.0, 0.0), (0.2, 0.0), (0.26, 0.25), (0.29, 0.27), (0.29, 0.31), (0.0, 0.31)], 22)
     paint(pot, hexcol("d9774a"), ao=0.0, fn=lambda co, n: 1.1 if co.z > 0.26 else None)
     soil = cyl("so", (0, 0, 0.27), 0.25, 0.25, 0.05, segs=22)
-    paint(soil, hexcol("5a3a22"), ao=0.0)
+    paint(soil, hexcol("5a3a22"), ao=0.0, mat="soil")
     stem = tube("ss", [(0, 0, 0.3), (0.02, 0, 0.55), (-0.01, 0.01, 0.8)], [0.025, 0.02, 0.012], 6)
     paint(stem, hexcol("6fbf4a"), ao=0.0)
     parts = [pot, soil, stem]

@@ -71,7 +71,7 @@ func _build_crop() -> void:
 	if crop_node == null:
 		crop_node = Models.crop(crop, 3)
 	visual.add_child(crop_node)
-	_fruit_mat = (Models.model_mat(false).duplicate() as ShaderMaterial)
+	_fruit_mat = null
 	var i := 0
 	for c in crop_node.find_children("P*", "Node3D", false, false):
 		var nm := String(c.name)
@@ -79,10 +79,14 @@ func _build_crop() -> void:
 			continue
 		var fruits: Array = []
 		for mi in (c as Node3D).find_children("*_fruit*", "MeshInstance3D", true, false):
+			if _fruit_mat == null:   # плоды культуры — в одном атласе: один материал на всю грядку
+				_fruit_mat = Models.tint_mat(mi as MeshInstance3D)
 			(mi as MeshInstance3D).material_override = _fruit_mat
 			fruits.append(mi)
 		_plants.append([c, fposmod(i * 0.37, 1.0) * 0.12, fruits])
 		i += 1
+	if _fruit_mat == null:
+		_fruit_mat = (Models.model_mat(false).duplicate() as ShaderMaterial)
 	_shown = -1.0
 	_grow_visual()
 

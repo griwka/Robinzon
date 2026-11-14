@@ -41,8 +41,47 @@ func _ready() -> void:
 		_colcheck.call_deferred()
 
 
+## --bench=N: замер скорости кадра — после прогрева (--benchfrom=, по умолчанию 120 кадров) N кадров без вертикальной
+## синхронизации; печатает среднее и 95-й процентиль времени кадра, FPS и время кадра на видеокарте, потом выход.
+var _bench: Array[float] = []
+var _bench_gpu: Array[float] = []
+
+
+func _bench_step(delta: float) -> void:
+	var from := int(args.get("benchfrom", "120"))
+	var vp := get_viewport().get_viewport_rid()
+	if _frames == 2:
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		Engine.max_fps = 0
+		RenderingServer.viewport_set_measure_render_time(vp, true)
+	if _frames <= from:
+		return
+	_bench.append(delta * 1000.0)
+	_bench_gpu.append(RenderingServer.viewport_get_measured_render_time_gpu(vp))
+	if _bench.size() >= int(args["bench"]):
+		var s := _bench.duplicate()
+		s.sort()
+		var g := _bench_gpu.duplicate()
+		g.sort()
+		var avg := 0.0
+		for v in s:
+			avg += v
+		avg /= s.size()
+		var gavg := 0.0
+		for v in g:
+			gavg += v
+		gavg /= g.size()
+		print("BENCH кадр %.2f мс (95%%: %.2f), %.0f FPS; видеокарта %.2f мс (95%%: %.2f); объектов в кадре %d, вызовов отрисовки %d" % [
+			avg, s[int(s.size() * 0.95)], 1000.0 / avg, gavg, g[int(g.size() * 0.95)],
+			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
+			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)])
+		get_tree().quit()
+
+
 func _process(_delta: float) -> void:
 	_frames += 1
+	if args.has("bench"):
+		_bench_step(_delta)
 	var p: Player = main.player
 	if _frames == 1 and args.get("thaw", "") == "1":
 		Game.flags["ice_thawed"] = true

@@ -268,7 +268,7 @@ def aloe_plant():
         tilt = 0.5 + (k % 3) * 0.15
         lf = leaf("leaf", (0, 0, 0.05), (math.cos(a) * tilt, math.sin(a) * tilt, 1.0), r.uniform(0.45, 0.6), 0.09,
                   droop=0.15, fold=0.6, shape=lambda t: 1.0 - t * 0.9)
-        paint(lf, hexcol("6fbf7a"), ao=0.0, fn=lambda co, n: hexcol("e8f2e0") if math.sin(co.x * 60) * math.sin(co.y * 60) > 0.7 else None)
+        paint(lf, hexcol("6fbf7a"), ao=0.0, mat="aloe")   # белые крапинки и зубчики по краю — texbake
         leaves.append(lf)
     pot = sphere("bs", (0, 0, 0.0), 0.18, (1.0, 1.0, 0.4))
     paint(pot, hexcol("5a4a3a"), ao=0.0)
@@ -330,19 +330,18 @@ def _charred(seed):
     r = rnd(seed)
     pts = [(0, 0, -0.1), (0.05, 0.02, 1.2), (0.15 * r.uniform(-1, 1), 0.1, 2.4), (0.2, 0.1 * r.uniform(-1, 1), 3.4)]
     trunk = tube("tr", pts, [0.28, 0.22, 0.15, 0.06], 10)
-    paint(trunk, hexcol("2e2a28"), ao=0.0, noise_amt=0.2, nscale=8,
-          fn=lambda co, n: (hexcol("ff7a2a") if math.sin(co.z * 13 + math.atan2(co.y, co.x) * 4) > 0.97 else
-                            (hexcol("4a4442") if math.sin(co.z * 30) > 0.6 else None)))
+    # трещины сеткой, зола и тлеющие угольки в глубине трещин — texbake (mat="charred")
+    paint(trunk, hexcol("2e2a28"), ao=0.0, noise_amt=0.2, nscale=8, mat="charred")
     parts = [trunk]
     for k in range(4):
         z = r.uniform(1.2, 3.0)
         a = r.uniform(0, 2 * math.pi)
         br = tube("br", [(0.05, 0.02, z), (math.cos(a) * 0.7, math.sin(a) * 0.7, z + 0.5)], [0.07, 0.02], 6)
-        paint(br, hexcol("2e2a28"), ao=0.0)
+        paint(br, hexcol("2e2a28"), ao=0.0, mat="charred")
         parts.append(br)
     for k in range(3):
         root = tube("rt", [(0, 0, 0.1), (math.cos(k * 2.1) * 0.55, math.sin(k * 2.1) * 0.55, -0.05)], [0.12, 0.04], 6)
-        paint(root, hexcol("2e2a28"), ao=0.0)
+        paint(root, hexcol("2e2a28"), ao=0.0, mat="charred")
         parts.append(root)
     join(parts, "Trunk")
 

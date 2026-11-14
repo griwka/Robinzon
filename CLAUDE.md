@@ -123,6 +123,13 @@
   Направление волокон — атрибут `u0` от `kit.tube`/`lathe`/`cyl`, у ящиков — оси формы. Размер атласа — по площади (512/1024),
   свой — `TEX_SIZE`. Узоры для текстур пишите без полос «через одну» и `sin`-полос пятнами (станут «зеброй»): обшивка — `boards()`,
   кладка — `masonry()` (`models_buildings.py`), пятна (ржавчина, мох) — по шуму `mathutils.noise`.
+- **Текстуры растений и деревьев** (v1.0.8, список `PLANTS` в `build.py`, семейство `"plant"`): деталь — `texbake.detail_plant`
+  (виды построек вроде `bark`, `wood`, `soil` рисует `detail_build`). Виды `paint(..., mat="leaf"|"leaf_matte"|"banana"|"aloe"|"grass"|
+  "petal"|"foliage"|"stem"|"sheath"|"vine"|"palm"|"birch"|"pinebark"|"needle"|"charred"|"moss"|"bloom"|"fruit"|"husk"|"root"|"velvet"|
+  "cabbage")`; без `mat=` — по цвету и форме (`guess_plant`: лист `kit.leaf` → `leaf`/`grass`, трубка → `stem`/`bark`, «шар» →
+  `foliage`/`fruit`). `kit.leaf` пишет координаты листа (атрибуты `lf0`/`lf1`) — по ним жилки, край и блик. Кроны — «чешуйками»
+  (`texbake._scales`, ячейки Вороного `worley`). Клевер (`clover_tuft`, MultiMesh травы) — на цвете вершин. Плоды на грядках
+  и деревьях подкрашивает копия их же материала — `Models.tint_mat(mi)` (не `model_mat`: у запечённых нет цвета вершин).
 - **Живость моделей:** складки ткани, пряди, шерсть у запечённых моделей рисует `texbake.detail` (по пикселям). Прежние
   `kit.liven` / `kit.liven_fur` (то же по вершинам) остались в `kit.py` для моделей на цвете вершин, `build.py` их больше не зовёт.
   Общие помощники дерева: `kit.bark_trunk`, `wood_cap` (торец с кольцами), `splinters`, `bark_fn`, `smooth_path`; `log()`/`plank()`
@@ -201,7 +208,9 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a -s "-screen 0 
 - `--demo --wheel=pen|bed|seeds` — круг действий; `--panel=build|craft|inv` — окно (всё открыто); `--farline=marta` — реплика издалека;
 - `--dbgdraw=1|2|5|12` — без света / только свет / нормали / SSAO;
 - `--gallery=a,b --gpitch=0.3 --dist= --camy=` — модели в ряд своей камерой; `--growrow=tomato,corn` — грядки и деревья на разных стадиях;
-  `--mow=5` — расчистить траву вокруг героя.
+  `--mow=5` — расчистить траву вокруг героя;
+- `--bench=600` — замер скорости: после прогрева (`--benchfrom=120`) 600 кадров без вертикальной синхронизации, печать `BENCH …`
+  (время кадра, 95-й процентиль, FPS, время на видеокарте, вызовы отрисовки) и выход.
 
 Пересборка ассетов (Python 3.13 с `pip install bpy numpy scipy pillow`, для музыки и фона — ffmpeg в PATH;
 `python tools/gen_audio.py thunder0 radio` — только указанные эффекты, без ffmpeg). Иконки главы 4 — в `tools/icons_storm.py`, главы 5 — в `tools/icons_ice.py`, главы 6 — в `tools/icons_volcano.py`, главы 7 — в `tools/icons_fog.py`, главы 8 — в `tools/icons_eye.py`.

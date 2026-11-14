@@ -8,7 +8,7 @@
 import math
 
 import bmesh
-from mathutils import Vector
+from mathutils import Vector, noise
 
 from kit import (box, cyl, displace, empty, from_bm, hexcol, ico, join, lathe, leaf, mix, paint, remesh, rnd,
                  set_origin, set_parent, shade, sphere, subsurf, tube)
@@ -740,9 +740,9 @@ def _moss(seed):
     m = join(bumps, "Moss")
     remesh(m, 0.05, 2)
     displace(m, 0.03, 0.06)
+    # кочечки, рыжие пятна и звёздочки лишайника — texbake (mat="moss"), а не сеткой по sin
     paint(m, hexcol("9aa860"), ao=0.3, ao_h=0.2, noise_amt=0.3, nscale=14,
-          fn=lambda co, n: (hexcol("eef0e2") if math.sin(co.x * 31) * math.sin(co.y * 27) > 0.82 else
-                            (hexcol("b89a58") if n.z < 0.3 else (hexcol("b8c070") if n.z > 0.85 else None))))
+          fn=lambda co, n: hexcol("b89a58") if n.z < 0.3 else (hexcol("b8c070") if n.z > 0.85 else None), mat="moss")
     parts = [m]
     for k in range(6):   # стебельки с красными шапочками лишайника
         a = r.uniform(0, 2 * math.pi)
@@ -788,7 +788,7 @@ def _pine(seed, h):
     """Северная сосна-ёлочка: прямой ствол и ярусы хвои; сверху на каждом ярусе — снег."""
     r = rnd(seed)
     trunk = tube("tr", [(0, 0, -0.1), (0, 0, h * 0.85)], [0.17, 0.06], 10)
-    paint(trunk, BARK, ao=0.2, noise_amt=0.15, nscale=8, fn=lambda co, n: 0.8 if math.sin(co.z * 25) > 0.6 else None)
+    paint(trunk, BARK, ao=0.2, noise_amt=0.15, nscale=8, mat="pinebark")
     tiers = []
     n = 5
     for k in range(n):
@@ -799,9 +799,10 @@ def _pine(seed, h):
         displace(t, 0.14, 0.3)
         tiers.append(t)
     crown = join(tiers, "crown_leaf")
+    # снег сверху ярусов — неровными шапками по шуму (не полосами); хвою рисует texbake (mat="needle")
     paint(crown, PINE, ao=0.0, noise_amt=0.15, nscale=5,
-          fn=lambda co, n: (SNOW if (n.z > 0.45 and math.sin(co.x * 6 + co.y * 5) > -0.6) else
-                            (shade(PINE, 0.8) if n.z < -0.2 else None)))
+          fn=lambda co, n: (SNOW if (n.z > 0.45 and noise.noise(co * 1.7 + Vector((3.1, 1.7, 0.4))) + 0.35 * noise.noise(co * 5.0) > -0.42) else
+                            (shade(PINE, 0.8) if n.z < -0.2 else None)), mat="needle")
     t = join([trunk], "Trunk")
     set_parent(crown, t)
 

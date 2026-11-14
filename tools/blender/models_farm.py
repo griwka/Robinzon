@@ -155,7 +155,8 @@ def crop_carrot():
             a = 2 * math.pi * k / 7 + rr.uniform(-0.2, 0.2)
             leaves += _frond("cf_leaf", (x, y, z + 0.04), a, rr.uniform(0.26, 0.36), GREEN if k % 2 else hexcol("6cbc48"), rr, 4, 1.6)
         root = lathe("cr", [(0.0, -0.1), (0.028, -0.07), (0.05, -0.02), (0.058, 0.02), (0.05, 0.045), (0.0, 0.05)], 14, loc=(x, y, z))
-        paint(root, hexcol("f58a1f"), ao=0.0, noise_amt=0.05, fn=lambda co, n: shade(hexcol("f58a1f"), 0.82) if int(co.z * 140) % 3 == 0 else (hexcol("8fb83f") if co.z > z + 0.04 else None))
+        # неровные колечки-бороздки рисует texbake (mat="root"), сверху — зелёная «шейка»
+        paint(root, hexcol("f58a1f"), ao=0.0, noise_amt=0.05, fn=lambda co, n, z=z: hexcol("8fb83f") if co.z > z + 0.04 else None, mat="root")
         _plant(i, (x, y, z), leaves, [], [(root, (x, y, z))])
 
 
@@ -196,6 +197,25 @@ def crop_potato():
         _plant(i, (x, y, z), leaves, stems, fruits)
 
 
+def _kernels(c):
+    """Зёрна початка: ряды кругленьких зёрен со сдвигом через ряд, тёмные щели между ними и светлая макушка
+    у каждого зерна (раньше — клетка «через одну», на текстуре стала бы шахматной доской)."""
+    base = hexcol("ffd23f")
+
+    def f(co, n):
+        a = math.atan2(co.y - c.y, co.x - c.x)
+        u = a * 12 / (2 * math.pi)
+        row = (co.z - c.z) / 0.012 + 0.5 * (math.floor(u) % 2)
+        fx, fy = u - math.floor(u) - 0.5, row - math.floor(row) - 0.5
+        d = fx * fx + fy * fy
+        if d > 0.19:
+            return shade(base, 0.72)
+        if fy > 0.08 and fx < 0.05:
+            return shade(base, 1.12)
+        return None
+    return f
+
+
 def noise_spot(co):
     from mathutils import noise
     return noise.noise(co)
@@ -225,7 +245,7 @@ def crop_corn():
             cz = z + h * (0.5 + q * 0.08)
             c = Vector((x + math.cos(a) * 0.06, y + math.sin(a) * 0.06, cz))
             cob = sphere("cb", tuple(c + Vector((0, 0, 0.06))), 0.042, (1, 1, 2.7), (0.25 * math.sin(a), -0.25 * math.cos(a), 0), segs=14, rings=10)
-            paint(cob, hexcol("ffd23f"), ao=0.0, fn=lambda co, n: shade(hexcol("ffd23f"), 0.8) if (int(co.z * 90) + int(math.atan2(co.y, co.x) * 7)) % 2 else None)
+            paint(cob, hexcol("ffd23f"), ao=0.0, fn=_kernels(c + Vector((0, 0, 0.06))), mat="fruit")
             husk = []
             for hk in range(3):
                 ha = a + (hk - 1) * 1.6
@@ -243,7 +263,7 @@ def crop_tomato():
     for i, (x, y, z) in enumerate([SPOTS[j] for j in (1, 3, 4, 5, 7)]):
         stems, leaves, fruits = [], [], []
         stake = cyl("sk", (x + 0.07, y + 0.04, z - 0.05), 0.012, 0.01, 0.95, segs=6)
-        paint(stake, hexcol("a87a4a"), ao=0.0, fn=lambda co, n: 0.85 if int(co.z * 30) % 4 == 0 else None)
+        paint(stake, hexcol("a87a4a"), ao=0.0, mat="wood")
         stems.append(stake)
         st = tube("ts", [(x, y, z), (x + 0.02, y, z + 0.35), (x + 0.05, y + 0.02, z + 0.7), (x + 0.06, y + 0.03, z + 0.82)], [0.016, 0.013, 0.01, 0.006], 6)
         paint(st, hexcol("5f9a3a"), ao=0.0)
@@ -280,12 +300,11 @@ def crop_cabbage():
             col = shade(hexcol("8cc26a"), 0.9 + 0.12 * rr.random())
             lf = leaf("cb_leaf", (x, y, z + 0.03), (math.cos(a), math.sin(a), 0.55 if k % 2 else 0.35), rr.uniform(0.22, 0.28), 0.13,
                       droop=0.35, segs=7, fold=0.35, shape=_round)
-            paint(lf, col, ao=0.0, noise_amt=0.06,
-                  fn=lambda co, n, a=a: shade(hexcol("8cc26a"), 1.28) if abs(math.sin(math.atan2(co.y - y, co.x - x) - a) * math.hypot(co.x - x, co.y - y)) < 0.008 else None)
+            paint(lf, col, ao=0.0, noise_amt=0.06)   # светлая жилка — texbake по координатам листа
             leaves.append(lf)
         c = (x, y, z + 0.13)
         head = [sphere("ch", c, 0.135, (1, 1, 0.92), segs=18, rings=12)]
-        paint(head[0], hexcol("cdeaa0"), ao=0.0, fn=lambda co, n: shade(hexcol("cdeaa0"), 0.86) if math.sin(math.atan2(co.y - y, co.x - x) * 4 + co.z * 18) > 0.8 else None)
+        paint(head[0], hexcol("cdeaa0"), ao=0.0, mat="cabbage")   # жилки от кочерыжки — texbake
         for k in range(5):   # листья, обнимающие кочан
             a = 2 * math.pi * k / 5 + 0.3
             lf = leaf("wr", (x + math.cos(a) * 0.08, y + math.sin(a) * 0.08, z + 0.02), (math.cos(a) * 0.35, math.sin(a) * 0.35, 1), 0.2, 0.1,
@@ -330,8 +349,10 @@ def crop_watermelon():
         c = Vector((x, y + (0.12 if i == 0 else -0.12), z + 0.16))
         rot = 0.3 if i == 0 else -0.4
         m = sphere("wm", tuple(c), 0.24, (1.3, 0.95, 0.72), (0, 0, rot), segs=22, rings=14)
+        # полосы арбуза — с рваным краем (мелкий шум), чтобы на текстуре не вышли ровной «зеброй»
         paint(m, hexcol("2f8f3a"), ao=0.0, fn=lambda co, n, c=c, rot=rot: hexcol("8fd46a") if math.sin(
-            math.atan2(co.z - c.z, (co.x - c.x) * math.sin(rot) - (co.y - c.y) * math.cos(rot)) * 8 + noise_spot(co * 9) * 1.2) > 0.45 else None)
+            math.atan2(co.z - c.z, (co.x - c.x) * math.sin(rot) - (co.y - c.y) * math.cos(rot)) * 8 + noise_spot(co * 9) * 1.2
+            + noise_spot(co * 60) * 0.35) > 0.45 else None, mat="fruit")
         stem = tube("ws", [tuple(c + Vector((math.cos(rot) * 0.3, math.sin(rot) * 0.3, 0.02))), tuple(c + Vector((math.cos(rot) * 0.36, math.sin(rot) * 0.36, 0.06)))], [0.012, 0.006], 5)
         paint(stem, hexcol("6a8a3a"), ao=0.0)
         _plant(i, (x, y, z), leaves, stems, [([m, stem], tuple(c))])

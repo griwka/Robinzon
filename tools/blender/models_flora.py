@@ -99,8 +99,7 @@ def _taro(seed):
         lf = leaf("tr_leaf", tuple(top - Vector((math.cos(a), math.sin(a), 0)) * 0.08), (math.cos(a), math.sin(a), -0.35), rr.uniform(0.42, 0.55), 0.22,
                   droop=0.45, segs=8, fold=0.3, shape=_shape_heart)
         c = shade(hexcol("4a9a4a"), 0.92 + 0.12 * rr.random())
-        paint(lf, c, ao=0.0, noise_amt=0.05, nscale=10,
-              fn=lambda co, n, a=a, top=top: shade(c, 1.3) if abs((co - top).dot(Vector((-math.sin(a), math.cos(a), 0)))) < 0.012 else None)
+        paint(lf, c, ao=0.0, noise_amt=0.05, nscale=10)   # жилки и блик — texbake по координатам листа
         parts.append(lf)
     join(parts, "Taro_leaf")
 
@@ -202,7 +201,7 @@ def _tree_fern(seed):
     displace(tr, 0.025, 0.06)
     # ствол в «рубцах» от старых листьев: тёмные пятна-ромбы, у земли — мох
     paint(tr, hexcol("6a5040"), ao=0.3, ao_h=0.6, noise_amt=0.14, nscale=8,
-          fn=lambda co, n: MOSS if co.z < 0.35 and noise.noise(co * 6) > -0.1 else (shade(hexcol("6a5040"), 0.7) if math.sin(co.z * 22 + math.atan2(co.y, co.x) * 3) > 0.6 else None))
+          fn=lambda co, n: MOSS if co.z < 0.35 and noise.noise(co * 6) > -0.1 else None, mat="palm")
     trunk = [tr]
     top = Vector(pts[-1])
     fronds = []
@@ -305,7 +304,7 @@ def dwarf_birch():
         pts = [(0, 0, 0), (math.cos(a) * ln * 0.3, math.sin(a) * ln * 0.3, ln * 0.35), (math.cos(a) * ln * 0.7, math.sin(a) * ln * 0.7, ln * 0.55),
                (math.cos(a + 0.3) * ln, math.sin(a + 0.3) * ln, ln * 0.62)]
         st = _stem("db", pts, [0.032, 0.024, 0.015, 0.007], hexcol("7a4a3a"))
-        paint(st, hexcol("7a4a3a"), ao=0.0, fn=lambda co, n: hexcol("a8786a") if math.sin(co.z * 40 + co.x * 25) > 0.8 else None)
+        paint(st, hexcol("7a4a3a"), ao=0.0, mat="birch")   # светлые чечевички поперёк — texbake
         stems.append(st)
         for j in range(16):
             t = 0.2 + 0.8 * j / 15
@@ -313,7 +312,7 @@ def dwarf_birch():
             aa = rr.uniform(0, 6.28)
             lf = leaf("dbl_leaf", tuple(p), (math.cos(aa), math.sin(aa), 0.6), 0.11, 0.075, droop=0.15, segs=4, fold=0.2, shape=_shape_round)
             c = [hexcol("8aa84a"), hexcol("c8a83a"), hexcol("d8783a")][(j + k) % 3]   # осенняя пёстрая листва
-            paint(lf, c, ao=0.0, noise_amt=0.05)
+            paint(lf, c, ao=0.0, noise_amt=0.05, mat="leaf_matte")
             leaves.append(lf)
     join(stems, "DwarfBirch")
     join(leaves, "DwarfBirch_leaf")
@@ -348,8 +347,7 @@ def yucca():
     rr = rnd(291)
     trunk = []
     t1 = tube("yt", [(0, 0, 0), (0.05, 0.02, 0.35), (0.08, 0.0, 0.62)], [0.09, 0.075, 0.07], 10)
-    paint(t1, hexcol("8a7458"), ao=0.3, ao_h=0.4, noise_amt=0.15, nscale=10,
-          fn=lambda co, n: shade(hexcol("8a7458"), 0.75) if (co.z * 18) % 1.0 < 0.25 else None)
+    paint(t1, hexcol("8a7458"), ao=0.3, ao_h=0.4, noise_amt=0.15, nscale=10, mat="palm")   # рубцы от листьев
     trunk.append(t1)
     leaves = []
     top = Vector((0.08, 0.0, 0.62))
@@ -422,7 +420,7 @@ def cattail():
         cx, cy = x + math.cos(a) * 0.035, y + math.sin(a) * 0.035
         hd = cyl("cth", (cx, cy, h - 0.12), 0.03, 0.03, 0.2, segs=10)
         subsurf(hd, 1)
-        paint(hd, hexcol("7a4a2a"), ao=0.0, noise_amt=0.12, nscale=30)
+        paint(hd, hexcol("7a4a2a"), ao=0.0, noise_amt=0.12, nscale=30, mat="velvet")
         heads.append(hd)
     join(parts + heads, "Cattail_leaf")
 

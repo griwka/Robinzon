@@ -937,7 +937,7 @@ def _crooked(seed):
     lean = r.uniform(0.6, 1.0)
     pts = [(0, 0, 0), (0.1, 0.0, 0.8), (0.4 * lean, 0.1, 1.6), (0.9 * lean, 0.0, 2.3), (1.5 * lean, -0.1, 2.8)]
     trunk = tube("tr", pts, [0.22, 0.18, 0.14, 0.11, 0.08], 10)
-    paint(trunk, hexcol("6b5040"), ao=0.2, noise_amt=0.15, nscale=8, fn=lambda co, n: 0.8 if math.sin(co.z * 20 + co.x * 5) > 0.7 else None)
+    paint(trunk, hexcol("6b5040"), ao=0.2, noise_amt=0.15, nscale=8, mat="bark")
     parts = [trunk]
     br = tube("br", [(0.4 * lean, 0.1, 1.6), (0.1, 0.6, 2.3), (0.3, 0.9, 2.6)], [0.08, 0.06, 0.04], 8)
     paint(br, hexcol("6b5040"), ao=0.0)
@@ -982,7 +982,7 @@ def _heather(seed):
         x, y = math.cos(a) * d * 1.2, math.sin(a) * d
         z = 0.18 + 0.27 * (1 - (d / 0.55) ** 2)
         sp = tube("hs", [(x, y, z - 0.05), (x + r.uniform(-0.05, 0.05), y + r.uniform(-0.05, 0.05), z + r.uniform(0.15, 0.3))], 0.02, 4)
-        paint(sp, shade(HEATHER, r.uniform(0.85, 1.15)), ao=0.0, noise_amt=0.1)
+        paint(sp, shade(HEATHER, r.uniform(0.85, 1.15)), ao=0.0, noise_amt=0.1, mat="bloom")
         parts.append(sp)
     join(parts, "Heather_leaf")
 

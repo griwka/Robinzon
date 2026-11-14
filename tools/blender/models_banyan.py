@@ -87,7 +87,7 @@ def deck():
 def liana():
     """Вертикальная лиана высотой 1 м (в игре растягивается по длине) с листиками."""
     parts = [tube("lv", [(0, 0, 0), (0.04, 0, 0.5), (0, 0, 1.0)], 0.06, 6, caps=False)]
-    paint(parts[0], hexcol("6f7a35"), ao=0.0, fn=lambda co, n: 0.8 if int(co.z * 8) % 2 else None)
+    paint(parts[0], hexcol("6f7a35"), ao=0.0, mat="vine")   # витые волокна — texbake, без полос «через одну»
     for k in range(3):
         a = k * 2.1
         lf = leaf("ll_leaf", (0, 0, 0.2 + k * 0.3), (math.cos(a), math.sin(a), 0.2), 0.16, 0.06, droop=0.3, segs=3)
@@ -105,7 +105,7 @@ def liana_curtain():
         x = -1.2 + k * 0.18 + rr.uniform(-0.05, 0.05)
         ln = rr.uniform(1.8, 2.5)
         v = tube("vn", [(x, 0, 2.5), (x + rr.uniform(-0.1, 0.1), rr.uniform(-0.1, 0.1), 2.5 - ln * 0.5), (x, 0, 2.5 - ln)], 0.03, 5)
-        paint(v, hexcol("5f7a35"), ao=0.0)
+        paint(v, hexcol("5f7a35"), ao=0.0, mat="vine")
         parts.append(v)
         for q in range(4):
             lf = leaf("lc_leaf", (x, 0, 2.4 - q * 0.5), (rr.uniform(-1, 1), rr.uniform(-1, 1), -0.3), 0.15, 0.06, droop=0.3, segs=3)

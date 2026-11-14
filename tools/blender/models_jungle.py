@@ -41,7 +41,7 @@ def jungle_tree(seed):
         parts.append(tube("bb", [(0, 0, z0), (math.cos(a) * 1.4, math.sin(a) * 1.4, z0 + 1.0), (math.cos(a) * 2.2, math.sin(a) * 2.2, z0 + 1.4)], [0.2, 0.12, 0.06], 8))
     for p in parts:
         paint(p, BARK_J, ao=0.3, ao_h=1.0, noise_amt=0.14, nscale=4,
-              fn=lambda co, n: hexcol("5f8a3a") if (n.z > 0.3 and co.z < 2) else (0.82 if math.sin(co.z * 8 + math.atan2(co.y, co.x) * 5) > 0.75 else None))
+              fn=lambda co, n: hexcol("5f8a3a") if (n.z > 0.3 and co.z < 2) else None, mat="bark")
     t = join(parts, "Trunk")
     crown = empty("Crown", (0, 0, h))
     blobs = []
@@ -177,7 +177,7 @@ def bamboo_clump():
         def nodes(co, n):
             k2 = (co.z / 0.45) % 1.0
             return 0.72 if k2 < 0.06 else (1.08 if k2 < 0.2 else None)
-        paint(st, hexcol("a9b84a"), ao=0.3, ao_h=0.8, noise_amt=0.05, fn=nodes)
+        paint(st, hexcol("a9b84a"), ao=0.3, ao_h=0.8, noise_amt=0.05, fn=nodes, mat="bamboo")
         parts.append(st)
         for j in range(4):
             z = h * (0.55 + j * 0.13)

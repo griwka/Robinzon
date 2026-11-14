@@ -74,6 +74,15 @@ static func tex_mat(tex: Texture2D, foliage := false) -> ShaderMaterial:
 	return m
 
 
+## Свой материал для подкрашивания (недозрелые плоды: albedo зеленит их, потом отпускает): копия того,
+## что Models.glb дал этой сетке, — с текстурой, если модель запечена, иначе цвет вершин.
+static func tint_mat(mi: MeshInstance3D) -> ShaderMaterial:
+	var cur := mi.material_override as ShaderMaterial
+	if cur:
+		return cur.duplicate() as ShaderMaterial
+	return Models.model_mat(false).duplicate() as ShaderMaterial
+
+
 const TEX_PAINT := 0.04   # сила рисованной фактуры на запечённых моделях (у остальных 0.16)
 
 

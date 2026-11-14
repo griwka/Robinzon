@@ -190,7 +190,7 @@ def apple_tree():
     parts = []
     trunk = tube("tr", [(0, 0, -0.1), (0.15, 0.05, 0.8), (-0.05, 0.1, 1.5), (0.1, 0, 2.0)], [0.22, 0.17, 0.14, 0.1], 10)
     displace(trunk, 0.03, 0.2, "VORONOI")
-    paint(trunk, hexcol("6a5040"), ao=0.2, fn=lambda co, n: shade(hexcol("6a5040"), 0.8) if (co.z * 7 + co.x * 3) % 1.0 < 0.2 else None)
+    paint(trunk, hexcol("6a5040"), ao=0.2, mat="bark")
     parts.append(trunk)
     for a, ln in ((0.4, 0.9), (2.3, 0.8), (4.2, 0.85)):
         br = tube("bb", [(0.05, 0.03, 1.6), (math.cos(a) * ln * 0.6, math.sin(a) * ln * 0.6, 2.1), (math.cos(a) * ln, math.sin(a) * ln, 2.45)], [0.09, 0.06, 0.035], 8)
@@ -268,10 +268,10 @@ def wild_bed():
     for x in (-0.45, 0.4):
         cb = sphere("cb", (x, 0.05, 0.28), 0.18, (1.0, 1.0, 0.7))
         displace(cb, 0.03, 0.08)
-        paint(cb, hexcol("8ac06a"), ao=0.0, fn=lambda co, n: hexcol("b8d888") if n.z > 0.7 else None)
+        paint(cb, hexcol("8ac06a"), ao=0.0, fn=lambda co, n: hexcol("b8d888") if n.z > 0.7 else None, mat="cabbage")
         parts.append(cb)
     stake = tube("sk", [(0.75, -0.3, 0.1), (0.8, -0.32, 0.6), (0.95, -0.36, 0.85)], 0.025, 6)
-    paint(stake, hexcol("a07a50"), ao=0.0)
+    paint(stake, hexcol("a07a50"), ao=0.0, mat="wood")
     parts.append(stake)
     join(parts, "WildBed")
 

@@ -108,7 +108,7 @@ def _attr(me, name, n, width, dtype=np.float32, prop="vector"):
 
 def gather(objs):
     """Все треугольники модели одним набором массивов (вершины каждого треугольника, uv, атрибуты)."""
-    out = {k: [] for k in ("uv", "co", "nr", "p0", "n0", "pid", "ovl", "vc", "obj", "u0", "uok", "flat")}
+    out = {k: [] for k in ("uv", "co", "nr", "p0", "n0", "pid", "ovl", "vc", "obj", "u0", "uok", "flat", "lf0", "lf1")}
     for oi, o in enumerate(objs):
         me = o.data
         me.calc_loop_triangles()
@@ -138,6 +138,8 @@ def gather(objs):
         ovl = _attr(me, "ovl", P, 1, np.int32, "value")
         u0 = _attr(me, "u0", V, 3)
         uok = _attr(me, "uok", P, 1, np.int32, "value")
+        lf0 = _attr(me, "lf0", V, 3)
+        lf1 = _attr(me, "lf1", V, 3)
         sm = np.zeros(P, bool)
         me.polygons.foreach_get("use_smooth", sm)
         if "Col" in me.color_attributes and me.color_attributes["Col"].domain == "CORNER":
@@ -158,6 +160,8 @@ def gather(objs):
         out["u0"].append((u0 if u0 is not None else np.zeros((V, 3), np.float32))[tv])
         out["uok"].append(uok[tp] if uok is not None else np.zeros(T, np.int32))
         out["flat"].append(~sm[tp])
+        out["lf0"].append((lf0 if lf0 is not None else np.zeros((V, 3), np.float32))[tv])
+        out["lf1"].append((lf1 if lf1 is not None else np.zeros((V, 3), np.float32))[tv])
     return {k: np.concatenate(v) for k, v in out.items()}
 
 
@@ -459,12 +463,13 @@ def pick_size(area, density=360.0, lo=256, hi=1024):
 
 def bake_model(name, family, size=None, boost=None, seed=0, default="fur", report=False):
     """Запечь всю модель (все сетки сцены) в один атлас и назначить материал с текстурой.
-    family: "people" | "animals" | "build" (постройки и лодки) — как угадывать вид поверхности и какую деталь
+    family: "people" | "animals" | "build" (постройки и лодки) | "plant" (растения, v1.0.8) — как угадывать вид поверхности и какую деталь
     рисовать; default — вид шкуры животного ("fur", "feather", "hide", "smooth"). Возвращает размер текстуры."""
     objs = [o for o in bpy.context.scene.objects if o.type == "MESH" and len(o.data.polygons)]
     if not objs:
         return 0
-    build = family == "build"
+    plant = family == "plant"
+    build = family == "build" or plant
     if boost is None:
         boost = {} if build else ({"Head": 1.6} if family == "people" else {"Head": 1.35})
     area = surface_area(objs)
@@ -480,11 +485,17 @@ def bake_model(name, family, size=None, boost=None, seed=0, default="fur", repor
     col = eval_programs(pid, P, N, vc)
     col = eval_overlays(g["ovl"][tri], P, N, col)
     if build:
-        kind = kinds_build(pid)
         uok = g["uok"][tri]
         U = local_frames(pid, P, _interp(g["u0"], tri, bary), uok, seed)
         px = math.sqrt(area / max(1, len(tri)))
-        col = detail_build(kind, col, P, N, U, uok, px, seed)
+        if plant:
+            LF0 = _interp(g["lf0"], tri, bary)
+            LF1 = _interp(g["lf1"], tri, bary)
+            kind = kinds_plant(pid, LF0, LF1, uok)
+            col = detail_plant(kind, col, P, N, U, uok, LF0, LF1, pid, px, seed)
+        else:
+            kind = kinds_build(pid)
+            col = detail_build(kind, col, P, N, U, uok, px, seed)
         if report:
             print("  %d px, %.1f мм на пиксель" % (size, px * 1000))
             report_kinds(name, pid, kind)
@@ -904,3 +915,427 @@ def flat_normals(g, tri, bary):
     fnrm = _norm(fnrm)
     sm = _norm(_interp(g["n0"], tri, bary))
     return np.where(g["flat"][tri][:, None], fnrm[tri], sm)
+
+
+# ============================================================ растения и деревья (v1.0.8)
+# Своя мелкая деталь для листьев, крон, коры, хвои, стеблей, плодов и мха — в уютном стиле: чётко и насыщенно,
+# без фотореализма. Листья из kit.leaf знают свои координаты (атрибуты lf0, lf1: поперёк от жилки, от основания
+# к кончику, длина и ширина) — по ним идут средняя жилка, боковые жилки, край и блик. Кроны-«шары» покрыты
+# листочками и пучками (ячейки Вороного: у каждого листочка светлый верх и тёмная щель вокруг). Кора — по виду
+# дерева: пальма — кольца-рубцы, берёзка — чечевички, сосна — пластинки, горелое — трещины с угольками.
+PLANT_KINDS = ("leaf", "leaf_matte", "banana", "aloe", "grass", "petal", "foliage", "stem", "sheath", "vine", "palm",
+               "birch", "pinebark", "needle", "charred", "moss", "bloom", "fruit", "husk", "root", "velvet", "cabbage")
+
+
+def _hash(ix, iy, iz, k):
+    """Целочисленный хеш ячейки → 0..1 (для шума Вороного)."""
+    h = (ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791) ^ (k * 2654435761 + 97)
+    h = h & 0xFFFFFFFF
+    h ^= h >> 13
+    h = (h * 1274126177) & 0xFFFFFFFF
+    h ^= h >> 16
+    return h.astype(np.float64) / 4294967296.0
+
+
+def worley(Q, seed=0, jit=0.85):
+    """Ячейки Вороного в 3D (Q — в размерах ячейки): расстояние до ближайшей точки (F1), до второй (F2),
+    случайное число ячейки 0..1 и вектор от точки ячейки к пикселю (в размерах ячейки)."""
+    Q = np.asarray(Q, np.float64)
+    base = np.floor(Q).astype(np.int64)
+    n = len(Q)
+    f1 = np.full(n, 9.0)
+    f2 = np.full(n, 9.0)
+    rid = np.zeros(n)
+    v1 = np.zeros((n, 3))
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                cx, cy, cz = base[:, 0] + dx, base[:, 1] + dy, base[:, 2] + dz
+                fp = np.stack([cx + 0.5 + jit * (_hash(cx, cy, cz, seed) - 0.5),
+                               cy + 0.5 + jit * (_hash(cx, cy, cz, seed + 1) - 0.5),
+                               cz + 0.5 + jit * (_hash(cx, cy, cz, seed + 2) - 0.5)], 1)
+                d = Q - fp
+                dist = np.sqrt((d * d).sum(axis=1))
+                closer = dist < f1
+                f2 = np.where(closer, f1, np.minimum(f2, dist))
+                v1 = np.where(closer[:, None], d, v1)
+                rid = np.where(closer, _hash(cx, cy, cz, seed + 3), rid)
+                f1 = np.where(closer, dist, f1)
+    return f1, f2, rid, v1
+
+
+def _scales(Q, seed, line=0.2):
+    """«Чешуйки» из ячеек Вороного (Q — в размерах ячейки, ось z — вверх): каждая ячейка светлеет кверху,
+    а по нижнему краю — тёмная кромка (тень на чешуйке ниже). Верхний край без кромки: сверху лежит соседняя.
+    Возвращает (множитель яркости, случайное число ячейки)."""
+    F1, F2, rid, v = worley(Q, seed)
+    edge = 1 - smooth01(0.02, 0.16, F2 - F1)
+    lower = smooth01(-0.05, -0.45, v[:, 2])
+    lit = smooth01(-0.75, 0.6, v[:, 2])
+    kk = (0.9 + 0.18 * lit) * (1 - line * edge * lower) * (1 - 0.5 * line * smooth01(0.35, 0.8, F1) * lower)
+    return kk * (1 + 0.1 * (rid - 0.5)), rid
+
+
+def _hsv(color):
+    r, g, b = color[:3]
+    mx, mn = max(r, g, b), min(r, g, b)
+    s = (mx - mn) / max(mx, 1e-4)
+    if mx - mn < 1e-4:
+        hue = 0.0
+    elif mx == r:
+        hue = (60 * (g - b) / (mx - mn)) % 360
+    elif mx == g:
+        hue = 60 * (b - r) / (mx - mn) + 120
+    else:
+        hue = 60 * (r - g) / (mx - mn) + 240
+    return hue, s, mx
+
+
+def guess_plant(color, has_lf, has_u, ratio):
+    """Вид поверхности растения по цвету программы раскраски и по форме детали (лист kit.leaf, трубка, «шар»)."""
+    k = _known().get(tuple(round(v, 4) for v in color[:3]))
+    if k in ("clay", "stone", "soil", "metal", "iron"):
+        return k
+    hue, s, mx = _hsv(color)
+    if mx < 0.12:
+        return "clean"
+    if 58 < hue < 178 and s > 0.15:
+        if has_lf:
+            return "grass" if ratio > 6.5 else "leaf"
+        return "stem" if has_u else "foliage"
+    if s < 0.14:
+        if mx > 0.8:
+            return "petal" if has_lf else "fruit"
+        return "stone"
+    if 8 <= hue <= 50 and mx < 0.8 and s > 0.2:
+        if has_lf:
+            return "leaf_matte"
+        if has_u:
+            return "bark"
+        if s > 0.55:
+            return "fruit"          # шляпки грибов, орехи — гладкие, не древесина
+        return "soil" if mx < 0.45 else "wood"
+    return "petal" if has_lf else "fruit"
+
+
+def kinds_plant(pid, LF0, LF1, uok):
+    kind = np.empty(len(pid), object)
+    for p in np.unique(pid):
+        idx = pid == p
+        prog = kit.PAINTS[p] if 0 < p < len(kit.PAINTS) else None
+        if prog is None:
+            kind[idx] = "plain"
+            continue
+        m = prog["mat"]
+        if m is None:
+            lf = LF0[idx, 2] > 1e-4
+            ratio = float(np.median(LF0[idx][lf, 2] / np.maximum(LF1[idx][lf, 1], 1e-4))) if lf.any() else 0.0
+            m = guess_plant(prog["color"], lf.mean() > 0.5, (uok[idx] > 0).mean() > 0.5, ratio)
+        kind[idx] = m
+    return kind
+
+
+def detail_plant(kind, col, P, N, U, uok, LF0, LF1, pid, px, seed=0):
+    """Мелкая деталь растений. Виды построек (дерево, торец, земля, камень, глина) рисует detail_build."""
+    off = np.array([seed * 3.7, seed * 1.3, seed * 5.1])
+    col = col.copy()
+    pk = np.isin(kind, PLANT_KINDS)
+    if (~pk).any():
+        col[~pk] = detail_build(kind[~pk], col[~pk], P[~pk], N[~pk], U[~pk], uok[~pk], px, seed)
+    k = np.ones(len(col))
+
+    def bl(period, lo=1.8, hi=3.6):
+        return float(smooth01(lo, hi, np.array([period / px]))[0])
+
+    def fade(period_arr, lo=2.0, hi=4.5):
+        return smooth01(lo, hi, period_arr / px)
+
+    def sel(*names):
+        m = np.zeros(len(kind), bool)
+        for nm in names:
+            m |= kind == nm
+        return m
+
+    # ---------------- листья kit.leaf: средняя жилка, боковые жилки, край, блик (глянец) или пушок (матовые)
+    m = sel("leaf", "leaf_matte", "banana", "aloe")
+    if m.any():
+        p, c = P[m], col[m]
+        km = kind[m]
+        s_m, t, L = LF0[m, 0].astype(np.float64), np.clip(LF0[m, 1], 0, 1), LF0[m, 2].astype(np.float64)
+        wr, W = np.maximum(LF1[m, 0], 1e-4), np.maximum(LF1[m, 1], 1e-4)
+        has = L > 1e-4
+        sn = np.clip(s_m / wr, -1, 1)
+        a = np.abs(sn)
+        asm = np.abs(s_m)
+        rib = 0.05 * W + 0.0012
+        ribv = (1 - smooth01(rib, rib + 0.8 * px, asm)) * smooth01(0.0, 0.06, t) * (1 - smooth01(0.8, 1.0, t))
+        nv = np.clip(np.round(L / (1.1 * W)), 3, 11)
+        sp = np.maximum(L / nv, 1e-4)
+        u = (t * L - 0.8 * asm) / sp
+        vw = np.maximum(0.35 * rib, 0.55 * px)
+        fv = fade(sp, 2.5, 5.0)
+        vein = _band(u, vw / sp, 0.6 * px / sp) * smooth01(1.0, 2.2, asm / rib) * (1 - smooth01(0.72, 0.95, a)) * \
+            smooth01(0.03, 0.08, t) * fv
+        fr = u - np.floor(u)
+        edge = smooth01(0.8, 0.98, a)
+        kk = (0.9 + 0.12 * smooth01(0.0, 0.6, t)) * (1 + 0.035 * np.sign(s_m))
+        kk *= (1 + 0.17 * ribv) * (1 + 0.12 * vein) * (1 - 0.06 * fr * fv * (a > 0.1)) * (1 - 0.08 * edge)
+        kk *= 1 + 0.05 * pn(p / 0.22 + off)
+        glossy = (km == "leaf") | (km == "banana")
+        sheen = smooth01(0.08, 0.22, sn) * (1 - smooth01(0.42, 0.68, sn)) * smooth01(0.1, 0.3, t) * (1 - smooth01(0.55, 0.82, t))
+        c = _mixc(c, (1.0, 1.0, 0.9), 0.15 * sheen * glossy)
+        fz = max(0.004, 2 * px)
+        kk *= 1 + np.where(glossy, 0.0, 0.05) * pn(p / fz + off + 4.0) * bl(fz)
+        ban = km == "banana"
+        if ban.any():
+            tear = _band(u + 0.5, np.maximum(0.3 * rib, 0.6 * px) / sp, 0.6 * px / sp) * smooth01(0.4, 0.55, a) * \
+                smooth01(0.25, 0.45, pn(p / 0.15 + off + 6.0)) * fv
+            kk = np.where(ban, kk * (1 - 0.4 * tear), kk)
+            c = np.where(ban[:, None], _mixc(c, (0.66, 0.58, 0.32), 0.45 * smooth01(0.9, 0.99, a) *
+                                             smooth01(0.0, 0.4, pn(p / 0.2 + off + 7.0))), c)
+        al = km == "aloe"
+        if al.any():
+            spots = smooth01(0.42, 0.52, pn(p / 0.011 + off + 8.0)) * bl(0.011) * (a < 0.85)
+            teeth = _band(t * L / 0.03, 0.18, 0.1) * smooth01(0.88, 0.97, a)
+            c = np.where(al[:, None], _mixc(c, (0.9, 0.95, 0.86), 0.75 * np.maximum(spots, teeth)), c)
+        kk = np.where(has, kk, 1 + 0.06 * pn(p / 0.05 + off))
+        col[m] = c
+        k[m] = kk
+
+    # ---------------- узкие листья и травинки: параллельные жилки, тёмное основание, подсохший кончик
+    m = sel("grass")
+    if m.any():
+        p, c = P[m], col[m]
+        s_m, t, L = LF0[m, 0].astype(np.float64), np.clip(LF0[m, 1], 0, 1), LF0[m, 2].astype(np.float64)
+        wr, W = np.maximum(LF1[m, 0], 1e-4), np.maximum(LF1[m, 1], 1e-4)
+        has = L > 1e-4
+        sn = np.clip(s_m / wr, -1, 1)
+        a = np.abs(sn)
+        nl = np.clip(np.round(W / 0.006), 2, 5)
+        f = fade(wr / nl, 2.0, 4.0)
+        line = _band(sn * nl, 0.09, 0.5 * px * nl / wr) * f * (a < 0.9)
+        rib = 0.06 * W + 0.001
+        ribv = 1 - smooth01(rib, rib + 0.8 * px, np.abs(s_m))
+        kk = (1 + 0.08 * line) * (1 + 0.12 * ribv) * (0.84 + 0.18 * smooth01(0.0, 0.45, t)) * (1 + 0.03 * np.sign(s_m))
+        kk *= (1 - 0.07 * smooth01(0.85, 0.98, a)) * (1 + 0.05 * pn(p / 0.3 + off))
+        hue_g = (c[:, 1] > c[:, 0] * 1.05) & (c[:, 1] > c[:, 2] * 1.3)
+        dry = 0.32 * smooth01(0.7, 1.0, t) * smooth01(-0.15, 0.35, pn(p / 0.35 + off + 2.0)) * hue_g
+        c = _mixc(c, (0.84, 0.76, 0.44), dry)
+        kk = np.where(has, kk, 1 + 0.05 * pn(p / 0.05 + off))
+        col[m] = c
+        k[m] = kk
+
+    # ---------------- лепестки: тонкие жилки веером, основание глубже, кончик светлее, светлый край
+    m = sel("petal")
+    if m.any():
+        p, c = P[m], col[m]
+        s_m, t, L = LF0[m, 0].astype(np.float64), np.clip(LF0[m, 1], 0, 1), LF0[m, 2].astype(np.float64)
+        wr = np.maximum(LF1[m, 0], 1e-4)
+        has = L > 1e-4
+        sn = np.clip(s_m / wr, -1, 1)
+        a = np.abs(sn)
+        line = _band(sn * 3 + 0.25 * pn(p / 0.02 + off), 0.08, 0.5 * px * 3 / wr) * fade(wr / 3, 1.8, 3.5)
+        kk = (1 - 0.07 * line) * (0.82 + 0.18 * smooth01(0.0, 0.45, t)) * (1 + 0.06 * smooth01(0.86, 0.98, a))
+        c = _mixc(c, (1.0, 1.0, 0.97), 0.12 * smooth01(0.6, 1.0, t) * has)
+        kk = np.where(has, kk, 1 + 0.04 * pn(p / max(0.004, 2 * px) + off) * bl(0.004))
+        col[m] = c
+        k[m] = kk
+
+    # ---------------- кроны-«шары» и кусты: листочки «чешуйками» (светлый верх, тень под нижним краем — листок
+    # лежит на листке ниже) и крупные пучки листвы так же; без сплошной обводки, иначе выходит «брусчатка»
+    m = sel("foliage")
+    if m.any():
+        p, c = P[m], col[m]
+        cl = max(0.065, 4.5 * px)
+        kl, rid = _scales(p / np.array([cl, cl, cl * 1.3]) + off, seed + 1, 0.2)
+        kc, crid = _scales(p / np.array([0.32, 0.32, 0.38]) + off + 3.0, seed + 5, 0.13)
+        warm = smooth01(0.6, 0.95, rid) * 0.5
+        c = c * (1 + warm[:, None] * np.array([0.1, 0.09, -0.14]))
+        col[m] = np.clip(c, 0, 1)
+        k[m] = (1 + fade(np.full(len(p), cl), 2.5, 5.0) * (kl - 1)) * kc
+
+    # ---------------- стебли, черешки, лианы, банановый ствол: волокна вдоль, листовые влагалища, витые лианы
+    m = sel("stem", "sheath", "vine")
+    if m.any():
+        u, p, c = U[m], P[m], col[m]
+        km = kind[m]
+        hu = uok[m] > 0
+        fa = max(0.0025, 1.5 * px)
+        st = np.where(hu, _an(u, fa, 0.12, off), pn(p / fa + off)) * bl(fa)
+        kk = (1 + 0.07 * st) * (1 + 0.05 * pn(p / 0.09 + off + 1.0))
+        a = np.arctan2(u[:, 1], u[:, 0])
+        R = np.maximum(np.hypot(u[:, 0], u[:, 1]), 1e-3)
+        sh = km == "sheath"
+        if sh.any():
+            ln = _band(a / (2 * math.pi) * 1.5 + u[:, 2] / 0.9 + 0.15 * pn(p / 0.2 + off), 0.012 + 0.5 * px / (R * 2 * math.pi / 1.5),
+                       0.6 * px / (R * 4)) * hu
+            dry = smooth01(0.2, 0.5, pn(np.stack([u[:, 0] / 0.08, u[:, 1] / 0.08, u[:, 2] / 0.45], 1) + off + 2.0))
+            kk = np.where(sh, kk * (1 - 0.28 * ln), kk)
+            c = np.where(sh[:, None], _mixc(c, (0.6, 0.52, 0.32), 0.5 * dry), c)
+        vi = km == "vine"
+        if vi.any():
+            g = a / (2 * math.pi) * 2 + u[:, 2] / 0.22
+            fv = smooth01(1.5, 3.0, (R * math.pi) / px)
+            groove = _band(g, 0.09, 0.6 * px / (R * math.pi)) * fv * hu
+            ridge = smooth01(0.3, 0.5, g - np.floor(g)) * (1 - smooth01(0.55, 0.75, g - np.floor(g))) * fv * hu
+            kk = np.where(vi, kk * (1 - 0.3 * groove) * (1 + 0.08 * ridge), kk)
+        col[m] = c
+        k[m] = kk
+
+    # ---------------- пальма, юкка, древовидный папоротник: кольца-рубцы от старых листьев, волокна
+    m = sel("palm")
+    if m.any():
+        u, p = U[m], P[m]
+        R = np.maximum(np.hypot(u[:, 0], u[:, 1]), 0.02)
+        sp = np.clip(0.75 * R, 0.035, 0.17)
+        a = np.arctan2(u[:, 1], u[:, 0])
+        wob = 0.18 * pn(np.stack([np.cos(a) * 1.5, np.sin(a) * 1.5, u[:, 2] / sp * 0.15], 1) + off)
+        f = u[:, 2] / sp + wob
+        i = np.floor(f)
+        fr = f - i
+        rid = _hash(i.astype(np.int64), np.zeros(len(i), np.int64), np.zeros(len(i), np.int64), seed + 11)
+        fv = fade(sp, 2.5, 5.0)
+        scar = smooth01(0.8, 0.96, fr) * fv
+        lip = smooth01(0.0, 0.1, fr) * (1 - smooth01(0.12, 0.32, fr)) * fv
+        fa = max(0.003, 1.5 * px)
+        kk = (1 - 0.3 * scar) * (1 + 0.1 * lip) * (1 + 0.09 * (rid - 0.5)) * (0.95 + 0.08 * fr * fv)
+        kk *= 1 + 0.06 * _an(u, fa, 0.08, off + 2.0) * bl(fa)
+        k[m] = kk
+
+    # ---------------- карликовая берёза: тёмная красноватая кора и светлые чечевички-чёрточки поперёк
+    m = sel("birch")
+    if m.any():
+        u, p, c = U[m], P[m], col[m]
+        along = max(0.003, 1.5 * px)
+        lent = smooth01(0.42, 0.56, pn(np.stack([u[:, 0] / 0.012, u[:, 1] / 0.012, u[:, 2] / along], 1) + off)) * bl(along)
+        c = _mixc(c, (0.8, 0.68, 0.6), 0.6 * lent)
+        k[m] = (1 + 0.08 * pn(p / 0.05 + off + 1.0)) * (1 + 0.05 * _an(u, 0.004, 0.06, off + 2.0))
+        col[m] = c
+
+    # ---------------- сосна: пластинки коры, тёмные щели, рыжеватые свежие пластинки
+    m = sel("pinebark")
+    if m.any():
+        u, p, c = U[m], P[m], col[m]
+        hu = (uok[m] > 0)[:, None]
+        Q = np.where(hu, u / np.array([0.05, 0.05, 0.13]), p / 0.07)
+        F1, F2, rid, v = worley(Q + off, seed + 7)
+        gap = 1 - smooth01(0.03, 0.14, F2 - F1)
+        lit = smooth01(-0.6, 0.5, v[:, 2])
+        c = _mixc(c, (0.66, 0.38, 0.24), 0.32 * (1 - gap) * smooth01(0.4, 0.8, rid))
+        k[m] = (1 - 0.42 * gap) * (0.9 + 0.16 * lit) * (1 + 0.12 * (rid - 0.5))
+        col[m] = c
+
+    # ---------------- хвоя: лапки «чешуйками» вниз по ярусу, штрихи иголок, светлые кончики; снег — мягкий,
+    # с голубой тенью снизу
+    m = sel("needle")
+    if m.any():
+        p, c, n = P[m], col[m], N[m]
+        snow = c.min(axis=1) > 0.72
+        kt, rid = _scales(p / np.array([0.11, 0.11, 0.075]) + off, seed + 9, 0.26)
+        down = np.array([0.0, 0.0, -1.0]) + n * n[:, 2:3]
+        ln = np.linalg.norm(down, axis=1, keepdims=True)
+        D = np.where(ln > 0.2, down / np.maximum(ln, 1e-6), np.array([1.0, 0.0, 0.0]))
+        aw = max(0.0035, 1.6 * px)
+        strokes = _an_dir(p, D, aw, 0.05, off + 4.0) * bl(aw)
+        kk = kt * (1 + 0.14 * strokes)
+        c2 = _mixc(c, np.clip(c * 1.3 + 0.04, 0, 1), 0.3 * smooth01(0.4, 0.75, strokes))
+        c2 = c2 * (1 + (smooth01(0.55, 0.95, rid) * 0.4)[:, None] * np.array([0.06, 0.08, -0.06]))
+        ks = 1 + 0.03 * pn(p / 0.05 + off + 5.0)
+        cs = _mixc(c, (0.8, 0.87, 1.0), 0.3 * smooth01(0.7, 0.3, n[:, 2]))
+        col[m] = np.where(snow[:, None], cs, np.clip(c2, 0, 1))
+        k[m] = np.where(snow, ks, kk)
+
+    # ---------------- горелое дерево: «крокодилья» сетка трещин, зола сверху, в глубине трещин тлеют угольки
+    m = sel("charred")
+    if m.any():
+        u, p, c, n = U[m], P[m], col[m], N[m]
+        hu = (uok[m] > 0)[:, None]
+        Q = np.where(hu, u / np.array([0.045, 0.045, 0.08]), p / 0.06)
+        F1, F2, rid, v = worley(Q + off, seed + 13)
+        crack = 1 - smooth01(0.03, 0.12, F2 - F1)
+        lit = smooth01(-0.6, 0.6, v[:, 2])
+        kk = (1 - 0.45 * crack) * (0.88 + 0.3 * lit * (1 - crack)) * (1 + 0.15 * (rid - 0.5))
+        ash = smooth01(0.3, 0.8, n[:, 2]) * smooth01(-0.2, 0.3, pn(p / 0.1 + off))
+        c = _mixc(c, (0.56, 0.53, 0.5), 0.45 * ash * (1 - crack))
+        ember = (1 - smooth01(0.0, 0.05, F2 - F1)) * smooth01(0.5, 0.65, pn(p / 0.35 + off + 3.0))
+        c = _mixc(c, (1.0, 0.48, 0.16), 0.9 * ember)
+        kk = np.where(ember > 0.2, 1.0, kk)
+        col[m] = c
+        k[m] = kk
+
+    # ---------------- мох: мягкие кочечки (светлые макушки), рыжие пятна, белые звёздочки лишайника
+    m = sel("moss")
+    if m.any():
+        p, c = P[m], col[m]
+        cs = max(0.016, 4 * px)
+        F1, F2, rid, v = worley(p / cs + off, seed + 17)
+        lit = 1 - smooth01(0.0, 0.5, F1)
+        gap = 1 - smooth01(0.02, 0.12, F2 - F1)
+        f = bl(cs, 2.5, 5.0)
+        kk = 1 + f * ((0.86 + 0.24 * lit) * (1 - 0.22 * gap) * (1 + 0.08 * (rid - 0.5)) - 1)
+        c = _mixc(c, (0.74, 0.6, 0.32), 0.38 * smooth01(0.2, 0.5, pn(p / 0.16 + off + 1.0)))
+        lich = smooth01(0.5, 0.6, pn(p / 0.028 + off + 2.0)) * smooth01(0.0, 0.3, pn(p / 0.2 + off + 3.0))
+        c = _mixc(c, (0.93, 0.94, 0.88), 0.85 * lich)
+        col[m] = c
+        k[m] = np.where(lich > 0.5, 1.0, kk)
+
+    # ---------------- соцветия (вереск): крошечные цветочки — светлая серединка, тёмная щель
+    m = sel("bloom")
+    if m.any():
+        p = P[m]
+        cs = max(0.011, 3.5 * px)
+        F1, F2, rid, v = worley(p / cs + off, seed + 19)
+        lit = 1 - smooth01(0.0, 0.55, F1)
+        gap = 1 - smooth01(0.02, 0.14, F2 - F1)
+        k[m] = (0.84 + 0.3 * lit) * (1 - 0.25 * gap) * (1 + 0.1 * (rid - 0.5))
+
+    # ---------------- плоды, ягоды, грибы: поры-крапинки, румянец, нарисованный блик
+    m = sel("fruit")
+    if m.any():
+        p, c, n = P[m], col[m], N[m]
+        ds = max(0.0035, 1.6 * px)
+        speck = smooth01(0.45, 0.58, pn(p / ds + off)) * bl(ds)
+        lent = smooth01(0.5, 0.62, pn(p / 0.007 + off + 1.0)) * bl(0.007)
+        kk = (1 - 0.08 * speck) * (1 + 0.07 * lent) * (1 + 0.06 * pn(p / 0.05 + off + 2.0))
+        warm = (c[:, 0] > 0.75) & (c[:, 1] > 0.35) & (c[:, 2] < 0.45)
+        c = _mixc(c, (0.9, 0.32, 0.2), 0.2 * smooth01(0.05, 0.55, pn(p / 0.07 + off + 3.0)) * warm)
+        L0 = np.array([0.35, -0.45, 0.82]) / np.linalg.norm([0.35, -0.45, 0.82])
+        hl = smooth01(0.84, 0.97, (n * L0).sum(axis=1))
+        c = _mixc(c, (1.0, 1.0, 0.95), 0.38 * hl)
+        col[m] = c
+        k[m] = kk
+
+    # ---------------- кокос: волокна; морковь: колечки-бороздки; початки рогоза: бархат; кочан: жилки
+    m = sel("husk")
+    if m.any():
+        p = P[m]
+        fib = pn(p * np.array([1 / 0.006, 1 / 0.006, 1 / 0.05]) + off) * bl(0.006)
+        k[m] = (1 + 0.15 * fib) * (1 + 0.08 * pn(p / 0.04 + off + 1.0)) * \
+            (1 + 0.12 * smooth01(0.5, 0.62, pn(p * np.array([1 / 0.004, 1 / 0.004, 1 / 0.04]) + off + 2.0)) * bl(0.004))
+    m = sel("root")
+    if m.any():
+        p = P[m]
+        ring = _band(p[:, 2] / 0.011 + 0.5 * pn(p / 0.02 + off), 0.08, 0.6 * px / 0.011) * \
+            smooth01(-0.1, 0.3, pn(p / 0.03 + off + 1.0)) * bl(0.011)
+        k[m] = (1 - 0.2 * ring) * (1 + 0.05 * pn(p / 0.02 + off + 2.0))
+    m = sel("velvet")
+    if m.any():
+        p = P[m]
+        k[m] = (1 + 0.09 * pn(p / max(0.003, 1.5 * px) + off) * bl(0.003)) * (1 + 0.06 * pn(p / 0.03 + off + 1.0))
+    m = sel("cabbage")
+    if m.any():
+        idx = np.nonzero(m)[0]
+        c = col[idx]
+        kk = np.ones(len(idx))
+        for q in np.unique(pid[idx]):
+            j = pid[idx] == q
+            pj = P[idx][j]
+            d = pj - pj.mean(axis=0)
+            az = np.arctan2(d[:, 1], d[:, 0])
+            g = az * 7 / (2 * math.pi) + 0.35 * pn(pj / 0.05 + off)
+            vein = _band(g, 0.05, 0.3) * smooth01(-0.8, 0.2, d[:, 2] / max(1e-3, np.abs(d[:, 2]).max()))
+            c[j] = _mixc(c[j], (0.95, 0.98, 0.84), 0.45 * vein)
+            kk[j] = 1 + 0.05 * pn(pj / 0.03 + off + 1.0)
+        col[idx] = c
+        k[idx] = kk
+    return np.clip(col * k[:, None], 0.0, 1.0)

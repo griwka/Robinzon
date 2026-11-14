@@ -41,11 +41,24 @@ BUILDINGS = ["tent", "campfire", "torch", "workbench", "hut", "coop", "goat_pen"
 BOATS = ["raft", "canoe", "lifeboat", "boat_wreck", "stepa_boat", "stepa_boat_wreck", "seaplane",
          "albatros", "albatros_wreck", "albatros_mast", "albatros_helm", "albatros_lights"]
 
+# растения и деревья (v1.0.8): листья с жилками, кроны из листочков, кора по виду дерева, хвоя, плоды, мох —
+# texbake.detail_plant. Клевер (clover_tuft) — крошечный пучок в MultiMesh травы, остаётся на цвете вершин.
+PLANTS = ["palm_a", "palm_b", "palm_c", "banana_tree", "mango_tree", "lemon_tree", "sapling", "bush_a", "bush_b", "bush_c",
+          "jungle_tree_a", "jungle_tree_b", "fern_a", "fern_b", "tall_grass", "thicket", "bamboo_clump",
+          "fallen_log", "fallen_log_b", "flower_patch", "liana", "liana_curtain", "apple_tree", "wild_bed",
+          "crop_sprout", "crop_young", "crop_carrot", "crop_potato", "crop_corn", "crop_tomato", "crop_cabbage",
+          "crop_watermelon", "crop_pumpkin", "crop_pepper", "crop_cloudberry",
+          "monstera_a", "monstera_b", "taro_a", "taro_b", "ginger", "hibiscus_a", "hibiscus_b", "tree_fern_a", "tree_fern_b",
+          "gorse", "foxglove", "dwarf_birch", "cotton_grass", "yucca", "ohia", "cattail", "swamp_willow", "mushrooms",
+          "mangrove_a", "mangrove_b", "moss_a", "moss_b", "lingonberry_bush", "pine_a", "pine_b",
+          "crooked_tree_a", "crooked_tree_b", "heather_a", "heather_b", "blueberry_bush",
+          "aloe_plant", "coffee_bush", "charred_tree_a", "charred_tree_b"]
+
 # своё разрешение атласа (иначе — по площади модели): шхуна 15 м и хижина (бамбук + три яруса соломы) — крупнее
 TEX_SIZE = {"albatros": 2048, "albatros_wreck": 2048, "hut": 2048}
 
 # эти модели запекаются в текстуру (texbake.py): чёткие границы цветов, ткань, пряди, шерсть, перья, дерево, камень
-TEXTURED = PEOPLE + ANIMALS + WEAR + BUILDINGS + BOATS
+TEXTURED = PEOPLE + ANIMALS + WEAR + BUILDINGS + BOATS + PLANTS
 
 
 def all_builders():
@@ -88,7 +101,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     builders = all_builders()
     args = sys.argv[1:]
-    report = "--kinds" in args          # напечатать виды поверхности построек (что угадалось по цвету)
+    report = "--kinds" in args          # напечатать виды поверхности построек и растений (что угадалось по цвету)
     args = [a for a in args if a != "--kinds"]
     names = args or list(builders)
     for name in names:
@@ -96,7 +109,10 @@ def main():
         kit.reset()
         builders[name]()
         size = 0
-        if name in BUILDINGS or name in BOATS:
+        if name in PLANTS:
+            # листья, кроны, кора, хвоя, стебли, плоды, мох — texbake.detail_plant
+            size = texbake.bake_model(name, "plant", size=TEX_SIZE.get(name), seed=len(name), report=report)
+        elif name in BUILDINGS or name in BOATS:
             # дерево, солома, камень, металл, верёвка — texbake.detail_build
             size = texbake.bake_model(name, "build", size=TEX_SIZE.get(name), seed=len(name), report=report)
         elif name in TEXTURED:

@@ -97,7 +97,7 @@ func _grow_visual() -> void:
 	if items.is_empty() and f is MeshInstance3D:
 		items = [f]
 	if _fruit_mat == null and not items.is_empty():
-		_fruit_mat = (Models.model_mat(false).duplicate() as ShaderMaterial)
+		_fruit_mat = Models.tint_mat(items[0] as MeshInstance3D)
 	for it in items:
 		(it as MeshInstance3D).scale = Vector3.ONE * k
 		(it as MeshInstance3D).material_override = _fruit_mat
