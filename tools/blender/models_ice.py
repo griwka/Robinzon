@@ -555,13 +555,23 @@ def ice_chest():
     set_parent(l, b)
     ice = _block("ic", 1.25, 0.95, 1.05, cuts=4, z0=-0.05)
     displace(ice, 0.1, 0.4, "VORONOI")
-    paint(ice, ICE_L, ao=0.0, noise_amt=0.08, fn=_ice_fn(ICE_L, snow_z=0.85, snow_n=0.5))
+    paint(ice, ICE_L, ao=0.0, noise_amt=0.08, fn=_snow_fn(ICE_L, snow_z=0.85, snow_n=0.5))
     cap = sphere("cp", (0, 0, 1.0), 0.65, (1.0, 0.8, 0.2))
     paint(cap, SNOW, ao=0.0)
     parts = [ice, cap]
     _icicles(parts, -0.5, 0.5, -0.5, 0.95, 4, 3, (0.15, 0.35), 0.04)
     i = join(parts, "Ice")
     set_origin(i, (0, 0, 0))
+
+
+def _scale_fn():
+    """Окалина и нагар на чаше жаровни — пятнами по шуму (не полосами)."""
+    from mathutils import noise
+
+    def f(co, n):
+        v = noise.noise(co * 6.0) + 0.4 * noise.noise(co * 19.0)
+        return hexcol("6a4a3a") if v > 0.35 else None
+    return f
 
 
 def brazier():
@@ -574,7 +584,7 @@ def brazier():
         paint(leg, IRON, ao=0.0)
         parts.append(leg)
     bowl = lathe("bw", [(0.0, 0.5), (0.2, 0.5), (0.34, 0.66), (0.36, 0.72), (0.33, 0.7), (0.0, 0.62)], 18)
-    paint(bowl, IRON, ao=0.0, fn=lambda co, n: hexcol("6a4a3a") if math.sin(co.x * 20 + co.y * 13) > 0.8 else None)
+    paint(bowl, IRON, ao=0.0, fn=_scale_fn())
     parts.append(bowl)
     r = rnd(4)
     for k in range(8):
@@ -675,10 +685,12 @@ def ice_shelf():
     bmesh.ops.triangulate(bm, faces=bm.faces[:])
     bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=3, use_grid_fill=True)
     slab = from_bm("sl", bm, smooth=False)
+    # снежные пятна — по шуму (а не произведением синусов: в текстуре стали бы клетками); трещины, грани, пузырьки
+    # рисует запекание (texbake_props, "ice")
+    from mathutils import noise
     paint(slab, ICE_L, ao=0.0, noise_amt=0.08,
-          fn=lambda co, n: (SNOW if (n.z > 0.5 and math.sin(co.x * 1.3) * math.sin(co.y * 2.1) > 0.25) else
-                            (ICE_D if (n.z > 0.5 and abs(math.sin(co.x * 2.2 + co.y * 3.1)) < 0.05) else
-                             (ICE if n.z < 0.3 else None))))
+          fn=lambda co, n: (SNOW if (n.z > 0.5 and noise.noise(co * 0.45) + 0.3 * noise.noise(co * 1.7) > 0.12) else
+                            (ICE if n.z < 0.3 else None)))
     join([slab], "IceShelf")
 
 
@@ -687,7 +699,7 @@ def ice_hole():
     ring = lathe("rg", [(0.3, 0.0), (0.55, 0.0), (0.6, 0.05), (0.42, 0.1), (0.3, 0.06)], 20)
     paint(ring, ICE_L, ao=0.0, fn=lambda co, n: SNOW if n.z > 0.6 and math.hypot(co.x, co.y) > 0.45 else None)
     water = cyl("wt", (0, 0, 0.01), 0.31, 0.31, 0.02, segs=20)
-    paint(water, hexcol("1f4a6a"), ao=0.0, noise_amt=0, fn=lambda co, n: hexcol("3f7a9a") if math.sin(co.x * 30) > 0.8 else None)
+    paint(water, hexcol("1f4a6a"), ao=0.0, noise_amt=0)     # блики на воде — пятнами при запекании ("water")
     r = join([ring, water], "Hole")
     cap = sphere("cp", (0, 0, 0.06), 0.42, (1.0, 1.0, 0.22))
     paint(cap, SNOW, ao=0.0, fn=lambda co, n: SNOW_SH if n.z < 0.4 else None)
@@ -814,11 +826,24 @@ def pine_b():
     _pine(29, 4.2)
 
 
+def _snow_fn(base=ICE, snow_z=0.0, snow_n=0.55):
+    """Лёд для запекания (texbake_props, "ice"): снежная шапка с рваным краем, верх светлее. Трещины, пузырьки
+    и иней рисует запекание — без полос sin(), которые в текстуре стали бы «зеброй» (как в _ice_fn)."""
+    from mathutils import noise
+
+    def f(co, n):
+        v = n.z + 0.25 * noise.noise(co * 3.0) + 0.1 * noise.noise(co * 11.0)
+        if co.z > snow_z + 0.12 * noise.noise(co * 2.0 + Vector((5.0, 0, 0))) and v > snow_n:
+            return SNOW
+        return shade(base, 1.1) if n.z > 0.5 else None
+    return f
+
+
 def ice_block():
     """Ледяная глыба: гранёный голубой обломок со снежной шапкой (из неё колют лёд)."""
     b = ico("ib", (0, 0, 0.45), 0.65, (1.2, 1.0, 0.95), sub=3)
     displace(b, 0.18, 0.6, "VORONOI")
-    paint(b, ICE, ao=0.25, ao_h=0.4, noise_amt=0.08, fn=_ice_fn(ICE, snow_z=0.75, snow_n=0.6))
+    paint(b, ICE, ao=0.25, ao_h=0.4, noise_amt=0.08, fn=_snow_fn(ICE, snow_z=0.75, snow_n=0.6))
     join([b], "IceBlock")
 
 
@@ -834,7 +859,7 @@ def _ice_wall(seed):
     w = join(parts, "IceWall")
     remesh(w, 0.15, 2)
     displace(w, 0.16, 0.5, "VORONOI")
-    paint(w, ICE, ao=0.3, ao_h=0.8, noise_amt=0.08, fn=_ice_fn(ICE, snow_z=1.6, snow_n=0.55))
+    paint(w, ICE, ao=0.3, ao_h=0.8, noise_amt=0.08, fn=_snow_fn(ICE, snow_z=1.6, snow_n=0.55))
     ic = []
     _icicles(ic, -1.4, 1.4, -0.62, 1.9, 6, seed, (0.2, 0.6), 0.05)
     for p in ic:

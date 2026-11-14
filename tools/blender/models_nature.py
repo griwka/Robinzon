@@ -250,6 +250,16 @@ def bush_c():
 
 
 # ------------------------------------------------------------------ камни
+def _moss_top(z0, nz):
+    """Мох на верхних гранях выше z0: граница рваная (шум), снизу — отдельные пятнышки."""
+    from mathutils import noise
+
+    def f(co, n):
+        v = n.z + 0.22 * noise.noise(co * 5.0) + 0.1 * noise.noise(co * 17.0)
+        return hexcol("6fb04a") if (v > nz and co.z > z0) else None
+    return f
+
+
 def rock(seed, big=True):
     rr = rnd(seed)
     col = mix(hexcol("a7abb0"), hexcol("bdb3a3"), rr.random())
@@ -261,8 +271,10 @@ def rock(seed, big=True):
         r = ico("rk", (x, y, s * 0.35), s, (rr.uniform(1.0, 1.3), 1.0, 0.7), (0, 0, rr.uniform(0, 3)), sub=2)
         displace(r, 0.35 * s, 0.6 * s, "VORONOI")
         subsurf(r, 1)
+        # мох на макушке: край — по шуму, не по ровной линии (в текстуре видно каждый пиксель); деталь камня
+        # (крапинки, трещины, лишайник) и мха рисует texbake_props
         paint(r, shade(col, 1 - 0.06 * i), ao=0.35, ao_h=0.4 * s + 0.05, noise_amt=0.12, nscale=4 / s,
-              fn=(lambda co, n: hexcol("6fb04a") if (n.z > 0.75 and co.z > 0.35) else None) if big else None)
+              fn=_moss_top(0.35, 0.72) if big else None)
         parts.append(r)
     join(parts, "Rock")
 
@@ -296,8 +308,8 @@ def driftwood():
     br = tube("db", [(0.2, -0.04, 0.15), (0.45, -0.3, 0.32), (0.6, -0.42, 0.36)], [0.06, 0.04, 0.02], 8)
     br2 = tube("db2", [(-0.4, 0.06, 0.16), (-0.55, 0.3, 0.2)], [0.05, 0.02], 8)
     for o in (log, br, br2):
-        paint(o, hexcol("c8a985"), ao=0.3, ao_h=0.15, noise_amt=0.12, nscale=10,
-              fn=lambda co, n: 0.82 if math.sin(co.x * 40 + co.y * 10) > 0.75 else None)
+        # волокна и трещины выбеленного дерева — texbake_props ("driftwood")
+        paint(o, hexcol("c8a985"), ao=0.3, ao_h=0.15, noise_amt=0.12, nscale=10)
     join([log, br, br2], "Driftwood")
 
 
@@ -321,7 +333,14 @@ def shell():
         bm.faces.new((top, ring[j], ring[j + 1]))
     sh = from_bm("sh", bm)
     subsurf(sh, 1)
-    paint(sh, hexcol("f6c7c0"), ao=0.0, fn=lambda co, n: 0.82 if math.sin(math.atan2(co.y + 0.02, co.x) * ribs * 2) > 0.6 else None)
+    def shell_fn(co, n):
+        # рёбра веером от «замка»: мягкий профиль (не полосы через одну), к краю — пара тёмных колец роста
+        a = math.atan2(co.y + 0.02, co.x)
+        rib = 0.5 + 0.5 * math.cos(a * ribs * 2)
+        d = math.hypot(co.x, co.y + 0.02)
+        band = 0.9 if (0.105 < d < 0.118 or 0.138 < d < 0.146) else 1.0
+        return (0.86 + 0.16 * rib * rib) * band
+    paint(sh, hexcol("f6c7c0"), ao=0.0, fn=shell_fn)
     parts.append(sh)
     join(parts, "Shell")
 

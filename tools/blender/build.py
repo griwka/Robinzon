@@ -14,6 +14,7 @@ OUT = os.path.join(HERE, "..", "..", "assets", "models")
 
 import kit  # noqa: E402
 import texbake  # noqa: E402
+import texbake_props  # noqa: E402
 
 MODULES = ["models_characters", "models_nature", "models_buildings", "models_farm", "models_jungle", "models_banyan", "models_fort", "models_storm", "models_ice", "models_volcano", "models_fog", "models_eye", "models_tools", "models_flora"]
 
@@ -46,6 +47,10 @@ TEX_SIZE = {"albatros": 2048, "albatros_wreck": 2048, "hut": 2048}
 
 # эти модели запекаются в текстуру (texbake.py): чёткие границы цветов, ткань, пряди, шерсть, перья, дерево, камень
 TEXTURED = PEOPLE + ANIMALS + WEAR + BUILDINGS + BOATS
+
+# камни и мелочь (v1.0.9): валуны, скалы, лёд, ракушки, ящики, инструменты — texbake_props.py (вид по пикселю)
+PROPS = texbake_props.PROPS
+TEXTURED = TEXTURED + PROPS
 
 
 def all_builders():
@@ -99,6 +104,8 @@ def main():
         if name in BUILDINGS or name in BOATS:
             # дерево, солома, камень, металл, верёвка — texbake.detail_build
             size = texbake.bake_model(name, "build", size=TEX_SIZE.get(name), seed=len(name), report=report)
+        elif name in PROPS:
+            size = texbake_props.bake(name, seed=len(name), report=report)
         elif name in TEXTURED:
             # раскраска считается в каждом пикселе атласа; складки, пряди, шерсть — там же (texbake.detail)
             size = texbake.bake_model(name, "animals" if name in ANIMALS else "people", seed=len(name),

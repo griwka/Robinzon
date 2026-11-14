@@ -39,14 +39,10 @@ def handle(name, z_top, z_bot, r_top, r_bot, col=WOOD, segs=10, swell=0.0):
         pts.append((0, 0, z_top + (z_bot - z_top) * t))
         rad.append(r_top + (r_bot - r_top) * t + swell * math.sin(t * math.pi))
     h = tube(name, pts, rad, segs)
-
-    def grain(co, nrm):
-        a = math.atan2(co.y, co.x)
-        s = math.sin(a * 7 + co.z * 25 + math.sin(co.z * 9) * 1.5)
-        return 0.82 if s > 0.75 else (1.08 if s < -0.85 else None)
-    paint(h, col, ao=0.0, noise_amt=0.06, nscale=12, fn=grain)
+    # волокна вдоль рукояти рисует запекание (texbake_props → "wood", направление — атрибут u0 трубки)
+    paint(h, col, ao=0.0, noise_amt=0.06, nscale=12, mat="wood")
     cap = sphere(name + "c", (0, 0, z_top), r_top * 1.02, (1, 1, 0.55), segs=10, rings=6)
-    paint(cap, shade(col, 0.92), ao=0.0)
+    paint(cap, shade(col, 0.92), ao=0.0, mat="endgrain")
     return [h, cap]
 
 
@@ -59,7 +55,7 @@ def wrap(name, z0, z1, r, col=LEATHER, turns=5, w=0.011):
         a = t * turns * 2 * math.pi
         pts.append((math.cos(a) * r, math.sin(a) * r, z0 + (z1 - z0) * t))
     t = tube(name, pts, w, 6, caps=False)
-    paint(t, col, ao=0.0, noise_amt=0.1, nscale=30, fn=lambda co, n: 0.85 if int((co.z * 120)) % 3 == 0 else None)
+    paint(t, col, ao=0.0, noise_amt=0.1, nscale=30)     # зерно и заломы кожи — texbake_props ("leather")
     return t
 
 
@@ -145,12 +141,9 @@ def tool_stone_axe():
     head = blade("hd", outline, lambda y, z: 0.085 - 0.07 * smoothstep(0.02, 0.23, y) + 0.008 * math.sin(z * 90 + y * 60),
                  STONE, hexcol("aab1b8"), lambda y, z: y > 0.215)
 
-    def chips(co, nrm):
-        k = math.sin(co.z * 140) * math.sin(co.y * 110)
-        if co.y > 0.222:
-            return hexcol("aab1b8")
-        return 0.72 if k > 0.45 else (1.12 if k < -0.6 else (0.9 if nrm.x < 0 else None))
-    paint(head, STONE, ao=0.0, noise_amt=0.08, nscale=18, fn=chips)
+    # сколы и раковистые волны кремня, меловая корка — texbake_props ("flint"); кромка светлее
+    paint(head, STONE, ao=0.0, noise_amt=0.08, nscale=18,
+          fn=lambda co, nrm: hexcol("aab1b8") if co.y > 0.222 else (0.9 if nrm.x < 0 else None))
     parts.append(head)
     parts += lashing("l", -0.54, 0.05, ROPE, 3)
     join(parts, "Tool")
@@ -181,8 +174,7 @@ def _machete(name_col, edge_col, length=0.55, guard_col=STEEL, scale_col=LEATHER
     parts = []
     # рукоять: две накладки, заклёпки, отверстие под темляк
     grip = box("g", (0, 0, -0.05), (0.034, 0.05, 0.26), bev=0.012, seg=3)
-    paint(grip, scale_col, ao=0.0, noise_amt=0.1, nscale=25,
-          fn=lambda co, n: 0.82 if int((co.z + 1) * 40) % 4 == 0 else None)
+    paint(grip, scale_col, ao=0.0, noise_amt=0.1, nscale=25, mat="leather")
     parts.append(grip)
     for z in (0.04, -0.06, -0.15):
         parts.append(rivet("rv%d" % int(z * 100), (0.019, 0, z), 0.008, "x", rivet_col))
@@ -229,7 +221,7 @@ def tool_pickaxe():
     parts = handle("h", 0.12, -0.62, 0.03, 0.036, WOOD_DARK, swell=0.004)
     parts.append(wrap("w", 0.07, -0.09, 0.034, LEATHER, 4))
     block = box("bk", (0, 0, -0.57), (0.07, 0.2, 0.09), bev=0.015, seg=2)
-    paint(block, WOOD, ao=0.0, fn=lambda co, n: 0.85 if int(co.y * 70) % 3 == 0 else None)
+    paint(block, WOOD, ao=0.0, mat="wood")
     parts.append(block)
     for s in (-1, 1):
         pts = [(0, s * 0.09, -0.56), (0, s * 0.2, -0.53), (0, s * 0.31, -0.47), (0, s * 0.35, -0.43)]
@@ -332,7 +324,13 @@ def tool_watering_can():
     paint(spout, dark, ao=0.0)
     parts.append(spout)
     rose = cyl("rs", (0, 0.33, -0.08), 0.016, 0.042, 0.045, (-0.75, 0, 0), 12)
-    paint(rose, BRASS, ao=0.0, fn=lambda co, n: 0.62 if (int(co.x * 260) + int(co.z * 260)) % 3 == 0 and n.y > 0.4 else None)
+    def holes(co, n):
+        # дырочки ситечка — кружками по сетке (а не косыми полосами)
+        if n.y < 0.4:
+            return None
+        fx, fz = (co.x * 220) % 1.0 - 0.5, (co.z * 220) % 1.0 - 0.5
+        return 0.45 if fx * fx + fz * fz < 0.07 else None
+    paint(rose, BRASS, ao=0.0, fn=holes)
     parts.append(rose)
     join(parts, "Tool")
 
@@ -460,7 +458,7 @@ def tool_ice_drill():
     parts.append(bar)
     for s in (-1, 1):
         g = tube("g%d" % s, [(s * 0.1, 0, 0.14), (s * 0.24, 0, 0.14)], 0.031, 10)
-        paint(g, hexcol("c9a050"), ao=0.0, fn=lambda co, n: 0.85 if int(abs(co.x) * 80) % 3 == 0 else None)
+        paint(g, hexcol("c9a050"), ao=0.0, mat="wood")
         parts.append(g)
         cap = sphere("c%d" % s, (s * 0.245, 0, 0.14), 0.032, (0.5, 1, 1), segs=10, rings=6)
         paint(cap, hexcol("a8823e"), ao=0.0)

@@ -343,8 +343,9 @@ def cliff(seed):
         displace(r, 0.35, 0.5, "VORONOI")
         subsurf(r, 1)
         c = mix(hexcol("8f9196"), hexcol("a89f90"), rr.random())
+        # слои породы, трещины и лишайник рисует texbake_props ("cliff"); мох сверху — с рваным краем
         paint(r, c, ao=0.35, ao_h=0.6, noise_amt=0.12, nscale=3,
-              fn=lambda co, n: hexcol("6f9a48") if (n.z > 0.8 and co.z > 1.2) else (0.78 if (co.z * 6) % 1.0 < 0.08 else None))
+              fn=lambda co, n: hexcol("6f9a48") if (n.z + 0.2 * noise_v(co * 4.0) > 0.78 and co.z > 1.2) else None)
         parts.append(r)
     join(parts, "Cliff")
 
