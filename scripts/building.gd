@@ -199,7 +199,7 @@ func get_hint() -> String:
 			return "Тыквенный фонарь — туман здесь больше не вернётся"
 		"well": return "Колодец — вода холодная и чистая"
 		"long_table": return "Длинный стол — вся команда в сборе" if Game.flags.get("village_moved", false) else "Длинный стол"
-		"bench": return "Скамейка — присесть отдохнуть"
+		"bench": return "Скамейка — встать (WASD или Пробел)" if Sitting.on(self) else "Скамейка — присесть и посмотреть вокруг"
 	return Data.BUILDINGS[id]["name"]
 
 
@@ -227,7 +227,10 @@ func interact(_player: Node) -> void:
 		"tent", "hut", "hammock": sleep_requested.emit()
 		"raft", "canoe", "boat": sail_requested.emit()
 		"shelter": Game.notified.emit("Сухо и спокойно. Дождь стучит по листьям над головой.", Color("ffe08a"))
-		"bench": Game.notified.emit("Ты присел на скамейку. Шумит прибой, кричат чайки...", Color("ffe08a"))
+		"bench":
+			# герой по-настоящему садится (scripts/sitting.gd); у запасной модели без скелета — прежний текст
+			if not Sitting.on(self) and not Sitting.sit(_player, self, "bench"):
+				Game.notified.emit("Ты присел на скамейку. Шумит прибой, кричат чайки...", Color("ffe08a"))
 		"torch":
 			lit = not lit
 			_light.visible = lit

@@ -291,6 +291,42 @@ static func _cozy(dev: Node) -> void:
 	cl._update_cozy()
 	_ok(dev, CozyLife.resting and Game.hunger_regen() > regen_far, "у костра в уютном лагере силы возвращаются быстрее")
 
+	# посидеть: герой по-настоящему садится на скамейку и смотрит туда же, куда она
+	var bench_pos: Vector3 = fire.global_position + Vector3(-9.0, 0, 9.0)
+	bench_pos.y = isl.height_at(bench_pos.x, bench_pos.z)
+	var bench := bs.spawn_building("bench", bench_pos, 0.7)
+	made.append(bench)
+	var hero := pl as Player
+	if hero.rig != null:
+		var cam_was := hero.camera_distance
+		hero.global_position = bench_pos + Vector3(0, 0.2, 1.5)
+		bench.interact(hero)
+		var st: Sitting = Sitting.current
+		_ok(dev, st != null and Sitting.on(bench) and not hero.is_physics_processing(), "E у скамейки — герой садится (ходьба выключена)")
+		for n in 40:
+			st._physics_process(0.05)
+		var hips_y: float = hero.rig.g("Hips").origin.y
+		var hips_rest: float = (hero.rig.rest["Hips"] as Transform3D).origin.y
+		_ok(dev, hero.global_position.distance_to(st.seat_point()) < 0.05 and absf(hips_y - 0.56) < 0.03,
+			"герой на сиденье: таз на высоте доски (%.2f; стоя — %.2f)" % [hips_y, hips_rest])
+		var knee_l: Vector3 = hero.rig.g("ShinL").origin
+		var thigh_l: Vector3 = hero.rig.g("ThighL").origin
+		_ok(dev, knee_l.z < thigh_l.z - 0.05, "колени согнуты: смотрят вперёд")
+		_ok(dev, absf(angle_difference(hero.camera_yaw, st.face_yaw())) < 0.01 and hero.camera_distance < cam_was and hero.camera_pitch > -0.3,
+			"камера ниже и ближе, смотрит туда же, куда сидящий: видно пейзаж")
+		_ok(dev, bench.get_hint().contains("встать"), "подсказка у скамейки: как встать")
+		st.stand()
+		_ok(dev, not Sitting.sitting_now() and hero.is_physics_processing() and is_equal_approx(hero.camera_distance, cam_was),
+			"встал: ходьба и камера вернулись")
+		var chair2 := _put(main, bs, isl, fire, made, "camp_stool", 40)
+		_ok(dev, Sitting.sit(hero, chair2, "camp_stool") and Sitting.on(chair2), "на табурет и в кресло-качалку тоже можно сесть")
+		chair2.remove_from_group("building")
+		chair2.free()
+		Sitting.current._physics_process(0.05)
+		_ok(dev, not Sitting.sitting_now() and hero.is_physics_processing(), "сиденье убрали — герой сам встал")
+	else:
+		print("      (у запасной модели героя нет скелета — сидение не проверяется)")
+
 	# вечерний гость
 	Game.flags.erase("guest")
 	Game.flags.erase("guest_roll_day")
@@ -357,6 +393,7 @@ static func _put(main: Node, bs: BuildSystem, isl: Island, fire: Node3D, made: A
 
 # ------------------------------------------------------------------ Скриншоты
 ## --open=cook — окно котелка (в сумке продукты, часть рецептов уже найдена); --open=cookbook — кулинарная книга;
+## --open=sit — герой сидит на скамейке у берега (--sitcam=1 — вид со стороны);
 ## --open=cozy — лагерь с украшениями у костра и вечерним гостем (время — --time=0.76, камера — --yaw/--pitch/--dist);
 ## --open=decor — меню строительства, вкладка «Декор».
 const CAMP := [
@@ -373,7 +410,7 @@ const CAMP := [
 
 
 static func shot(dev: Node, what: String) -> void:
-	if not what in ["cook", "cookbook", "cozy", "decor"]:
+	if not what in ["cook", "cookbook", "cozy", "decor", "sit"]:
 		return
 	var main: Node = dev.get("main")
 	var hud: HUD = main.get("hud")
@@ -400,6 +437,24 @@ static func shot(dev: Node, what: String) -> void:
 			cl.cook_ui.put("fish")
 			cl.cook_ui.put("fish")
 			cl.cook_ui.put("coconut")
+		"sit":
+			# герой сидит на скамейке у берега и смотрит на море (--sitcam=1 — вид со стороны)
+			var bs2: BuildSystem = main.get("build")
+			var isl2: Island = main.get("island")
+			var to_sea: Vector3 = isl2.wreck_point - isl2.camp_center
+			to_sea.y = 0.0
+			to_sea = to_sea.normalized()
+			var bp: Vector3 = isl2.camp_center.lerp(isl2.wreck_point, 0.45) + Vector3(-to_sea.z, 0, to_sea.x) * 4.0
+			bp.y = isl2.height_at(bp.x, bp.z)
+			for n in dev.get_tree().get_nodes_in_group("obstacle"):
+				if n is ResourceNode and (n as Node3D).global_position.distance_to(bp) < 5.0:
+					n.call("_deplete")
+			var bench := bs2.spawn_building("bench", bp, atan2(to_sea.x, to_sea.z))
+			var hero: Player = main.get("player")
+			hero.global_position = bp + to_sea * 1.2 + Vector3(0, 0.3, 0)
+			Sitting.sit(hero, bench, "bench")
+			if (dev.get("args") as Dictionary).has("sitcam") and Sitting.current != null:
+				Sitting.current.set_meta("side", true)
 		"cozy":
 			var bs: BuildSystem = main.get("build")
 			var isl: Island = main.get("island")

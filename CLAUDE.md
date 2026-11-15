@@ -81,6 +81,9 @@
   Блюда — в `Data.ITEMS` (поля `buff`, `buff_t`) и `SELL_PRICES` (блок «кулинария»). Модели — `tools/blender/models_decor.py`
   (котелок) и `models_decor_camp.py` (украшения), список `DECOR` в `build.py`; иконки — `tools/icons_decor.py` и `icons_decor_camp.py`.
   Проверка: `--autotest --cozyonly` (быстро), снимки: `--shot=… --open=cook|cookbook|cozy|decor`.
+  Сидение — `scripts/sitting.gd` (`Sitting.sit(герой, сиденье, id)`, места — `SEATS`): пока герой сидит, его `_physics_process`
+  выключен, позу (HeroRig: таз на сиденье, IK ног и рук), место и камеру ставит узел `Sitting`; `player.gd` не менялся.
+  Снимок: `--open=sit` (`--sitcam=1` — вид со стороны).
 - **Ассеты собираются скриптами, руками не правятся:**
   - модели: `tools/blender/*.py` → `assets/models/*.glb`;
   - иконки: `tools/gen_icons.py` → `assets/icons/` (подробности — раздел «Иконки» ниже);

@@ -140,7 +140,7 @@ func interact_point() -> Vector3:
 func get_hint() -> String:
 	var nm: String = cfg()["name"]
 	match id:
-		"rocking_chair": return "%s — посидеть" % nm
+		"rocking_chair", "camp_stool": return "%s — %s" % [nm, "встать (WASD или Пробел)" if Sitting.on(self) else "посидеть"]
 		"gramophone": return "%s — %s" % [nm, "остановить" if playing else "завести"]
 		"sign_camp", "sign_arrows": return "%s — прочитать" % nm
 		"wash_stand": return "%s — умыться" % nm
@@ -196,8 +196,14 @@ func remove_piece() -> void:
 
 func interact(_player: Node) -> void:
 	var nm: String = cfg()["name"]
+	if Sitting.on(self):
+		return      # уже сидим: встать — WASD, Пробел или E (Sitting)
 	var opts := []
-	if SAY.has(id) or id in ["gramophone", "sign_arrows"]:
+	if Sitting.can_sit(id):
+		opts.append({"text": "Посидеть", "icon": id, "callback": func():
+			if not Sitting.sit(_player, self, id):
+				act()})
+	if (SAY.has(id) or id in ["gramophone", "sign_arrows"]) and not Sitting.can_sit(id):
 		var label: String = {"rocking_chair": "Посидеть", "gramophone": "Остановить" if playing else "Завести", "sign_camp": "Прочитать",
 			"sign_arrows": "Прочитать", "wash_stand": "Умыться", "wind_chime": "Тронуть"}.get(id, "Посмотреть")
 		opts.append({"text": label, "icon": id, "callback": func(): act()})
