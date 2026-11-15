@@ -356,26 +356,68 @@ static func _put(main: Node, bs: BuildSystem, isl: Island, fire: Node3D, made: A
 
 
 # ------------------------------------------------------------------ Скриншоты
-## --open=cook — окно котелка (в сумке продукты, пара рецептов уже найдена); --open=cookbook — кулинарная книга.
+## --open=cook — окно котелка (в сумке продукты, часть рецептов уже найдена); --open=cookbook — кулинарная книга;
+## --open=cozy — лагерь с украшениями у костра и вечерним гостем (время — --time=0.76, камера — --yaw/--pitch/--dist);
+## --open=decor — меню строительства, вкладка «Декор».
+const CAMP := [
+	["rug_wool", 0.0, 2.3, 0.0], ["rocking_chair", -1.5, 2.7, 2.6], ["decor_chest", 1.5, 3.0, 3.4], ["camp_table", 3.0, 1.2, 1.2],
+	["camp_stool", 2.2, 2.4, 0.0], ["camp_stool", 4.0, 2.2, 0.0], ["cook_pot", -3.0, 0.4, 1.2], ["camp_shelf", -4.2, -1.4, 0.9],
+	["garland_lights", 0.0, -3.2, 0.0], ["garland_flags", 5.2, -1.2, 1.2], ["lantern_post", -4.8, 2.6, 0.6], ["lantern_post", 5.2, 3.6, 2.4],
+	["paper_lantern", 1.6, 4.6, 0.0], ["stone_lantern", -2.4, 4.6, 0.0], ["flower_tub", 4.2, -0.2, 0.0], ["flower_barrow", -5.6, 0.6, 1.0],
+	["flower_arch", 0.0, 6.4, 0.0], ["stone_path", 0.0, 4.8, 0.0], ["stone_path", 0.0, 7.6, 0.4], ["picket_fence", -1.7, 6.4, 0.0],
+	["picket_fence", -3.0, 6.4, 0.0], ["picket_fence", 1.7, 6.4, 0.0], ["picket_fence", 3.0, 6.4, 0.0], ["sign_camp", 2.4, 7.6, 0.0],
+	["sign_arrows", -2.4, 7.8, 0.0], ["bird_feeder", 6.2, -3.6, 0.0], ["weather_vane", -6.0, -3.2, 0.0], ["log_stack", -2.0, -4.6, 0.0],
+	["wind_chime", 3.2, -3.0, 0.0], ["gramophone", -2.6, 2.0, 2.2], ["wash_stand", -4.6, -3.2, 0.6], ["bamboo_fence", 6.8, 1.4, 1.57],
+	["bamboo_fence", 6.8, 2.7, 1.57], ["garden_gate", 6.8, 0.0, 1.57], ["plank_path", 5.6, 0.2, 0.0], ["rug_straw", 3.0, 1.3, 0.0],
+]
+
+
 static func shot(dev: Node, what: String) -> void:
-	if not what in ["cook", "cookbook"]:
+	if not what in ["cook", "cookbook", "cozy", "decor"]:
 		return
 	var main: Node = dev.get("main")
 	var hud: HUD = main.get("hud")
+	dev.call("_flush")
 	Game.flags["ending_open_sea"] = true
 	CozyLife.migrate()
 	var b := {}
 	for id in ["veg_stew", "tomato_omelette", "coconut_fish", "banana_pancakes", "pumpkin_soup", "lemonade", "cheese_salad", "corn_cakes",
-			"cloudberry_pie", "milk_coffee", "fish_pie"]:
+			"cloudberry_pie", "milk_coffee", "fish_pie", "spicy_corn", "honey_carrot", "truffle_potato"]:
 		b[id] = 1
 	Game.flags["cookbook"] = b
 	dev.call("_give", {"potato": 4, "carrot": 5, "tomato": 3, "corn": 6, "cabbage": 2, "pumpkin": 2, "egg": 4, "milk": 3, "honey": 2,
-		"fish": 5, "coconut": 3, "lemon": 2, "banana": 4, "mango": 2, "truffle": 1, "cheese": 1, "pepper": 2})
-	if what == "cookbook":
-		hud.open_collections()
-		return
+		"fish": 5, "coconut": 3, "lemon": 2, "banana": 4, "mango": 2, "truffle": 1, "cheese": 1, "pepper": 2, "plank": 12, "wood": 9,
+		"rope": 4, "stone": 9, "bamboo": 6, "fiber": 10})
 	var cl := dev.get_tree().get_first_node_in_group("cozy_life") as CozyLife
-	cl.open_cooking()
-	cl.cook_ui.put("fish")
-	cl.cook_ui.put("fish")
-	cl.cook_ui.put("coconut")
+	match what:
+		"cookbook":
+			hud.open_collections()
+		"decor":
+			hud._build_tab = "декор"
+			hud.open_build()
+		"cook":
+			cl.open_cooking()
+			cl.cook_ui.put("fish")
+			cl.cook_ui.put("fish")
+			cl.cook_ui.put("coconut")
+		"cozy":
+			var bs: BuildSystem = main.get("build")
+			var isl: Island = main.get("island")
+			var c: Vector3 = isl.camp_center
+			for n in dev.get_tree().get_nodes_in_group("obstacle"):
+				if n is ResourceNode and (n as Node3D).global_position.distance_to(c) < 13.0:
+					n.call("_deplete")
+			if isl.grass_field:
+				isl.grass_field.clear_at(c, 10.0, true)
+			var fire := bs.spawn_building("campfire", Vector3(c.x, isl.height_at(c.x, c.z), c.z), 0.0)
+			for e in CAMP:
+				var pos := Vector3(c.x + float(e[1]), 0, c.z + float(e[2]))
+				pos.y = isl.height_at(pos.x, pos.z)
+				bs.spawn_building(str(e[0]), pos, float(e[3]))
+			cl._update_cozy()
+			Game.flags["guest"] = {"id": "marta", "day": Game.day, "talked": false}
+			cl._spawn_guest("marta", fire, false)
+			var pl: Node3D = main.get("player")
+			pl.global_position = Vector3(c.x - 0.6, isl.height_at(c.x - 0.6, c.z + 3.6) + 0.3, c.z + 3.6)
+			cl._update_cozy()
+			cl._update_labels()

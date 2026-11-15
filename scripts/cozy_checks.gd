@@ -12,6 +12,15 @@ static func _price(id: String) -> int:
 	return int(Data.SELL_PRICES.get(id, 0))
 
 
+## Каждый материал постройки можно достать (каждый проверяем отдельно, с нуля: цепочка «гвозди → кузница → руда → кирка»
+## длинная, а у QuestValidator.can_get есть предел глубины).
+static func _can_build(v: QuestValidator, id: String) -> bool:
+	for c in Data.BUILDINGS[id]["cost"]:
+		if not v.can_get(c):
+			return false
+	return true
+
+
 static func run(v: QuestValidator) -> void:
 	# после финала: судно Лёвы, котелок и украшения открыты (GreatFire.choose и CozyLife.migrate)
 	v.unlocked["shop_lyova"] = true
@@ -22,7 +31,7 @@ static func run(v: QuestValidator) -> void:
 
 	# ---- кулинария
 	v._where = "Кулинария"
-	if not v._building_ok("cook_pot"):
+	if not _can_build(v, "cook_pot"):
 		v._err("котелок нельзя построить: чего-то из материалов не достать")
 	var ratio := 0.0
 	var seen := {}
@@ -92,7 +101,7 @@ static func run(v: QuestValidator) -> void:
 			v._err("украшение «%s» не даёт уюта" % id)
 		if b.get("tab", "") != "декор":
 			v._err("украшение «%s» не на вкладке «Декор»" % id)
-		if not v._building_ok(id):
+		if not _can_build(v, id):
 			v._err("украшение «%s» нельзя поставить: чего-то из материалов не достать" % id)
 		if not ResourceLoader.exists("res://assets/models/%s.glb" % id):
 			v._err("у украшения «%s» нет модели" % id)
