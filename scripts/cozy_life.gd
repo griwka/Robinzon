@@ -32,6 +32,10 @@ func _process(delta: float) -> void:
 ## Старые сохранения и только что выбранный финал: открыть всё новое. Ничего не отнимает и не меняет в прежнем.
 static func migrate() -> void:
 	Cooking.unlock_postgame()
+	if Game.ended():
+		for id in Data.BUILDINGS:
+			if Data.BUILDINGS[id].get("decor", false):
+				Game.unlocked[id] = true
 
 
 ## Во сколько раз меньше тает сытость за ночь сна (1.0 — как обычно).

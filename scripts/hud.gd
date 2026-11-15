@@ -1043,6 +1043,8 @@ func _locked_row(title: String) -> Control:
 func _build_row(title: String, desc: String, cost: Dictionary, id: String, variant: String) -> Control:
 	var rh := _row()
 	var h: HBoxContainer = rh[1]
+	if FX.icon_texture(id) != null and Data.BUILDINGS.get(id, {}).get("decor", false):
+		h.add_child(_card_icon(id, 56))   # у украшений лагеря — своя иконка
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(info)
