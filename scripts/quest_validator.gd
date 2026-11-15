@@ -76,6 +76,7 @@ func run(chapters: Array = Data.CHAPTERS) -> Array[String]:
 	_check_crops()
 	_check_tools()
 	_check_buyers()
+	CozyChecks.run(self)   # кулинария и уют «вечной игры»
 	return errors
 
 

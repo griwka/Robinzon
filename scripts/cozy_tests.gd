@@ -16,6 +16,7 @@ static func run(dev: Node) -> void:
 	var saved_stats: Dictionary = Game.stats.duplicate(true)
 	var saved_hunger := Game.hunger
 	_cooking(dev)
+	_cozy(dev)
 	Game.inventory = saved_inv
 	Game.flags = saved_flags
 	Game.unlocked = saved_unl
@@ -172,6 +173,186 @@ static func _cooking(dev: Node) -> void:
 	_ok(dev, not loaded.is_empty() and Cooking.known("veg_stew") and Cooking.has_buff("regen") and Game.unlocked.has("cook_pot"),
 		"книга, польза и котелок сохраняются и загружаются")
 	pot.queue_free()
+
+
+# ------------------------------------------------------------------ Уют и гости
+static func _cozy(dev: Node) -> void:
+	var main: Node = dev.get("main")
+	var hud: HUD = main.get("hud")
+	Game.flags["ending_keeper"] = true
+	CozyLife.migrate()
+	var decor: Array = []
+	for id in Data.BUILDINGS:
+		if Data.BUILDINGS[id].get("decor", false):
+			decor.append(id)
+	var locked: Array[String] = []
+	for id in decor:
+		if not Game.unlocked.has(id):
+			locked.append(id)
+	_ok(dev, decor.size() >= 20 and decor.size() <= 30 and locked.is_empty(), "украшений %d, после финала все открыты (%s)" % [decor.size(), ", ".join(locked)])
+	# счёт уюта: разное — выгодно, одинаковое — всё меньше
+	_ok(dev, CozyLife.score_of([]) == 0 and CozyLife.level_of(0) == 0, "пустой лагерь — уют 0")
+	var one := CozyLife.score_of(["lantern_post"])
+	var five := CozyLife.score_of(["lantern_post", "lantern_post", "lantern_post", "lantern_post", "lantern_post"])
+	_ok(dev, one == 4 and five < one * 3, "пять одинаковых фонарей дают меньше трёх разных вещей (%d против %d)" % [five, one * 3])
+	var torches: Array = []
+	for i in 30:
+		torches.append("torch")
+	_ok(dev, CozyLife.level_of(CozyLife.score_of(torches)) <= 1, "30 факелов не делают лагерь уютным")
+	var top: int = CozyLife.LEVELS[CozyLife.LEVELS.size() - 1]
+	_ok(dev, CozyLife.score_of(decor) >= top, "все украшения по разу дают высшую ступень (%d из %d)" % [CozyLife.score_of(decor), top])
+	# подарки: только вещи и недорогие
+	var rich: Array[String] = []
+	for gid in CozyLife.GUESTS:
+		for g in CozyLife.GUESTS[gid]["gifts"]:
+			if g[0] == "coins" or int(Data.SELL_PRICES.get(g[0], 3)) * int(g[1]) > CozyLife.GIFT_MAX_VALUE:
+				rich.append("%s: %s" % [gid, g[0]])
+	_ok(dev, rich.is_empty(), "подарки гостей — вещи не дороже %d монет (%s)" % [CozyLife.GIFT_MAX_VALUE, ", ".join(rich)])
+	# украшения за монеты — на судне Лёвы
+	var sold := false
+	for e in Game.shop_items("lyova"):
+		if e["item"] == "gramophone" and int(e["price"]) >= 100:
+			sold = true
+	_ok(dev, sold, "патефон продаётся на судне Лёвы за монеты (трата, а не доход)")
+	# меню строительства: вкладка «Декор»
+	hud._build_tab = "декор"
+	hud.open_build()
+	var texts: Array[String] = []
+	for l in hud._body(hud.build_panel).find_children("*", "Label", true, false):
+		texts.append((l as Label).text)
+	var joined := "\n".join(texts)
+	_ok(dev, joined.contains("Кресло-качалка") and joined.contains("Гирлянда огоньков"), "украшения стоят на вкладке «Декор»")
+	hud._build_tab = "дом"
+	hud.close_all()
+	if Game.location != "home":
+		print("      (лагерь, гости и бонусы уюта проверяются на острове крушения: --autotest --cozyonly)")
+		return
+
+	# лагерь: костёр и украшения вокруг него
+	var cl := dev.get_tree().get_first_node_in_group("cozy_life") as CozyLife
+	var bs: BuildSystem = main.get("build")
+	var isl: Island = main.get("island")
+	var made: Array = []
+	var fire: Building = dev.call("_build", "campfire")
+	made.append(fire)
+	Game.flags.erase("cozy_best")
+	cl._update_cozy()
+	_ok(dev, CozyLife.level_now == 0 and cl.cozy_text().contains("Пусто"), "костёр без украшений: уют «Пусто»")
+	var chair := _put(main, bs, isl, fire, made, "rocking_chair", 0)
+	var rug := _put(main, bs, isl, fire, made, "rug_wool", 1)
+	var lamp := _put(main, bs, isl, fire, made, "lantern_post", 2) as DecorPiece
+	_ok(dev, chair is DecorPiece and chair.is_in_group("interactable"), "украшение — своя постройка, к ней можно подойти")
+	_ok(dev, is_zero_approx(rug.block_radius()) and rug.collision_layer == 8, "по коврику ходят, на него можно ставить мебель")
+	_ok(dev, lamp._lights.size() == 1, "у фонаря есть свой свет")
+	Game.time_of_day = 0.95
+	lamp._update_lamps()
+	var lit: bool = lamp._lights[0].visible
+	Game.time_of_day = 0.5
+	lamp._update_lamps()
+	_ok(dev, lit and not lamp._lights[0].visible, "фонарь сам зажигается вечером и гаснет днём")
+	_ok(dev, (chair as DecorPiece).act().contains("качаешься"), "в кресле-качалке можно посидеть")
+	cl._update_cozy()
+	var s3 := CozyLife.score_now
+	_ok(dev, s3 == 4 + 3 + 4 and CozyLife.level_now == 1, "кресло, коврик и фонарь: уют %d, ступень «%s»" % [s3, CozyLife.LEVEL_NAMES[CozyLife.level_now]])
+	# далеко от костра — не считается
+	var far_pos: Vector3 = fire.global_position + Vector3(CozyLife.CAMP_R + 6.0, 0, 0)
+	far_pos.y = isl.height_at(far_pos.x, far_pos.z)
+	var far := bs.spawn_building("gramophone", far_pos, 0.0)
+	made.append(far)
+	cl._update_cozy()
+	_ok(dev, CozyLife.score_now == s3, "украшение далеко от костра уюта не добавляет")
+	# убрать — материалы возвращаются целиком
+	Game.inventory = {}
+	(far as DecorPiece).remove_piece()
+	_ok(dev, Game.count("gramophone") == 1 and not far.is_in_group("building"), "украшение можно убрать: всё возвращается в сумку")
+	# много разного — высокая ступень и бонусы
+	var i := 3
+	for id in decor:
+		if not id in ["rocking_chair", "rug_wool", "lantern_post"]:
+			_put(main, bs, isl, fire, made, id, i)
+			i += 1
+	cl._update_cozy()
+	_ok(dev, CozyLife.level_now == CozyLife.LEVELS.size() - 1, "все украшения у костра: ступень «%s» (%d очков)" % [CozyLife.LEVEL_NAMES[CozyLife.level_now], CozyLife.score_now])
+	Game.flags.erase("buffs")
+	_ok(dev, CozyLife.night_hunger() < 1.0 and CozyLife.night_hunger() >= 0.3, "в уютном лагере за ночь проголодаешься меньше (×%.2f), но не даром" % CozyLife.night_hunger())
+	Game.hunger = 70.0
+	var was_on := Game.hunger_on
+	Game.hunger_on = true
+	Game.sleep_until_morning()
+	Game.hunger_on = was_on
+	_ok(dev, Game.hunger > 55.0 and Game.hunger < 70.0, "сон в уютном лагере: сытость %d вместо 55" % int(Game.hunger))
+	var pl: Node3D = main.get("player")
+	var was_pos := pl.global_position
+	Game.hunger = 50.0
+	pl.global_position = fire.global_position + Vector3(40, 0, 0)
+	cl._update_cozy()
+	var regen_far := Game.hunger_regen()
+	pl.global_position = fire.global_position + Vector3(2, 0.5, 0)
+	cl._update_cozy()
+	_ok(dev, CozyLife.resting and Game.hunger_regen() > regen_far, "у костра в уютном лагере силы возвращаются быстрее")
+
+	# вечерний гость
+	Game.flags.erase("guest")
+	Game.flags.erase("guest_roll_day")
+	var was_playing := Game.playing
+	Game.playing = true
+	Game.time_of_day = 0.5
+	cl._update_guest()
+	_ok(dev, cl._guest == null, "днём гостей нет")
+	var lvl := CozyLife.level_now
+	while CozyLife.guest_today(lvl) == "" or CozyLife.gift_today(CozyLife.guest_today(lvl), lvl).is_empty():
+		Game.day += 1
+	var gid := CozyLife.guest_today(lvl)
+	var gift := CozyLife.gift_today(gid, lvl)
+	Game.time_of_day = 0.75
+	cl._update_guest()
+	_ok(dev, cl._guest != null and cl._guest.guest_id == gid and cl._guest.is_in_group("interactable"), "вечером к костру идёт гость (%s)" % gid)
+	var guest := cl._guest
+	guest.global_position = guest.target
+	Game.inventory = {}
+	var talks := Game.stat("guests", "any")
+	guest.interact(pl)
+	dev.call("_flush")
+	_ok(dev, guest.talked and Game.stat("guests", "any") == talks + 1, "гость говорит пару реплик")
+	_ok(dev, Game.count(str(gift[0])) == int(gift[1]) and Game.count("coins") == 0, "гость оставил подарок: %s ×%d (не монеты)" % [Game.item_name(str(gift[0])), int(gift[1])])
+	guest.interact(pl)
+	dev.call("_flush")
+	_ok(dev, Game.count(str(gift[0])) == int(gift[1]), "второй раз за вечер подарка нет")
+	cl._guest = null
+	guest.free()
+	cl._update_guest()
+	_ok(dev, cl._guest != null and cl._guest.talked, "после загрузки вечером гость на месте и помнит разговор")
+	var g2 := cl._guest
+	Game.time_of_day = 0.3
+	Game.day += 1
+	cl._update_guest()
+	_ok(dev, g2.leaving and cl._guest == null, "утром гость уходит; не поговорил — ничего не потерял")
+	g2.free()
+	# без уюта гости не заходят
+	Game.flags.erase("guest")
+	Game.flags.erase("guest_roll_day")
+	var none := true
+	for d in 20:
+		Game.day += 1
+		if CozyLife.guest_today(0) != "":
+			none = false
+	_ok(dev, none, "в пустой лагерь гости не заходят")
+	pl.global_position = was_pos
+	for b in made:
+		if is_instance_valid(b):
+			b.remove_from_group("building")
+			b.queue_free()
+	Game.playing = was_playing
+
+
+static func _put(main: Node, bs: BuildSystem, isl: Island, fire: Node3D, made: Array, id: String, i: int) -> Building:
+	var a := i * 0.7
+	var pos: Vector3 = fire.global_position + Vector3(cos(a), 0, sin(a)) * (3.0 + (i % 4) * 2.2)
+	pos.y = isl.height_at(pos.x, pos.z)
+	var b := bs.spawn_building(id, pos, 0.0)
+	main.call("_connect_building", b)
+	made.append(b)
+	return b
 
 
 # ------------------------------------------------------------------ Скриншоты

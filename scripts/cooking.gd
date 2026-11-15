@@ -269,7 +269,7 @@ static func time_text(t: float) -> String:
 
 
 static func regen_mult() -> float:
-	return REGEN_MULT if has_buff("regen") else 1.0
+	return (REGEN_MULT if has_buff("regen") else 1.0) * CozyLife.rest_mult()   # и отдых у костра в уютном лагере
 
 
 static func speed_mult() -> float:
