@@ -404,3 +404,7 @@ DISHES = {
 }
 
 ICONS = dict(DISHES)
+
+import icons_decor_camp as _camp   # noqa: E402 — украшения лагеря и котелок
+
+ICONS.update(_camp.ICONS)
