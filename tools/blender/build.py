@@ -17,7 +17,7 @@ import texbake  # noqa: E402
 import texbake_props  # noqa: E402
 
 MODULES = ["models_characters", "models_nature", "models_buildings", "models_farm", "models_jungle", "models_banyan", "models_fort", "models_storm", "models_ice", "models_volcano", "models_fog", "models_eye", "models_tools", "models_flora", "anim",
-           "models_decor", "models_decor_camp"]   # кулинария и уют: котелок и украшения лагеря
+           "models_decor", "models_decor_camp", "models_world"]   # кулинария и уют: котелок и украшения лагеря
 
 
 PEOPLE = ["player", "marta", "stepa", "timur", "ingrid", "vera", "misha", "renata", "gosha", "petya", "pasha", "lyova"]
@@ -45,6 +45,11 @@ DECOR = ["cook_pot", "camp_table", "camp_stool", "rocking_chair", "camp_shelf", 
          "flower_arch", "plank_path", "stone_path", "picket_fence", "bamboo_fence", "garden_gate", "sign_camp", "sign_arrows",
          "wash_stand", "bird_feeder", "weather_vane", "log_stack", "wind_chime", "gramophone"]
 BUILDINGS = BUILDINGS + DECOR
+
+# «живой мир» (tools/blender/models_world.py): камни со знаками, тайник, находки с моря, редкие существа
+WORLD = ["rune_stone_a", "rune_stone_b", "rune_stone_c", "sign_stone", "rune_cache", "drift_bottle", "drift_glass", "drift_float",
+         "drift_pod", "glow_crab", "gold_beetle", "sea_turtle"]
+BUILDINGS = BUILDINGS + WORLD
 
 # лодки и прочие суда — целые и разбитые
 BOATS = ["raft", "canoe", "lifeboat", "boat_wreck", "stepa_boat", "stepa_boat_wreck", "seaplane",

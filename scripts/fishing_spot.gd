@@ -129,6 +129,7 @@ func catch() -> void:
 		Game.bump("fished", "ice_fish")
 	FX.burst(get_parent(), global_position + Vector3(0, 0.3, 0), Color("bfe8ff"), 14)
 	Audio.play("harvest", -2.0, 0.1)
+	RareLife.on_catch(ice)   # живой мир: лунная рыба ночью в полнолуние
 	if randf() < rare_chance():
 		Game.add_collectible("north_fish" if ice else "fish")
 

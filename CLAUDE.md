@@ -84,6 +84,14 @@
   Сидение — `scripts/sitting.gd` (`Sitting.sit(герой, сиденье, id)`, места — `SEATS`): пока герой сидит, его `_physics_process`
   выключен, позу (HeroRig: таз на сиденье, IK ног и рук), место и камеру ставит узел `Sitting`; `player.gd` не менялся.
   Снимок: `--open=sit` (`--sitcam=1` — вид со стороны).
+- **Живой мир** (не по сюжету, ветка друга): `scripts/world_life.gd` (`WorldLife` — узел, его создаёт `CozyLife`; `collect(коллекция, вещь)`
+  кладёт в коллекцию определённую вещь), `sea_drift.gd` (`SeaDrift`: находки на песке, `KINDS`, `wash_ashore()`), `rune_stones.gd`
+  (`RuneStones`: три камня на остров, места — `find_spots()` по зерну острова, флаги `rune_<остров>_<n>` и `rune_cache_<остров>`,
+  содержимое тайников — `LOOT`), `rare_life.gd` (`RareLife`: условия существ `moth_time()` / `full_moon()` / `turtle_time()`…,
+  слухи `RUMORS`, лунная рыба — `on_catch()` из `FishingSpot.catch`), `world_checks.gd`, `world_tests.gd`.
+  Коллекции `sea_bottles`, `sea_glass`, `signs`, `rare_life` — в `Data.COLLECTIONS` (не `ordered`: это не страницы сюжета).
+  Украшение с `"secret": true` не открывается само после финала. Модели — `tools/blender/models_world.py` (список `WORLD` в `build.py`),
+  иконки — `tools/icons_world.py`. Снимки: `--open=runes|drift|turtle|worldcols`.
 - **Ассеты собираются скриптами, руками не правятся:**
   - модели: `tools/blender/*.py` → `assets/models/*.glb`;
   - иконки: `tools/gen_icons.py` → `assets/icons/` (подробности — раздел «Иконки» ниже);

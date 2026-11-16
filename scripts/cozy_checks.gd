@@ -26,7 +26,7 @@ static func run(v: QuestValidator) -> void:
 	v.unlocked["shop_lyova"] = true
 	v.unlocked["cook_pot"] = true
 	for id in Data.BUILDINGS:
-		if Data.BUILDINGS[id].get("decor", false):
+		if Data.BUILDINGS[id].get("decor", false) and not Data.BUILDINGS[id].get("secret", false):
 			v.unlocked[id] = true
 
 	# ---- кулинария
@@ -94,8 +94,8 @@ static func run(v: QuestValidator) -> void:
 	var all_ids: Array = []
 	for id in Data.BUILDINGS:
 		var b: Dictionary = Data.BUILDINGS[id]
-		if not b.get("decor", false):
-			continue
+		if not b.get("decor", false) or b.get("secret", false):
+			continue      # «секретные» украшения проверяет WorldChecks
 		all_ids.append(id)
 		if int(b.get("cozy", 0)) <= 0:
 			v._err("украшение «%s» не даёт уюта" % id)
@@ -144,3 +144,4 @@ static func run(v: QuestValidator) -> void:
 		v._err("шанс подарка на высшей ступени %.2f — больше 0.8" % top_chance)
 	v.report.append("Уют: украшений %d, все по разу — %d очков (высшая ступень — %d); подарок гостя — не дороже %d монет, не чаще раза в день"
 		% [all_ids.size(), once, top, worst])
+	WorldChecks.run(v)      # живой мир: находки, знаки, редкие существа

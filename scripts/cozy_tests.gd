@@ -23,6 +23,7 @@ static func run(dev: Node) -> void:
 	Game.stats = saved_stats
 	Game.hunger = saved_hunger
 	Game.inventory_changed.emit()
+	WorldTests.run(dev)      # живой мир: находки с моря, знаки, редкие существа
 
 
 static func _cooking(dev: Node) -> void:
@@ -183,7 +184,7 @@ static func _cozy(dev: Node) -> void:
 	CozyLife.migrate()
 	var decor: Array = []
 	for id in Data.BUILDINGS:
-		if Data.BUILDINGS[id].get("decor", false):
+		if Data.BUILDINGS[id].get("decor", false) and not Data.BUILDINGS[id].get("secret", false):
 			decor.append(id)
 	var locked: Array[String] = []
 	for id in decor:
@@ -410,6 +411,9 @@ const CAMP := [
 
 
 static func shot(dev: Node, what: String) -> void:
+	if what in ["runes", "drift", "turtle", "worldcols"]:
+		WorldTests.shot(dev, what)      # снимки живого мира
+		return
 	if not what in ["cook", "cookbook", "cozy", "decor", "sit"]:
 		return
 	var main: Node = dev.get("main")

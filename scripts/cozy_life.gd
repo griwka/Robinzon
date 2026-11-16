@@ -83,6 +83,9 @@ var _guest: CampGuest
 
 func _ready() -> void:
 	add_to_group("cozy_life")
+	var wl := WorldLife.new()      # находки с моря, знаки на камнях, редкие существа
+	wl.main = main
+	add_child(wl)
 	level_now = 0
 	score_now = 0
 	resting = false
@@ -110,7 +113,7 @@ static func migrate() -> void:
 	Cooking.unlock_postgame()
 	if Game.ended():
 		for id in Data.BUILDINGS:
-			if Data.BUILDINGS[id].get("decor", false):
+			if Data.BUILDINGS[id].get("decor", false) and not Data.BUILDINGS[id].get("secret", false):
 				Game.unlocked[id] = true
 
 
@@ -314,7 +317,11 @@ static func talk_to_guest(guest: CampGuest) -> void:
 		r["talked"] = true
 	Game.bump("guests", "any")
 	var gift := gift_today(id, level_now)
-	Game.dialogue_requested.emit([[id, pick[0]], [id, pick[1]]], func():
+	var lines: Array = [[id, pick[0]], [id, pick[1]]]
+	var rumor := RareLife.rumor(id)      # слух о редком существе, которого ты ещё не встречал
+	if not rumor.is_empty():
+		lines.append([id, rumor[1]])
+	Game.dialogue_requested.emit(lines, func():
 		if not gift.is_empty():
 			Game.add_item(str(gift[0]), int(gift[1]), false, true)
 			Game.notified.emit("Подарок от гостя: %s ×%d" % [Game.item_name(str(gift[0])), int(gift[1])], Color("b6f29a"))

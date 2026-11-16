@@ -1306,8 +1306,10 @@ func _fill_collections() -> void:
 		var done := Game.collection_complete(cid)
 		info.add_child(_label(col["name"] + ("  — собрана!" if done else ""), 20, Color("b6f29a") if done else Color.WHITE))
 		info.add_child(_label(col["source"], 14, Color("f3e2bd")))
-		var slots := HBoxContainer.new()
-		slots.add_theme_constant_override("separation", 8)
+		var slots := HFlowContainer.new()   # больше пяти-шести вещей — переносятся на вторую строку
+		slots.add_theme_constant_override("h_separation", 8)
+		slots.add_theme_constant_override("v_separation", 8)
+		slots.custom_minimum_size = Vector2(560, 0)
 		info.add_child(slots)
 		for it in col["items"]:
 			var v := VBoxContainer.new()
