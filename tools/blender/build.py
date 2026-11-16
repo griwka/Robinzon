@@ -16,7 +16,8 @@ import kit  # noqa: E402
 import texbake  # noqa: E402
 import texbake_props  # noqa: E402
 
-MODULES = ["models_characters", "models_nature", "models_buildings", "models_farm", "models_jungle", "models_banyan", "models_fort", "models_storm", "models_ice", "models_volcano", "models_fog", "models_eye", "models_tools", "models_flora", "anim"]
+MODULES = ["models_characters", "models_nature", "models_buildings", "models_farm", "models_jungle", "models_banyan", "models_fort", "models_storm", "models_ice", "models_volcano", "models_fog", "models_eye", "models_tools", "models_flora", "anim",
+           "models_decor", "models_decor_camp"]   # кулинария и уют: котелок и украшения лагеря
 
 
 PEOPLE = ["player", "marta", "stepa", "timur", "ingrid", "vera", "misha", "renata", "gosha", "petya", "pasha", "lyova"]
@@ -37,6 +38,13 @@ BUILDINGS = ["tent", "campfire", "torch", "workbench", "hut", "coop", "goat_pen"
              "hammock", "scarecrow", "shell_path", "garden_bed", "beehive", "sheep_pen", "pig_sty", "kiln",
              "shelter", "lightning_rod", "goose_house", "stove", "greenhouse", "tortoise_pen", "forge", "stone_bridge",
              "pumpkin_lantern", "village_house", "well", "long_table"]
+
+# кулинария и уют «вечной игры» (tools/blender/models_decor.py): котелок и украшения — запекаются как постройки
+DECOR = ["cook_pot", "camp_table", "camp_stool", "rocking_chair", "camp_shelf", "decor_chest", "rug_wool", "rug_straw",
+         "garland_flags", "garland_lights", "lantern_post", "paper_lantern", "stone_lantern", "flower_tub", "flower_barrow",
+         "flower_arch", "plank_path", "stone_path", "picket_fence", "bamboo_fence", "garden_gate", "sign_camp", "sign_arrows",
+         "wash_stand", "bird_feeder", "weather_vane", "log_stack", "wind_chime", "gramophone"]
+BUILDINGS = BUILDINGS + DECOR
 
 # лодки и прочие суда — целые и разбитые
 BOATS = ["raft", "canoe", "lifeboat", "boat_wreck", "stepa_boat", "stepa_boat_wreck", "seaplane",

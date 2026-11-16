@@ -72,6 +72,18 @@
 - **Туман** — `scripts/fog_system.gd` (Туманный остров до флага `fog_cleared`): объёмный туман + `FogVolume`
   с отрицательной плотностью у огня (группы `station_*` из `FogSystem.RADIUS` и узлы `fog_light` с `fog_radius`).
   Плыть туда — только `Game.fog_hours()`; пассажир — флаг `stepa_aboard` → `Game.arrive()`.
+- **Кулинария и уют «вечной игры»** (после финала, ветка друга): `scripts/cooking.gd` (`Cooking`: рецепты котелка `RECIPES`,
+  `cook()`, книга в `Game.flags["cookbook"]`, польза блюд в `Game.flags["buffs"]`, виды пользы `BUFFS`), `cook_pot.gd` (постройка),
+  `cook_ui.gd` (окно котелка и раздел книги в окне коллекций), `cozy_life.gd` (`CozyLife`: узел в главной сцене — время пользы,
+  счёт уюта `score_of()` / `LEVELS`, вечерние гости `GUESTS`, `migrate()` для старых сохранений), `camp_guest.gd` (гость у костра),
+  `decor_piece.gd` (`DecorPiece` — украшения с `"decor": true` в `Data.BUILDINGS`: `cozy`, `flat`, `posts`, `glow`, `repeat`; узлы
+  `Lamp*` в модели — свет вечером), `cozy_checks.gd` (проверки для валидатора), `cozy_tests.gd` (автотест и снимки).
+  Блюда — в `Data.ITEMS` (поля `buff`, `buff_t`) и `SELL_PRICES` (блок «кулинария»). Модели — `tools/blender/models_decor.py`
+  (котелок) и `models_decor_camp.py` (украшения), список `DECOR` в `build.py`; иконки — `tools/icons_decor.py` и `icons_decor_camp.py`.
+  Проверка: `--autotest --cozyonly` (быстро), снимки: `--shot=… --open=cook|cookbook|cozy|decor`.
+  Сидение — `scripts/sitting.gd` (`Sitting.sit(герой, сиденье, id)`, места — `SEATS`): пока герой сидит, его `_physics_process`
+  выключен, позу (HeroRig: таз на сиденье, IK ног и рук), место и камеру ставит узел `Sitting`; `player.gd` не менялся.
+  Снимок: `--open=sit` (`--sitcam=1` — вид со стороны).
 - **Ассеты собираются скриптами, руками не правятся:**
   - модели: `tools/blender/*.py` → `assets/models/*.glb`;
   - иконки: `tools/gen_icons.py` → `assets/icons/` (подробности — раздел «Иконки» ниже);

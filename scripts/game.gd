@@ -431,7 +431,7 @@ func sleep_until_morning() -> void:
 	world_time += delta_days * DAY_LENGTH * 0.6
 	time_of_day = target
 	if hunger_on:
-		hunger = maxf(0.0, hunger - 15.0)   # за ночь проголодался: утром — завтракать
+		hunger = maxf(0.0, hunger - 15.0 * CozyLife.night_hunger())   # за ночь проголодался: утром — завтракать (уют и тёплая еда — меньше)
 		_hunger_check()
 
 
@@ -529,11 +529,11 @@ func hunger_stage() -> int:
 
 
 func hunger_speed() -> float:
-	return HUNGER_SPEED[hunger_stage()]
+	return HUNGER_SPEED[hunger_stage()] * Cooking.speed_mult()   # кулинария: «Лёгкий шаг»
 
 
 func hunger_regen() -> float:
-	return HUNGER_REGEN[hunger_stage()]
+	return HUNGER_REGEN[hunger_stage()] * Cooking.regen_mult()   # кулинария: «Бодрость»
 
 
 func can_sprint() -> bool:
@@ -567,6 +567,7 @@ func eat_best_food() -> int:
 			var v := float(Data.ITEMS[id]["food"])
 			# ближе всего к тому, чего не хватает; перебор — хуже недобора
 			var score := absf(v - missing) + maxf(0.0, v - missing) * 0.5
+			score += Cooking.q_penalty(id)   # кулинария: блюда с пользой Q бережёт напоследок
 			if score < best_score:
 				best_score = score
 				best = id
@@ -587,6 +588,7 @@ func eat_item(id: String) -> int:
 	notified.emit("Съеден %s: +%d сытости, +%d сил" % [item_name(id).to_lower(), v, v * 2], Color("ffe08a"))
 	Audio.play("eat", -2.0)
 	ate.emit(v)
+	Cooking.on_eaten(id)   # кулинария: польза блюда на время
 	return v
 
 
@@ -1036,6 +1038,7 @@ func load_game() -> Dictionary:
 	if loc_data.is_empty() and data.has("buildings"):
 		loc_data["home"] = {"buildings": data["buildings"], "player": data.get("player", [])}
 	_merge_duplicate_tools()
+	CozyLife.migrate()   # кулинария и уют: в сохранениях после финала открываем новое
 	inventory_changed.emit()
 	quest_changed.emit()
 	return data

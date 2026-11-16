@@ -89,6 +89,10 @@ func _ready() -> void:
 	add_child(critters)
 	critters.setup(island, player)
 
+	var cozy := CozyLife.new()   # кулинария и уют «вечной игры»
+	cozy.main = self
+	add_child(cozy)
+
 	hud = HUD.new()
 	add_child(hud)
 	hud.station_check = _near_station

@@ -231,7 +231,7 @@ func _try_place() -> void:
 	placed.emit(b)
 	Game.bump("built", id)
 	# дешёвые вещи (факелы, заборы, дорожки) можно ставить подряд
-	if id in ["torch", "fence", "shell_path", "flowerbed", "garden_bed"] and Game.can_afford(cost_of(id, v)):
+	if (id in ["torch", "fence", "shell_path", "flowerbed", "garden_bed"] or Data.BUILDINGS[id].get("repeat", false)) and Game.can_afford(cost_of(id, v)):
 		start(id, v)
 
 
@@ -244,7 +244,8 @@ func spawn_building(id: String, pos: Vector3, rot: float, variant := "", state :
 		"coop", "goat_pen", "beehive", "sheep_pen", "pig_sty", "goose_house", "lightning_rod": b = AnimalPen.new()
 		"greenhouse": b = Greenhouse.new()
 		"tortoise_pen": b = AnimalPen.new()
-		_: b = Building.new()
+		"cook_pot": b = CookPot.new()
+		_: b = DecorPiece.new() if Data.BUILDINGS[id].get("decor", false) else Building.new()   # украшения лагеря — свой класс
 	b.setup(id, variant)
 	b.position = pos
 	b.rotation.y = rot
