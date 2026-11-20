@@ -69,6 +69,10 @@ func _ready() -> void:
 	ch.position = d0 - radial * 0.4 + tangent * 1.45 + Vector3(0, 0.08, 0)
 	ch.rotation.y = -a0
 	add_child(ch)
+	IslandTrailPoint.place(self, Vector3(5.6, 0.12, -2.4), "apiary_trace", "Раскрыть ящик у корней",
+		"На крышке след воска. Внутри список Лёвы: «Мёд спускаю с первого яруса».", "letters_box")
+	IslandTrailPoint.place(self, d0 - tangent * 1.3, "apiary_trace", "Перебрать записи у дома",
+		"На листке нарисован улей возле дома. Рядом Лёва записал вес первого мёда.", "letters_box")
 	for i in range(1, DECKS.size()):
 		# лиана висит над самим настилом нижнего яруса (внутри перил, на стороне следующего яруса),
 		# а не за перилами у края: к ней легко подойти и ухватиться

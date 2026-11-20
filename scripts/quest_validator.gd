@@ -10,9 +10,10 @@ const KNOWN_KINDS := ["talk", "collected", "crafted", "built", "planted", "harve
 	"fished", "solved", "chose"]
 const NPCS := ["parrot", "marta", "kesha", "stepa", "timur", "ingrid", "walrus", "penguins", "vera",
 	"misha", "renata", "gosha", "petya", "pasha", "lyova"]
-const PUZZLES := ["cellar", "stars", "monolith", "shadows"]
+const PUZZLES := ["ice_passages", "cellar", "stars", "monolith", "shadows", "apiary_trace", "hut_masonry", "archive_chalk",
+	"smoke_signal", "camp_rubbing"]
 const ALBATROS_PARTS := ["albatros_hull", "albatros_mast", "albatros_helm", "albatros_lights", "albatros_radio"]
-const DECKS := ["deck1", "deck2", "deck3",
+const DECKS := ["lava_bank", "spring_return", "deck1", "deck2", "deck3",
 	"bunker1", "bunker2", "bunker3", "bunker4", "bunker5", "bunker6", "bunker7", "glacier_top", "temple_gate", "crater_top", "stilt_camp",
 	"eye_deck1", "eye_deck2", "eye_deck3"]
 ## Ледяные ларцы: задание «found ice_chest ×3» — это три места ice_chest_1..3.
@@ -410,8 +411,16 @@ func _check_task(t: Dictionary) -> void:
 			if tgt == "ice_fish" and not can_get("ice_drill"):
 				_err("подо льдом не порыбачить — нет ледового бура")
 		"solved":
+			if tgt == "ice_passages" and not can_get("ice_drill"):
+				_err("лунки не открыть без ледового бура")
 			if not tgt in PUZZLES:
 				_err("нет головоломки «%s»" % tgt)
+			elif tgt == "archive_chalk" and not can_get("lantern"):
+				_err("нечем подсветить надпись на ящиках")
+			elif tgt == "smoke_signal" and not _building_ok("campfire"):
+				_err("дымовой сигнал требует костра")
+			elif tgt == "camp_rubbing" and not (can_get("stone_axe") and can_get("machete")):
+				_err("к лагерю Лёвы нужны топор и мачете")
 		"sailed":
 			if not (_building_ok("raft") or _building_ok("canoe")):
 				_err("не на чем плыть")
@@ -429,7 +438,7 @@ func _check_task(t: Dictionary) -> void:
 			elif ResourceNode.KINDS[tgt]["tool"] != "" and not can_get(ResourceNode.KINDS[tgt]["tool"]):
 				_err("нечем расчистить «%s»" % tgt)
 		"found", "lit", "restored":
-			if tgt in ["crate", "wreck"]:
+			if tgt in ["crate", "wreck", "garden_trace"]:
 				return
 			if tgt == "ice_chest":
 				for c in ICE_CHESTS:
@@ -464,6 +473,9 @@ func _check_task(t: Dictionary) -> void:
 		"reached":
 			if not tgt in DECKS:
 				_err("нет яруса «%s»" % tgt)
+			elif tgt in ["lava_bank", "spring_return"]:
+				if not can_get("iron_pickaxe"):
+					_err("к ручью не пройти через базальт без железной кирки")
 			elif tgt == "glacier_top":
 				if not (can_get("ice_pick") and can_get("climbing_gloves")):
 					_err("на ледник не залезть: нужны ледоруб и перчатки")

@@ -1118,6 +1118,11 @@ func _spawn_stepa(holder: Node3D) -> void:
 	var sp := hp + to_camp.normalized() * 2.6
 	sp.y = height_at(sp.x, sp.z)
 	poi_extra["stepa"] = sp
+	var footing := hp + side * 1.65
+	footing.y = height_at(footing.x, footing.z)
+	var masonry := IslandTrailPoint.place(holder, footing, "hut_masonry", "Укрепить основание хижины",
+		"Кирпичи встали плотно. Стёпа отпустил стену. Она держится!", "fort_wall")
+	masonry.rotation.y = atan2(-to_camp.z, to_camp.x)
 	if not Game.flags.get("stepa_at_fog", false):   # глава 7: Стёпа уплыл к своим на Туманный
 		var st := NPCPerson.new()
 		st.npc_id = "stepa"

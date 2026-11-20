@@ -173,6 +173,8 @@ func _ready() -> void:
 	var cfg: Dictionary = PLACES[id]
 	visual = Models.glb(cfg["model"]) if cfg["model"] != "" else Node3D.new()
 	add_child(visual)
+	if id == "old_camp" and Game.flags.get("poi_old_camp", false):
+		CampClue.place_in(self)
 	if cfg["radius"] <= 0.0:
 		remove_from_group("obstacle")
 		return
@@ -308,6 +310,8 @@ func interact(_player: Node) -> void:
 			var lid := visual.find_child("Lid", true, false) as Node3D
 			if lid:
 				create_tween().tween_property(lid, "rotation:x", -1.6, 0.4)
+		if id == "old_camp":
+			CampClue.place_in(self)
 		Game.bump("found", id)
 		if id == "fort_gate":
 			var fort := get_parent() as FortRuin

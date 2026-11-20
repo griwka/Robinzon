@@ -82,6 +82,9 @@ func _find() -> void:
 			has_target = true
 			target_pos = n.global_position
 			return
+		# Игрок ещё ищет надпись или след птицы. Следующая точная метка выдала бы находку.
+		if t["target"] in ["archive_chalk", "garden_trace"]:
+			return
 
 
 func _node_for(t: Dictionary) -> Node3D:

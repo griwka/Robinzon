@@ -869,6 +869,13 @@ func _task_target(task: Dictionary) -> String:
 
 
 func task_progress(task: Dictionary) -> int:
+	if task["target"] == "ice_passages":
+		# Лунки, открытые до задания или в старом сохранении, уже пригодны для стаи.
+		var opened := 0
+		for i in 3:
+			if flags.get("drilled_ice_hole_%d" % i, false):
+				opened += 1
+		return opened
 	var tgt := _task_target(task)
 	var key: String = task["kind"] + ":" + tgt
 	var base: int = quest_baseline.get(key, 0)

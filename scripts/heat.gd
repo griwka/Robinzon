@@ -79,6 +79,13 @@ func tick(delta: float) -> void:
 		Game.heat = maxf(0.0, Game.heat - 80.0 * delta)
 	else:
 		Game.heat = maxf(0.0, Game.heat - COOL * delta)
+	if Game.quest_started and Game.current_quest().get("id", "") == "iron_pick":
+		var temple := get_tree().get_first_node_in_group("temple") as VolcanoTemple
+		if temple and near_lava > 0.0 and p.distance_to(temple.global_position) < 13.0 and Game.stat("reached", "lava_bank") == 0:
+			Game.notified.emit("За ручьём видны колышки Лёвы. Обратно к источникам!", Color("ffd0a0"))
+			Game.bump("reached", "lava_bank")
+		elif Game.stat("reached", "lava_bank") > 0 and Game.stat("reached", "spring_return") == 0 and _cool_here(p):
+			Game.bump("reached", "spring_return")
 	if Game.heat > 70.0 and not _warned:
 		_warned = true
 		Game.notified.emit("Жжёт! Отойди от лавы" + (" или намажься мазью (Q)" if Game.count("burn_salve") > 0 else ""), Color("ffb070"))

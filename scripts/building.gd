@@ -179,9 +179,40 @@ func tool_hint() -> String:
 	return ""
 
 
+func _can_signal() -> bool:
+	return Game.location == "home" and Game.quest_started and Game.current_quest().get("id") == "fire" and Game.stat("solved", "smoke_signal") == 0
+
+
+func _try_signal(wet_leaves: bool) -> void:
+	if not _can_signal():
+		return
+	if not wet_leaves:
+		FX.burst(self, Vector3.UP * 0.6, Color("ffbd62"), 8)
+		Game.dialogue_requested.emit([["player", "Хорошее пламя, а дыма почти нет. С моря такого не увидишь. Попробую мокрые листья."]], Callable())
+		return
+	var signals := create_tween()
+	for i in 3:
+		signals.tween_callback(_smoke_puff)
+		signals.tween_interval(0.85)
+	Game.bump("solved", "smoke_signal")
+
+
+func _smoke_puff() -> void:
+	var puff := Node3D.new()
+	add_child(puff)
+	FX.fire_smoke(puff, Vector3.UP * 0.35, 2.2)
+	for particles: CPUParticles3D in puff.get_children():
+		particles.one_shot = true
+		particles.explosiveness = 0.96
+		particles.restart()
+	var fade := puff.create_tween()
+	fade.tween_interval(4.0)
+	fade.tween_callback(puff.queue_free)
+
+
 func get_hint() -> String:
 	match id:
-		"campfire": return "Костёр — готовить еду"
+		"campfire": return "Подать дымовой сигнал или готовить" if _can_signal() else "Костёр — готовить еду"
 		"workbench": return "Верстак — открыть крафт"
 		"tent", "hut": return "%s — поспать до утра" % Data.BUILDINGS[id]["name"]
 		"hammock": return "Гамак — вздремнуть до утра"
@@ -205,7 +236,14 @@ func get_hint() -> String:
 
 func interact(_player: Node) -> void:
 	match id:
-		"campfire": craft_requested.emit("campfire")
+		"campfire":
+			if _can_signal():
+				Game.choice_requested.emit("Что положить в огонь?", [
+					{"text": "Подложить сухие ветки", "icon": "wood", "callback": _try_signal.bind(false)},
+					{"text": "Накрыть огонь мокрыми листьями", "icon": "leaf", "callback": _try_signal.bind(true)},
+					{"text": "Приготовить еду", "icon": "baked_potato", "callback": func(): craft_requested.emit("campfire")}])
+			else:
+				craft_requested.emit("campfire")
 		"stove": craft_requested.emit("stove")
 		"forge": craft_requested.emit("forge")
 		"kiln": craft_requested.emit("kiln")

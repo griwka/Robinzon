@@ -96,6 +96,7 @@ func interact(_player: Node) -> void:
 		bubbles.emitting = true
 		_refresh_hole()
 		Game.notified.emit("Лунка готова. Теперь — удочку", Color("bfe3ff"))
+		Game._check_quest()
 		return
 	if not Game.has_tool("fishing_rod"):
 		Game.notified.emit("Нужна удочка", Color("ff9d7a"))

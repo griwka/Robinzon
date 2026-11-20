@@ -1562,6 +1562,30 @@ func _test_mistakes() -> void:
 	broken[0]["quests"][2]["reward"]["unlock"] = []   # палатка больше не открывает мачете
 	var v := QuestValidator.new()
 	_check(v.run(broken).size() > 0, "валидатор ловит сломанный сюжет («%s»)" % (v.errors[0] if v.errors.size() else "—"))
+	# Формат прежней версии: номер текущего задания, флаги пробурённых лунок,
+	# количество уже переданных порций и исходные счётчики на начало задания.
+	for chapter_index in [4, 6]:
+		Game.reset_state()
+		Game.chapter = chapter_index
+		var wanted := "penguins" if chapter_index == 4 else "provisions"
+		var quests: Array = Data.CHAPTERS[chapter_index]["quests"]
+		for index in quests.size():
+			if quests[index]["id"] == wanted:
+				Game.quest_index = index
+				break
+		Game.quest_started = true
+		Game.flags["drilled_ice_hole_1"] = true
+		Game.stats = {"delivered": {"fish_soup": 6}}
+		Game.quest_baseline = {"delivered:fish_soup": 4}
+		Game.save_game({})
+		Game.reset_state()
+		Game.load_game()
+		_check(Game.current_quest().get("id") == wanted and Game.quest_started, "после загрузки продолжается " + wanted)
+		for task in Game.current_quest()["tasks"]:
+			if task["target"] == "ice_passages":
+				_check(Game.task_progress(task) == 1, "ранее открытая лунка сохранена для стаи")
+			if task["target"] == "fish_soup":
+				_check(Game.task_progress(task) == 2, "две порции, ранее отданные Ренате, учтены у Гоши")
 	Game.reset_state()
 	Game.location = args.get("location", "home")
 
@@ -2563,6 +2587,18 @@ func _jump_down(goal: Vector3) -> String:
 func _task_goal(t: Dictionary) -> Vector3:
 	var target: String = t["target"]
 	var p: Player = main.player
+	if target == "garden_trace":
+		for point in get_tree().get_nodes_in_group("interactable"):
+			if point is EyeIsland.GardenTrace:
+				return point.interact_point()
+	if target == "lava_bank" and _temple():
+		var tp := _temple()
+		var bank := tp.global_position + tp.out * 10.0
+		bank.y = main.island.height_at(bank.x, bank.z)
+		return bank
+	if target == "spring_return":
+		var spring := get_tree().get_first_node_in_group("cool_spot") as HotSprings
+		return spring.global_position if spring else Vector3.INF
 	match t["kind"]:
 		"talk", "delivered":
 			if t.get("radio", false):
@@ -2592,7 +2628,16 @@ func _task_goal(t: Dictionary) -> Vector3:
 				if c is FishingSpot and (c.ice == (target == "ice_fish")):
 					return (c as Node3D).global_position
 		"solved":
+			if IslandTrailPoint.QUESTS.has(target):
+				var point := _nearest_trail_point(target)
+				return point.interact_point() if point else Vector3.INF
 			match target:
+				"smoke_signal":
+					var fire := get_tree().get_first_node_in_group("station_campfire") as Building
+					return fire.interact_point() if fire else Vector3.INF
+				"camp_rubbing":
+					var clue := get_tree().get_first_node_in_group("camp_clues") as CampClue
+					return clue.interact_point() if clue else Vector3.INF
 				"shadows": return _shrine().global_position if _shrine() else Vector3.INF
 				"monolith": return _temple().global_position if _temple() else Vector3.INF
 				"stars": return _glacier().dial.global_position if _glacier() else Vector3.INF
@@ -2620,6 +2665,14 @@ func _task_goal(t: Dictionary) -> Vector3:
 func _walk_for_task(t: Dictionary) -> void:
 	if not _nav_ready:
 		await _nav_bake()
+	if t["target"] == "ice_passages":
+		for hole in get_tree().get_nodes_in_group("interactable"):
+			if hole is FishingSpot and hole.ice and not hole.drilled():
+				var why := await _reach(hole.interact_point(), 0, 2.0)
+				_check(why == "", "дойти до лунки %s: %s" % [hole.hole_id, why])
+				if why == "":
+					hole.interact(main.player)
+		return
 	var goal := _task_goal(t)
 	if goal == Vector3.INF:
 		walk_stats["skip"] += 1
@@ -3045,9 +3098,49 @@ func _pen(id: String) -> AnimalPen:
 	return _build(id) as AnimalPen
 
 
+func _nearest_trail_point(id: String) -> IslandTrailPoint:
+	var best: IslandTrailPoint
+	var distance := INF
+	for n in get_tree().get_nodes_in_group("interactable"):
+		if n is IslandTrailPoint and n.puzzle == id and not n.leads_on:
+			var d: float = main.player.global_position.distance_squared_to(n.global_position)
+			if d < distance:
+				best = n
+				distance = d
+	return best
+
+
 func _do_task(t: Dictionary) -> void:
 	var need: int = t["count"] - Game.task_progress(t)
 	var target: String = t["target"]
+	if target == "ice_passages":
+		for hole in get_tree().get_nodes_in_group("interactable"):
+			if hole is FishingSpot and hole.ice and not hole.drilled():
+				var before := Game.task_progress(t)
+				hole.interact(main.player)
+				_check(Game.task_progress(t) == before + 1, "открыта ещё одна лунка для стаи")
+		return
+	if target in ["lava_bank", "spring_return"]:
+		var goal := _task_goal(t)
+		_check(goal != Vector3.INF, "есть ориентир маршрута " + target)
+		if goal != Vector3.INF:
+			if target == "lava_bank" and Game.stat("reached", target) == 0:
+				var spring := get_tree().get_first_node_in_group("cool_spot") as HotSprings
+				main.player.global_position = spring.global_position
+				main.heat.tick(0.1)
+				_check(Game.stat("reached", "spring_return") == 0, "источники до разведки не завершают маршрут")
+			main.player.global_position = goal
+			main.heat.tick(0.1)
+			_check(Game.task_progress(t) == 1, "достигнут ориентир " + target)
+		return
+	if target == "garden_trace":
+		for point in get_tree().get_nodes_in_group("interactable"):
+			if point is EyeIsland.GardenTrace:
+				point.interact(main.player)
+				point.interact(main.player)
+				_check(Game.stat("found", target) == 1, "след птицы засчитан один раз")
+				break
+		return
 	match t["kind"]:
 		"talk":
 			if t.get("radio", false):
@@ -3182,6 +3275,57 @@ func _do_task(t: Dictionary) -> void:
 				spot.state = FishingSpot.BITE  # поклёвка
 				spot.interact(main.player)     # подсечь
 		"solved":
+			if IslandTrailPoint.QUESTS.has(target):
+				var point := _nearest_trail_point(target)
+				_check(point != null, "на острове доступно действие: " + t["text"])
+				if point:
+					if target == "archive_chalk":
+						if Game.has_light():
+							Game.toggle_gear("light")
+						point.interact(main.player)
+						_check(Game.stat("solved", target) == 0, "без света надпись не читается")
+						Game.toggle_gear("light")
+					point.interact(main.player)
+					point.interact(main.player)
+					_check(Game.stat("solved", target) == 1, "повторное действие не засчитывается дважды")
+				return
+			if target == "smoke_signal":
+				var fire := get_tree().get_first_node_in_group("station_campfire") as Building
+				_check(fire != null, "для сигнала есть построенный костёр")
+				if fire == null:
+					return
+				for action in [0, 1]:
+					var options := []
+					Game.choice_requested.connect(func(_title: String, offered: Array): options.append_array(offered), CONNECT_ONE_SHOT)
+					fire.interact(main.player)
+					_check(options.size() == 3, "у костра есть два топлива и обычная готовка")
+					if options.size() != 3:
+						return
+					main.hud.close_all()
+					options[action]["callback"].call()
+					_flush()
+					_check(Game.stat("solved", target) == action, "для сигнала нужен густой дым")
+				return
+			if target == "camp_rubbing":
+				var book: CampClue = null
+				var hearth: CampClue = null
+				for clue: CampClue in get_tree().get_nodes_in_group("camp_clues"):
+					if clue.hearth:
+						hearth = clue
+					else:
+						book = clue
+				_check(book != null and hearth != null, "у журнала и очага есть отдельные точки осмотра")
+				if book == null or hearth == null:
+					return
+				book.interact(main.player)
+				_flush()
+				_check(Game.stat("solved", target) == 0, "лист без уголька подсказывает, где искать")
+				hearth.interact(main.player)
+				_flush()
+				book.interact(main.player)
+				_flush()
+				_check(Game.stat("solved", target) == 1, "уголёк проявляет пропавшую запись")
+				return
 			if target == "shadows":
 				var sh := _shrine()
 				for i in FogShrine.RIGHT:
@@ -3322,6 +3466,18 @@ func _do_task(t: Dictionary) -> void:
 			tree._process(0.0)
 		"delivered":
 			_give({target: need})
+			if Game.current_quest().get("id", "") == "provisions" and target == "fish_soup":
+				for member in get_tree().get_nodes_in_group("interactable"):
+					if member is NPCPerson and member.npc_id == "renata":
+						var options := []
+						Game.choice_requested.connect(func(_title: String, offered: Array): options.append_array(offered), CONNECT_ONE_SHOT)
+						member.interact(main.player)
+						_check(options.size() == 2, "можно доверить общий стол Ренате или разнести еду")
+						if options.size() == 2:
+							main.hud.close_all()
+							options[0]["callback"].call()
+							_check(Game.task_progress(t) == t["count"], "похлёбка с общего стола досталась Гоше")
+						return
 			for n in get_tree().get_nodes_in_group("interactable"):
 				if n is NPCPerson and n.npc_id == t.get("to", "marta"):
 					n.interact(main.player)
@@ -3425,6 +3581,8 @@ func _autotest() -> void:
 			for qi in cqs.size():
 				if ci == ch and qi >= from_q:
 					break
+				if cqs[qi]["id"] == "pumpkin_lights":
+					Game.flags["trail_lit"] = true   # при старте с середины главы Миша уже вышел к огню
 				var rw: Dictionary = cqs[qi].get("reward", {})
 				Game._grant({"unlock": rw.get("unlock", []), "flags": rw.get("flags", []), "collect": rw.get("collect", {})})
 				for t in cqs[qi]["tasks"]:

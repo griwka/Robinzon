@@ -233,6 +233,19 @@ func _build_deck(k: int) -> void:
 	for pr in props.get(k, []):
 		var m := _model(pr[0], (pr[1] as Vector3) + Vector3(0, y, 0), pr[2])
 		Models.add_trimesh(_body, m)   # в полки и ящики не входят
+		if pr[0] == "bunker_crates" and k in [4, 5]:
+			var at := (pr[1] as Vector3) + Vector3(-0.45, y, 0)
+			var label := "Посветить на надпись на ящике"
+			var mark: IslandTrailPoint
+			if k == 4:
+				mark = IslandTrailPoint.place(self, at, "archive_chalk", label,
+					"Стрелка мелом указывает вниз. Под ней одно слово: «Ящики».")
+				mark.leads_on = true
+			else:
+				mark = IslandTrailPoint.place(self, at, "archive_chalk", label,
+					"Под слоем пыли почерк брата: «Журнал отнёс вниз, на стол шестого яруса. Л.»")
+			if m:
+				m.reparent(mark)  # подсветка цели обводит сами ящики
 
 
 func light_ok(k: int) -> bool:

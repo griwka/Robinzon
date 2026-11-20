@@ -147,6 +147,8 @@ func tool_hint() -> String:
 
 
 func get_hint() -> String:
+	if npc_id == "renata" and Game.current_quest().get("id") == "provisions":
+		return "Рената — припасы для команды"
 	if npc_id == "walrus":
 		if Game.flags.get("walrus_moved", false):
 			return "Морж греется на солнышке"
@@ -210,6 +212,13 @@ func interact(_player: Node) -> void:
 			return
 		if quest_talk(npc_id):
 			return
+		if npc_id == "renata" and q["id"] == "provisions":
+			for t in q["tasks"]:
+				if t.get("to") != "renata" and Game.count(t["target"]) > 0 and Game.task_progress(t) < t["count"]:
+					Game.choice_requested.emit("Ужин для команды", [
+						{"text": "Оставить припасы Ренате для всех", "icon": "fish_soup", "callback": _share_provisions},
+						{"text": "Еду разнесу сам", "icon": "cloudberry_jam", "callback": func(): Game.deliver_for_quest("renata")}])
+					return
 	if Game.deliver_for_quest(npc_id):
 		return
 	var lines: Array = IDLE.get(npc_id, ["..."])
@@ -241,3 +250,9 @@ func interact(_player: Node) -> void:
 			{"text": "Поговорить", "icon": "portrait_" + npc_id, "callback": say}])
 		return
 	say.call()
+
+
+func _share_provisions() -> void:
+	if Game.quest_started and Game.current_quest().get("id") == "provisions":
+		# Пустой адресат у deliver_for_quest отдаёт имеющиеся порции по всем пунктам.
+		Game.deliver_for_quest()

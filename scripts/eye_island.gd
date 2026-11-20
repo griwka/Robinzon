@@ -47,7 +47,11 @@ func _decor(model: String, local: Vector3, yaw: float, trunk_r: float) -> void:
 	m.position = _ground(local)
 	m.rotation.y = yaw
 	add_child(m)
-	if model in ["grandpa_bench", "perch"]:   # скамейка и насест твёрдые
+	if model in ["grandpa_bench", "perch"]:
+		var trace := GardenTrace.new()
+		trace.bench = model == "grandpa_bench"
+		m.add_child(trace)
+		# Скамейка и насест твёрдые.
 		var sb := StaticBody3D.new()
 		sb.collision_layer = 4
 		m.add_child(sb)
@@ -63,6 +67,35 @@ func _decor(model: String, local: Vector3, yaw: float, trunk_r: float) -> void:
 		cs.position.y = 1.5
 		body.add_child(cs)
 		m.add_child(body)
+
+
+## Улики у уже стоящих в саду моделей. Достаточно осмотреть любую из двух.
+class GardenTrace extends Node3D:
+	var bench := false
+
+	func _ready() -> void:
+		Game.quest_changed.connect(refresh)
+		refresh()
+
+	func refresh() -> void:
+		var available: bool = Game.current_quest().get("id", "") == "garden" and Game.stat("found", "garden_trace") == 0
+		if available and not is_in_group("interactable"):
+			add_to_group("interactable")
+		elif not available and is_in_group("interactable"):
+			remove_from_group("interactable")
+
+	func interact_point() -> Vector3:
+		return global_position + Vector3.UP * 0.7
+
+	func get_hint() -> String:
+		return "Осмотреть скамейку" if bench else "Осмотреть жёрдочку"
+
+	func interact(_player: Node) -> void:
+		if not is_in_group("interactable"):
+			return
+		var clue := "Под сиденьем застряло красное перо. Румба теребит такое же у себя на груди." if bench else "Дерево в зарубках от клюва. Румба прикладывает клюв к одной: точно по нему."
+		Game.notified.emit(clue, Color("ffe08a"))
+		Game.bump("found", "garden_trace")
 
 
 # ================================================================== берег
